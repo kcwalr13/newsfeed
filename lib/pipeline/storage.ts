@@ -6,15 +6,15 @@ import type { ArticleBatch } from '../types/article';
 /**
  * Writes a batch to data/batches/<batchDate>.json.
  * Creates the batches directory if it does not exist.
- * Does NOT overwrite an existing file — returns false if the file already existed.
+ * When force is false (default), does NOT overwrite an existing file.
  * Returns true if the file was written successfully.
  */
-export function writeBatch(batch: ArticleBatch): boolean {
+export function writeBatch(batch: ArticleBatch, force = false): boolean {
   if (!fs.existsSync(BATCH_DIR)) {
     fs.mkdirSync(BATCH_DIR, { recursive: true });
   }
   const filePath = path.join(BATCH_DIR, `${batch.batchDate}.json`);
-  if (fs.existsSync(filePath)) {
+  if (!force && fs.existsSync(filePath)) {
     return false;
   }
   fs.writeFileSync(filePath, JSON.stringify(batch, null, 2), 'utf-8');

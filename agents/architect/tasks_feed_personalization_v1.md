@@ -4,7 +4,7 @@
 **Design Reference**: `agents/architect/design_feed_personalization_v1.md`
 **Stories Reference**: `agents/pm/stories_feed_personalization_v1.md`
 **Date**: 2026-04-04
-**Status**: Not started — @agent-dev queued to implement PERS-TASK-001 through PERS-TASK-005 next session
+**Status**: Complete — all 5 tasks shipped by @agent-dev
 
 ---
 

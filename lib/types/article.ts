@@ -32,6 +32,12 @@ export interface FeedResponse {
   batchDate: string;
   /** Ordered list of articles for the day. */
   articles: Article[];
+  /**
+   * ISO-8601 UTC timestamp of when the most recent successful pipeline run completed.
+   * Absent when no batch exists (initial state before any pipeline run).
+   * Clients should format this to local time for display.
+   */
+  generatedAt?: string;
 }
 
 /** The on-disk representation of a daily article batch. */

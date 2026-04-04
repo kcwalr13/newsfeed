@@ -43,4 +43,5 @@ next-env.d.ts
 # pipeline runtime data
 /data/batches/
 /data/pipeline.log
+/data/refresh_cooldowns.json
 .env.local

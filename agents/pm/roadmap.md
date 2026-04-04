@@ -1,6 +1,6 @@
 # Product Roadmap
 
-**Last Updated**: 2026-04-04 (Milestones 3 and 4 scoped; auth and personalization stories written)
+**Last Updated**: 2026-04-04 (Milestone 5 scoped; feed refresh and diversity stories written)
 **Maintained by**: PM Agent
 
 ---
@@ -198,7 +198,47 @@ no change.
 
 ---
 
-## Milestone 5 — Extended Features
+## Milestone 5 — Feed Refresh and Source Diversity
+
+**Goal**: Authenticated users can trigger a fresh pipeline run on demand via a
+button in the feed UI, without waiting for the next scheduled run. Every pipeline
+run — scheduled or manually triggered — is guaranteed to draw articles from at
+least 3 distinct active sources, and no single source may contribute more than 5
+articles to any batch. Source failures are isolated: one failing source does not
+abort the run.
+
+**Status**: Planned
+**Prerequisite**: Milestone 4 (Feed Personalization) shipped.
+**Stories doc**: `agents/pm/stories_feed_refresh_and_diversity_v1.md`
+**Source BRD**: `agents/ba/brd_feed_refresh_and_diversity_v1.md` (BRD-005)
+
+### Must Have Stories
+
+| Story ID | Title | Status |
+|----------|-------|--------|
+| REFRESH-001 | Refresh Cooldown Configuration | Not started |
+| REFRESH-002 | Pipeline Writes Last-Updated Timestamp | Not started |
+| REFRESH-003 | Manual Refresh API Endpoint | Not started |
+| REFRESH-004 | Manual Refresh Applies Full Pipeline Rules | Not started |
+| REFRESH-005 | Manual Refresh Failure Behavior | Not started |
+| REFRESH-006 | Feed UI — Last Updated Label | Not started |
+| REFRESH-007 | Feed UI — Manual Refresh Button | Not started |
+| REFRESH-008 | Source Diversity — Configurable Minimum Sources | Not started |
+| REFRESH-009 | Per-Source Article Cap | Not started |
+| REFRESH-010 | Source Failure Isolation | Not started |
+| REFRESH-011 | Degraded-Mode Diversity Warning | Not started |
+
+### Deferred to Later Milestones
+
+| Story ID | Title | Status |
+|----------|-------|--------|
+| FUTURE-009 | Pull-to-refresh gesture (native mobile feel) | Backlog |
+| FUTURE-REFRESH-001 | Operator dashboard for manual refresh activity | Backlog |
+| FUTURE-REFRESH-002 | Per-source article cap adjustable by users | Backlog |
+
+---
+
+## Milestone 6 — Extended Features
 
 **Goal**: Quality-of-life features once the core loop is proven.
 
@@ -208,7 +248,6 @@ no change.
 |----------|-------|--------|
 | FUTURE-006 | Offline reading / article caching | Backlog |
 | FUTURE-008 | Search and filter by topic or category | Backlog |
-| FUTURE-009 | Pull-to-refresh or mid-day manual refresh | Backlog |
 | FUTURE-010 | Article sharing | Backlog |
 
 ---
@@ -223,3 +262,4 @@ no change.
 | 2026-04-04 | PM Agent | Milestone 2.5 added. BRD-003 resolved. 10 SFB stories written (stories_server_feedback_v1.md). Covers device identity, DB schema, all four API endpoints, client integration, offline retry queue, and localStorage migration. |
 | 2026-04-04 | Manual | Milestone 2 and 2.5 marked Released. All FB and SFB stories updated to Released status. Roadmap drift corrected. |
 | 2026-04-04 | PM Agent | Milestone 3 (User Authentication) and Milestone 4 (Feed Personalization) added. 11 AUTH stories and 11 PERS stories written. Former Milestone 3 (Extended Features) renumbered to Milestone 5. Deferred backlog items added for future suppression reversal and mandatory login enforcement. |
+| 2026-04-04 | PM Agent | Milestone 5 (Feed Refresh and Source Diversity) added. 11 REFRESH stories written (stories_feed_refresh_and_diversity_v1.md). BRD-005 open questions resolved: 15-min cooldown, 3-source minimum, 5-article-per-source cap, all authenticated users may refresh, anonymous users unaffected. Former Milestone 5 (Extended Features) renumbered to Milestone 6. FUTURE-009 (pull-to-refresh) moved to M5 deferred list. |

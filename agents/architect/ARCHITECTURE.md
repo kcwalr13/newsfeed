@@ -53,6 +53,7 @@ newsfeed/
 ├── data/                     ← Runtime data (mostly git-ignored)
 │   ├── batches/              ← Daily article JSON files (git-ignored)
 │   ├── pipeline.log          ← Append-only pipeline run log (git-ignored)
+│   ├── refresh_cooldowns.json ← Per-user manual refresh timestamps (git-ignored)
 │   └── sources.json          ← Source configuration (checked into git)
 ├── lib/                      ← Server-side business logic
 │   ├── auth/                 ← Session middleware
@@ -70,6 +71,8 @@ newsfeed/
 │   ├── pipeline/             ← Content pipeline modules
 │   │   ├── adapters/         ← Per-source-type fetch adapters
 │   │   ├── config.ts         ← Constants and source loader
+│   │   ├── cooldown.ts       ← Per-user refresh cooldown tracker (filesystem-backed)
+│   │   ├── ranker.ts         ← Feed personalization ranker (pure function)
 │   │   ├── run.ts            ← Pipeline orchestrator
 │   │   ├── storage.ts        ← Batch file read/write
 │   │   └── validator.ts      ← Article validation and deduplication
@@ -135,6 +138,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | GET | `/api/auth/me` | Return current authenticated user | `dd_session` cookie |
 | POST | `/api/auth/forgot-password` | Send password reset email | None |
 | POST | `/api/auth/reset-password` | Set new password, invalidate sessions | None |
+| POST | `/api/feed/refresh` | Triggers manual pipeline run with cooldown enforcement | `dd_session` cookie (authenticated users only) |
 
 ---
 
@@ -151,7 +155,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Article ID | `<source-slug>-<sha256-of-url>[0..8]` | Stable, deterministic, no collision risk for n=20 |
 | Client routing | Next.js App Router `Link` | Already the framework |
 | Dedup strategy | By `articleUrl` | Same article from two sources yields one record |
-| Feed personalization timing | API-time ranking in `rankFeed()` | Avoids per-identity batch file proliferation; ranking is O(20 articles) in-memory; shared batch on disk unchanged; DB failure degrades gracefully to unranked feed |
+| Feed personalization | API-time ranking in `rankFeed()` | Avoids per-identity batch file proliferation; ranking is O(20 articles) in memory; single shared batch on disk unchanged; graceful DB failure degrades to unranked feed |
+| Manual refresh cooldown storage | JSON file at `data/refresh_cooldowns.json` | Survives server restarts; consistent with filesystem-first architecture; no new DB table needed |
+| Same-day batch overwrite | `writeBatch` with force flag | Manual refresh overwrites same-day file; `GET /api/feed/today` reads the latest state naturally |
 | Password hashing | bcryptjs, cost=12 | No native bindings needed; works on serverless; industry standard |
 | Session tokens | Random 32-byte hex in DB (`sessions` table) | Enables server-side invalidation on logout; required for 30-day sliding window |
 | Session transport | `HttpOnly` cookie `dd_session` | Cannot be read by JS; separate from `dd_device_id` which must be JS-readable |
@@ -212,10 +218,21 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `/auth` page (register/login/forgot/reset) | **Shipped** | AUTH-TASK-011 |
 | Feed page and article page header integration | **Shipped** | AUTH-TASK-012 |
 | ARCHITECTURE.md Milestone 3 update | **Shipped** | AUTH-TASK-013 |
-| Feed ranker module (`lib/pipeline/ranker.ts`) | **Not started** | PERS-TASK-001 |
-| Personalized `GET /api/feed/today` route | **Not started** | PERS-TASK-002 |
-| Integration + edge-case verification | **Not started** | PERS-TASK-003, PERS-TASK-004 |
-| ARCHITECTURE.md Milestone 4 update | **Not started** | PERS-TASK-005 |
+| Feed ranker module (`lib/pipeline/ranker.ts`) | **Shipped** | PERS-TASK-001 |
+| Personalized `GET /api/feed/today` route | **Shipped** | PERS-TASK-002 |
+| Integration + edge-case verification | **Shipped** | PERS-TASK-003, PERS-TASK-004 |
+| ARCHITECTURE.md Milestone 4 update | **Shipped** | PERS-TASK-005 |
+| Pipeline constants (per-source cap, min sources) in `lib/pipeline/config.ts` | **Shipped** | REFRESH-TASK-001 |
+| Per-source cap + failure isolation + diversity warning in `lib/pipeline/run.ts` | **Shipped** | REFRESH-TASK-002 |
+| Cooldown tracker module (`lib/pipeline/cooldown.ts`) | **Shipped** | REFRESH-TASK-003 |
+| `POST /api/feed/refresh` route | **Shipped** | REFRESH-TASK-004 |
+| `FeedResponse` expose `generatedAt` | **Shipped** | REFRESH-TASK-005 |
+| `GET /api/feed/today` include `generatedAt` in response | **Shipped** | REFRESH-TASK-006 |
+| `LastUpdatedLabel` component | **Shipped** | REFRESH-TASK-007 |
+| `RefreshButton` component | **Shipped** | REFRESH-TASK-008 |
+| Feed page integration (button + label wired up) | **Shipped** | REFRESH-TASK-009 |
+| Manual verification | **Not started** | REFRESH-TASK-010 |
+| ARCHITECTURE.md Milestone 5 update | **Shipped** | REFRESH-TASK-011 |
 
 ---
 
@@ -228,6 +245,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Milestone 2.5 — Feedback Durability | `agents/architect/design_server_feedback_v1.md` | `agents/architect/tasks_server_feedback_v1.md` |
 | Milestone 3 — Identity Foundation | `agents/architect/design_user_auth_v1.md` | `agents/architect/tasks_user_auth_v1.md` |
 | Milestone 4 — Feed Personalization | `agents/architect/design_feed_personalization_v1.md` | `agents/architect/tasks_feed_personalization_v1.md` |
+| Milestone 5 — Feed Refresh and Source Diversity | `agents/architect/design_feed_refresh_v1.md` | `agents/architect/tasks_feed_refresh_v1.md` |
 
 ---
 
@@ -243,3 +261,6 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Architect Agent | Milestone 3 design complete. Added auth tables, session middleware, 8 new auth API routes, email module, Auth Context, AccountIcon, and /auth page. Added SMTP env vars and NEXTAUTH_URL. 13 new tasks, all Not started. |
 | 2026-04-04 | Dev Agent | All 13 Milestone 3 tasks shipped. Registration, email verification, login, password reset, logout, device→user feedback migration, cross-device merge, AuthContext, AccountIcon, /auth page all complete and verified. |
 | 2026-04-04 | Architect Agent | Milestone 4 design complete. API-time feed personalization via rankFeed(). Wilson score lower bound for source scoring. One new module (lib/pipeline/ranker.ts), one modified route (app/api/feed/today/route.ts). 5 tasks, all Not started. |
+| 2026-04-04 | Dev Agent | All 5 Milestone 4 tasks shipped. lib/pipeline/ranker.ts created (rankFeed, Wilson score, suppression, exploration, diversity cap). GET /api/feed/today updated with identity resolution and graceful DB fallback. All algorithm edge cases verified. |
+| 2026-04-04 | Architect Agent | Milestone 5 design complete. Manual refresh endpoint with filesystem cooldown. Per-source article cap and failure isolation in run.ts. generatedAt exposed in FeedResponse. LastUpdatedLabel and RefreshButton UI components. 11 tasks, all Not started. |
+| 2026-04-04 | Dev Agent | REFRESH-TASK-001–009 shipped. Config constants, run.ts rewrite (allSettled isolation, per-source cap, diversity warning, forceOverwrite), cooldown.ts, POST /api/feed/refresh, generatedAt in FeedResponse + feed route, LastUpdatedLabel, RefreshButton, page.tsx integration. |

@@ -1,10 +1,15 @@
 import crypto from 'crypto';
-import { ARTICLES_PER_DAY, loadSources } from './config';
+import { ARTICLES_PER_DAY, MAX_ARTICLES_PER_SOURCE, MIN_SOURCES_PER_BATCH, loadSources } from './config';
 import { writeBatch, readBatch, appendLog } from './storage';
 import { fetchRssArticles } from './adapters/rssAdapter';
 import { fetchNewsApiArticles } from './adapters/newsApiAdapter';
 import { validateAndTrim } from './validator';
 import type { Article, ArticleBatch, Source } from '../types/article';
+
+export interface RunOptions {
+  /** When true, overwrites an existing same-day batch. Default: false. */
+  forceOverwrite?: boolean;
+}
 
 export interface RunResult {
   batchDate: string;
@@ -32,23 +37,80 @@ async function fetchFromSource(source: Source) {
   return [];
 }
 
+type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
+
+function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle[] {
+  const countBySource = new Map<string, number>();
+  return articles.filter((a) => {
+    const count = countBySource.get(a.sourceName) ?? 0;
+    if (count >= cap) return false;
+    countBySource.set(a.sourceName, count + 1);
+    return true;
+  });
+}
+
 /**
  * Runs the full content pipeline: fetches from all active sources, validates,
- * deduplicates, and writes the daily batch to disk.
+ * deduplicates, applies per-source cap, checks diversity, and writes the batch.
+ *
+ * @param options.forceOverwrite - If true, overwrites an existing same-day batch.
+ *   Use for manual refresh. Default: false (scheduled pipeline behavior).
  */
-export async function runPipeline(): Promise<RunResult> {
+export async function runPipeline(options: RunOptions = {}): Promise<RunResult> {
   const today = todayUTC();
 
   try {
-    if (readBatch(today) !== null) {
+    // Guard: skip if batch already exists (unless explicitly overwriting)
+    if (!options.forceOverwrite && readBatch(today) !== null) {
       return { batchDate: today, count: 0, alreadyExists: true };
     }
 
     const sources = loadSources();
-    const results = await Promise.all(sources.map(fetchFromSource));
+
+    // Fetch from all sources with per-source failure isolation
+    const settled = await Promise.allSettled(sources.map(fetchFromSource));
+    const results: PartialArticle[][] = settled.map((outcome, i) => {
+      if (outcome.status === 'rejected') {
+        const reason =
+          outcome.reason instanceof Error
+            ? outcome.reason.message
+            : String(outcome.reason);
+        appendLog(`[pipeline] Source "${sources[i].slug}" failed: ${reason}`);
+        return [];
+      }
+      return outcome.value;
+    });
+
     const candidates = results.flat();
 
-    const validated = validateAndTrim(candidates, ARTICLES_PER_DAY);
+    // Cross-source URL deduplication (first occurrence wins)
+    const seenUrls = new Set<string>();
+    const deduped = candidates.filter((a) => {
+      if (!a.articleUrl || seenUrls.has(a.articleUrl)) return false;
+      seenUrls.add(a.articleUrl);
+      return true;
+    });
+
+    // Per-source article cap (applied after dedup, per PM requirement)
+    const capped = applySourceCap(deduped, MAX_ARTICLES_PER_SOURCE);
+
+    // Diversity check — log warning if below minimum (do not abort)
+    const contributingSourceNames = new Set(capped.map((a) => a.sourceName));
+    const contributingCount = contributingSourceNames.size;
+    if (contributingCount < MIN_SOURCES_PER_BATCH) {
+      const failedSources = sources
+        .filter((s) => !contributingSourceNames.has(s.name))
+        .map((s) => s.slug);
+      appendLog(
+        `[pipeline] DIVERSITY WARNING: Only ${contributingCount}/${MIN_SOURCES_PER_BATCH} ` +
+          `required sources contributed. ` +
+          `Contributing: [${[...contributingSourceNames].join(', ')}]. ` +
+          `Failed/empty: [${failedSources.join(', ')}].`
+      );
+    }
+
+    // Validate (titles/URLs) and trim to target batch size
+    const validated = validateAndTrim(capped, ARTICLES_PER_DAY);
 
     const articles: Article[] = validated.map((a) => ({
       ...a,
@@ -63,13 +125,13 @@ export async function runPipeline(): Promise<RunResult> {
       articles,
     };
 
-    writeBatch(batch);
-    appendLog(`Pipeline run complete. batchDate=${today} count=${articles.length}`);
+    writeBatch(batch, options.forceOverwrite ?? false);
+    appendLog(`[pipeline] Run complete. batchDate=${today} count=${articles.length}`);
 
     return { batchDate: today, count: articles.length, alreadyExists: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    appendLog(`Pipeline run failed: ${message}`);
+    appendLog(`[pipeline] Run failed: ${message}`);
     throw err;
   }
 }
