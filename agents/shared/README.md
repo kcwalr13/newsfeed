@@ -22,11 +22,11 @@ This directory contains cross-agent reference material available to all agents.
 
 | Milestone | Status |
 |-----------|--------|
-| 5 — Feed Refresh and Source Diversity | **Code complete — manual verification pending** |
+| 5 — Feed Refresh and Source Diversity | **Complete** |
 
 ### Next action
 
-REFRESH-TASK-001 through 009 are shipped. Run the app and complete **REFRESH-TASK-010** (manual verification checklist in `agents/architect/tasks_feed_refresh_v1.md`). Then all milestones through M5 are complete.
+All milestones through M5 are complete. Await next feature request from user → @agent-ba.
 
 ### Key files for orientation
 

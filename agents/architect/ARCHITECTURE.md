@@ -231,7 +231,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `LastUpdatedLabel` component | **Shipped** | REFRESH-TASK-007 |
 | `RefreshButton` component | **Shipped** | REFRESH-TASK-008 |
 | Feed page integration (button + label wired up) | **Shipped** | REFRESH-TASK-009 |
-| Manual verification | **Not started** | REFRESH-TASK-010 |
+| Manual verification | **Shipped** | REFRESH-TASK-010 |
 | ARCHITECTURE.md Milestone 5 update | **Shipped** | REFRESH-TASK-011 |
 
 ---

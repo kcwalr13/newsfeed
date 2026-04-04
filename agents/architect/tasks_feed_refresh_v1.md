@@ -4,7 +4,7 @@
 **Design Reference**: `agents/architect/design_feed_refresh_v1.md`
 **Stories Reference**: `agents/pm/stories_feed_refresh_and_diversity_v1.md`
 **Date**: 2026-04-04
-**Status**: REFRESH-TASK-001–009 shipped — REFRESH-TASK-010 (manual verification) pending
+**Status**: Complete — all 11 tasks shipped
 
 ---
 
