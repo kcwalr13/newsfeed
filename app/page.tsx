@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { FeedResponse } from '@/lib/types/article';
+import { initDeviceId } from '@/lib/identity/device';
+import { runMigrationIfNeeded, loadFromServer, drainQueue } from '@/lib/feedback/store';
+import AccountIcon from './components/AccountIcon';
 import ArticleCard from './components/ArticleCard';
 import FeedSkeleton from './components/FeedSkeleton';
 import ErrorState from './components/ErrorState';
@@ -34,11 +37,34 @@ export default function FeedPage() {
     fetchFeed();
   }, [fetchFeed]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void drainQueue();
+    };
+    const handleFocus = () => void drainQueue();
+
+    async function initFeedback() {
+      initDeviceId();
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleFocus);
+      await runMigrationIfNeeded();
+      await loadFromServer();
+    }
+
+    void initFeedback();
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-4">
+        <div className="max-w-2xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Daily Digest</h1>
+          <AccountIcon />
         </div>
       </header>
 

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { readBatch, readLatestBatch } from '@/lib/pipeline/storage';
 import ViewSourceLink from '@/app/components/ViewSourceLink';
 import FeedbackButtons from '@/app/components/FeedbackButtons';
+import AccountIcon from '@/app/components/AccountIcon';
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -45,6 +46,7 @@ export default async function ArticlePage({ params }: Props) {
             Back to feed
           </Link>
           <ViewSourceLink articleUrl={article.articleUrl} sourceName={article.sourceName} />
+          <AccountIcon />
         </div>
       </header>
 

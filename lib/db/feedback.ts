@@ -1,0 +1,117 @@
+import { sql } from './client';
+
+export interface DbFeedbackRow {
+  article_id: string;
+  value: 'like' | 'dislike';
+  updated_at: Date;
+}
+
+/** Returns all feedback rows for a device. */
+export async function getFeedbackForDevice(deviceId: string): Promise<DbFeedbackRow[]> {
+  const rows = await sql`
+    SELECT article_id, value, updated_at
+    FROM feedback
+    WHERE device_id = ${deviceId}
+  `;
+  return rows as DbFeedbackRow[];
+}
+
+/** Returns deduplicated feedback for an authenticated user (most-recent per article). */
+export async function getFeedbackForUser(userId: string): Promise<DbFeedbackRow[]> {
+  const rows = await sql`
+    SELECT DISTINCT ON (article_id) article_id, value, updated_at
+    FROM feedback
+    WHERE user_id = ${userId}
+    ORDER BY article_id, updated_at DESC
+  `;
+  return rows as DbFeedbackRow[];
+}
+
+/** Upserts a single feedback record. Returns the saved row. */
+export async function upsertFeedback(
+  deviceId: string,
+  articleId: string,
+  value: 'like' | 'dislike',
+  userId?: string | null
+): Promise<DbFeedbackRow> {
+  const rows = await sql`
+    INSERT INTO feedback (device_id, article_id, value, updated_at, user_id)
+    VALUES (${deviceId}, ${articleId}, ${value}, NOW(), ${userId ?? null})
+    ON CONFLICT (device_id, article_id)
+    DO UPDATE SET
+      value      = EXCLUDED.value,
+      updated_at = NOW(),
+      user_id    = COALESCE(EXCLUDED.user_id, feedback.user_id)
+    RETURNING article_id, value, updated_at
+  `;
+  return rows[0] as DbFeedbackRow;
+}
+
+/** Deletes a feedback record. No-op if not found. */
+export async function deleteFeedback(deviceId: string, articleId: string): Promise<void> {
+  await sql`
+    DELETE FROM feedback
+    WHERE device_id = ${deviceId} AND article_id = ${articleId}
+  `;
+}
+
+/**
+ * Associates all unclaimed device feedback rows to a user on login.
+ * Step A: most-recent-wins on conflict with existing user records.
+ * Step B: claims all remaining unclaimed device rows.
+ * Must run sequentially (Step A before Step B).
+ */
+export async function associateFeedbackToUser(
+  deviceId: string,
+  userId: string
+): Promise<void> {
+  // Step A: update existing user records where the device record is newer
+  await sql`
+    UPDATE feedback AS existing
+    SET
+      value      = device.value,
+      updated_at = device.updated_at
+    FROM feedback AS device
+    WHERE device.device_id = ${deviceId}
+      AND device.user_id IS NULL
+      AND existing.user_id = ${userId}
+      AND existing.article_id = device.article_id
+      AND device.updated_at > existing.updated_at
+  `;
+
+  // Step B: claim all remaining unclaimed device rows
+  await sql`
+    UPDATE feedback
+    SET user_id = ${userId}
+    WHERE device_id = ${deviceId}
+      AND user_id IS NULL
+  `;
+}
+
+/**
+ * Bulk upsert for one-time migration from localStorage.
+ * Server record wins if its updated_at is newer than the incoming record.
+ * Returns best-effort count of rows written.
+ */
+export async function migrateFeedbackRecords(
+  deviceId: string,
+  records: Array<{ articleId: string; value: 'like' | 'dislike'; updatedAt: string }>
+): Promise<number> {
+  let written = 0;
+  await Promise.all(
+    records.map(async (r) => {
+      const result = await sql`
+        INSERT INTO feedback (device_id, article_id, value, updated_at)
+        VALUES (${deviceId}, ${r.articleId}, ${r.value}, ${r.updatedAt}::timestamptz)
+        ON CONFLICT (device_id, article_id)
+        DO UPDATE SET
+          value = EXCLUDED.value,
+          updated_at = EXCLUDED.updated_at
+        WHERE feedback.updated_at < EXCLUDED.updated_at
+        RETURNING article_id
+      `;
+      if (result.length > 0) written++;
+    })
+  );
+  return written;
+}
