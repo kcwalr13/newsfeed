@@ -22,12 +22,15 @@ Every BRD must contain:
 - **ID**: BRD-NNN
 - **Title**: Short descriptive name
 - **Date**: Today's date
-- **Status**: Draft | Approved | Superseded
+- **Status**: Draft | Resolved | Superseded
 - **Problem Statement**: What problem does this solve for the user?
 - **Goals**: What does success look like? (bullet list)
 - **Non-Goals**: What is explicitly out of scope?
 - **User Impact**: Who is affected and how?
-- **Open Questions**: Anything unclear that needs a decision before moving forward
+- **Open Questions**: Anything unclear that still needs a decision before moving forward.
+  If all questions were resolved during writing, replace this section with a
+  **Decisions** section that records each decision made and the rationale. A BRD
+  with no open questions should have Status: Resolved.
 
 ## Your Behavior
 - Ask clarifying questions before writing the BRD if the request is ambiguous.
