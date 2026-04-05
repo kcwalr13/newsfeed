@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getUserByEmail, createSession } from '@/lib/db/auth';
-import { buildSessionCookie } from '@/lib/auth/session';
+import { buildSessionCookie, extractDeviceId, SESSION_MAX_AGE_SECONDS } from '@/lib/auth/session';
 import { associateFeedbackToUser } from '@/lib/db/feedback';
 
 export const dynamic = 'force-dynamic';
-
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
-
-function extractDeviceId(req: NextRequest): string | null {
-  return req.cookies.get('dd_device_id')?.value ?? req.headers.get('X-Device-ID') ?? null;
-}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: unknown;

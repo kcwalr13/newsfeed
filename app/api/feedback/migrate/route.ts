@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { migrateFeedbackRecords } from '@/lib/db/feedback';
+import { extractDeviceId } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
-
-function extractDeviceId(req: NextRequest): string | null {
-  return req.cookies.get('dd_device_id')?.value ?? req.headers.get('X-Device-ID') ?? null;
-}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const deviceId = extractDeviceId(req);

@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFeedback } from '@/lib/db/feedback';
-import { resolveSession, buildSessionCookie } from '@/lib/auth/session';
+import { resolveSession, buildSessionCookie, extractDeviceId } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
-
-function extractDeviceId(req: NextRequest): string | null {
-  return req.cookies.get('dd_device_id')?.value ?? req.headers.get('X-Device-ID') ?? null;
-}
 
 export async function DELETE(
   req: NextRequest,

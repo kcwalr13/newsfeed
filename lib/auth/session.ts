@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionById, refreshSession } from '@/lib/db/auth';
 
 export const SESSION_COOKIE = 'dd_session';
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export interface SessionPayload {
   sessionId: string;
@@ -48,4 +48,12 @@ export function buildSessionCookie(sessionId: string, maxAge: number): string {
  */
 export function clearSessionCookie(): string {
   return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
+/**
+ * Reads the device ID from the dd_device_id cookie, falling back to the
+ * X-Device-ID request header. Returns null if neither is present.
+ */
+export function extractDeviceId(req: NextRequest): string | null {
+  return req.cookies.get('dd_device_id')?.value ?? req.headers.get('X-Device-ID') ?? null;
 }

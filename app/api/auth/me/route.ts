@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserById } from '@/lib/db/auth';
-import { resolveSession, buildSessionCookie } from '@/lib/auth/session';
+import { resolveSession, buildSessionCookie, SESSION_MAX_AGE_SECONDS } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
-
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const cookieRes = new NextResponse();

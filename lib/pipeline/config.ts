@@ -2,10 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import type { Source } from '../types/article';
 
-/** Number of articles to include in each daily batch. */
-export const ARTICLES_PER_DAY: number = process.env.ARTICLES_PER_DAY
-  ? parseInt(process.env.ARTICLES_PER_DAY, 10)
-  : 20;
+export { ARTICLES_PER_DAY } from '@/lib/config/feed';
 
 /** Absolute path to the directory where daily batch JSON files are stored. */
 export const BATCH_DIR: string = path.resolve(process.cwd(), 'data', 'batches');

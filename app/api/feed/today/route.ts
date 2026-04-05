@@ -39,19 +39,28 @@ export async function GET(req: NextRequest) {
     }
   } catch (err) {
     console.error('[feed/today] identity/feedback fetch failed, returning unranked:', err);
+    const publicBatchArticles = batch.articles.map(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      ({ discoveryTopic: _dt, ...rest }) => rest
+    );
     return NextResponse.json(
-      { batchDate: batch.batchDate, articles: batch.articles, generatedAt: batch.generatedAt },
+      { batchDate: batch.batchDate, articles: publicBatchArticles, generatedAt: batch.generatedAt },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }
 
   const rankedArticles = rankFeed(batch.articles, feedbackRows);
 
+  const publicArticles = rankedArticles.map(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    ({ discoveryTopic: _dt, ...rest }) => rest
+  );
+
   const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
   if (setCookieHeader) headers['Set-Cookie'] = setCookieHeader;
 
   return NextResponse.json(
-    { batchDate: batch.batchDate, articles: rankedArticles, generatedAt: batch.generatedAt },
+    { batchDate: batch.batchDate, articles: publicArticles, generatedAt: batch.generatedAt },
     { headers }
   );
 }

@@ -1,5 +1,7 @@
 import crypto from 'crypto';
-import { ARTICLES_PER_DAY, MAX_ARTICLES_PER_SOURCE, MIN_SOURCES_PER_BATCH, loadSources } from './config';
+import { MAX_ARTICLES_PER_SOURCE, MIN_SOURCES_PER_BATCH, loadSources } from './config';
+import { ARTICLES_PER_DAY } from '@/lib/config/feed';
+import { runDiscovery } from '@/lib/discovery/run';
 import { writeBatch, readBatch, appendLog } from './storage';
 import { fetchRssArticles } from './adapters/rssAdapter';
 import { fetchNewsApiArticles } from './adapters/newsApiAdapter';
@@ -9,6 +11,8 @@ import type { Article, ArticleBatch, Source } from '../types/article';
 export interface RunOptions {
   /** When true, overwrites an existing same-day batch. Default: false. */
   forceOverwrite?: boolean;
+  /** When set, the discovery topic selection uses this user's topic weights. */
+  userId?: string | null;
 }
 
 export interface RunResult {
@@ -109,15 +113,45 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       );
     }
 
-    // Validate (titles/URLs) and trim to target batch size
+    // Validate (titles/URLs) and trim to target batch size.
+    // We keep up to ARTICLES_PER_DAY so that if discovery yields 0, fixed sources can fill all 20 slots.
     const validated = validateAndTrim(capped, ARTICLES_PER_DAY);
 
-    const articles: Article[] = validated.map((a) => ({
-      ...a,
-      id: makeId(a.sourceName, a.articleUrl),
-      batchDate: today,
-      feedbackSlot: null,
-    }));
+    // Build URL set for deduplication (canonical: origin + pathname).
+    const fixedArticleUrls = new Set(
+      validated.map((a) => {
+        try { const u = new URL(a.articleUrl); return u.origin + u.pathname; }
+        catch { return a.articleUrl; }
+      })
+    );
+
+    appendLog('[discovery] Starting discovery run...');
+    let discoveryArticles: Article[] = [];
+    try {
+      discoveryArticles = await runDiscovery(fixedArticleUrls, options.userId ?? null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendLog(`[discovery] Discovery run failed entirely: ${msg}. Falling back to fixed-only batch.`);
+      discoveryArticles = [];
+    }
+
+    const discoveryCount = discoveryArticles.length;
+    const fixedTarget = ARTICLES_PER_DAY - discoveryCount;
+    const finalFixedCandidates = validated.slice(0, fixedTarget);
+
+    const articles: Article[] = [
+      ...finalFixedCandidates.map((a) => ({
+        ...a,
+        id: makeId(a.sourceName, a.articleUrl),
+        batchDate: today,
+        feedbackSlot: null as null,
+      })),
+      ...discoveryArticles.map((a) => ({ ...a, batchDate: today })),
+    ];
+
+    appendLog(
+      `[pipeline] Batch: ${finalFixedCandidates.length} fixed-source, ${discoveryCount} discovery`
+    );
 
     const batch: ArticleBatch = {
       batchDate: today,

@@ -24,6 +24,13 @@ export interface Article {
   bodyText?: string;
   /** Reserved for the future like/dislike feedback system. null = no feedback given. */
   feedbackSlot?: 'like' | 'dislike' | null;
+  /**
+   * For discovery-sourced articles only: the topic ID from DISCOVERY_TOPICS that
+   * produced this article. Used by the topic weight feedback loop.
+   * Null for fixed-pipeline articles. Never sent to the client.
+   * @internal
+   */
+  discoveryTopic?: string | null;
 }
 
 /** The response shape returned by GET /api/feed/today. */

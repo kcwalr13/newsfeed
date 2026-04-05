@@ -2,7 +2,7 @@
 
 **Last Updated**: 2026-04-04
 **Maintained by**: Architect Agent
-**Status**: Active — Milestone 4 in progress
+**Status**: Active — Milestones 1–5 and 7 shipped; Milestone 6 (Extended Features) pending
 
 ---
 
@@ -58,10 +58,18 @@ newsfeed/
 ├── lib/                      ← Server-side business logic
 │   ├── auth/                 ← Session middleware
 │   │   └── session.ts        ← resolveSession(), buildSessionCookie(), clearSessionCookie()
+│   ├── config/               ← Cross-module tuning constants
+│   │   └── feed.ts           ← Quota + discovery constants (ARTICLES_PER_DAY, DISCOVERY_*, etc.)
 │   ├── db/                   ← Database query helpers
 │   │   ├── auth.ts           ← Users, sessions, tokens query helpers
 │   │   ├── client.ts         ← Neon DB connection singleton
+│   │   ├── discovery.ts      ← Topic weight DB helpers
 │   │   └── feedback.ts       ← Feedback query helpers
+│   ├── discovery/            ← Proactive content discovery subsystem
+│   │   ├── braveSearch.ts    ← Brave Search API HTTP adapter
+│   │   ├── qualityGate.ts    ← evaluateCandidate() pure function module
+│   │   ├── run.ts            ← runDiscovery() orchestrator
+│   │   └── topics.ts         ← DISCOVERY_TOPICS array + DiscoveryTopic type
 │   ├── email/                ← Email dispatch
 │   │   └── send.ts           ← Nodemailer SMTP wrapper
 │   ├── identity/             ← Client-side device identity
@@ -70,14 +78,14 @@ newsfeed/
 │   │   └── store.ts          ← localStorage + server write logic
 │   ├── pipeline/             ← Content pipeline modules
 │   │   ├── adapters/         ← Per-source-type fetch adapters
-│   │   ├── config.ts         ← Constants and source loader
+│   │   ├── config.ts         ← Infrastructure constants and source loader (ARTICLES_PER_DAY re-exported from lib/config/feed.ts)
 │   │   ├── cooldown.ts       ← Per-user refresh cooldown tracker (filesystem-backed)
 │   │   ├── ranker.ts         ← Feed personalization ranker (pure function)
-│   │   ├── run.ts            ← Pipeline orchestrator
+│   │   ├── run.ts            ← Pipeline orchestrator (calls runDiscovery, assembles combined batch)
 │   │   ├── storage.ts        ← Batch file read/write
 │   │   └── validator.ts      ← Article validation and deduplication
 │   └── types/                ← Shared TypeScript types
-│       ├── article.ts        ← Article, FeedResponse, ArticleBatch, Source
+│       ├── article.ts        ← Article (+ discoveryTopic internal field), FeedResponse, ArticleBatch, Source
 │       ├── auth.ts           ← DbUser, DbSession, DbToken
 │       └── feedback.ts       ← QueuedWrite, ServerFeedbackMap
 ├── public/                   ← Static assets
@@ -100,6 +108,8 @@ Full TypeScript definitions live in `lib/types/`. Summary:
   `fetchedAt`, `batchDate`
 - Optional: `description`, `imageUrl`, `bodyText`, `feedbackSlot`
 - `feedbackSlot?: 'like' | 'dislike' | null`
+- `discoveryTopic?: string | null` — internal metadata only; set on discovery-sourced articles;
+  never sent to the client (stripped from `GET /api/feed/today` response before serialization)
 
 **`FeedResponse`** — envelope returned by `GET /api/feed/today`
 - `batchDate: string` (YYYY-MM-DD) + `articles: Article[]`
@@ -116,6 +126,10 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 
 **`DbSession`** — `lib/types/auth.ts`
 - `session_id`, `user_id`, `created_at`, `last_active_at`, `expires_at`
+
+**`discovery_topic_weights`** — DB table for per-identity soft topic weights.
+- `user_id` (nullable), `device_id`, `topic_id`, `weight` (0.1–2.0), `updated_at`
+- Helpers in `lib/db/discovery.ts`
 
 ---
 
@@ -159,6 +173,12 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Manual refresh cooldown storage | JSON file at `data/refresh_cooldowns.json` | Survives server restarts; consistent with filesystem-first architecture; no new DB table needed |
 | Same-day batch overwrite | `writeBatch` with force flag | Manual refresh overwrites same-day file; `GET /api/feed/today` reads the latest state naturally |
 | Password hashing | bcryptjs, cost=12 | No native bindings needed; works on serverless; industry standard |
+| Search provider for discovery | Brave Search API | Independent index (no Google dependency), strong long-tail coverage, free tier covers our cadence (~180 calls/month), structured JSON response with outlet name and age fields |
+| Discovery integration point | `runDiscovery()` called inside `runPipeline()` after fixed-source fetch | Discovery failure does not block fixed-source batch; combined batch assembled in `runPipeline` before write |
+| `discoveryTopic` storage | Optional field on `Article`, stored in batch JSON, stripped from API response | Co-located with article; no extra DB query at feedback time; never leaks to client |
+| Topic configuration | TypeScript static array in `lib/discovery/topics.ts` | Type-safe, no runtime I/O, compile-time schema validation; adding a topic = one-line edit + redeploy |
+| Quality gate | Isolated pure function in `lib/discovery/qualityGate.ts` | No I/O, independently testable, four ordered criteria: validator rules, freshness (72h), domain blocklist, specificity score |
+| Quota constants | New `lib/config/feed.ts` with startup assertion | Cross-module constants (quota split, discovery tuning) in a neutral home; assertion prevents PIPELINE + DISCOVERY != ARTICLES_PER_DAY from going undetected |
 | Session tokens | Random 32-byte hex in DB (`sessions` table) | Enables server-side invalidation on logout; required for 30-day sliding window |
 | Session transport | `HttpOnly` cookie `dd_session` | Cannot be read by JS; separate from `dd_device_id` which must be JS-readable |
 | Email sending | Nodemailer + SMTP | Provider-agnostic; no vendor SDK lock-in; volume too low to require an API |
@@ -178,6 +198,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `SMTP_PASS` | Email sending | SMTP password or API token secret |
 | `EMAIL_FROM` | Email sending | From address: `"Daily Digest <noreply@yourdomain.com>"` |
 | `NEXTAUTH_URL` | Email link generation | Base URL: `http://localhost:3000` (dev), `https://yourdomain.com` (prod) |
+| `BRAVE_SEARCH_API_KEY` | Discovery pipeline (all Brave Search calls) | Obtain at https://api.search.brave.com. Free tier: 2,000 req/month. Never commit. |
 
 ---
 
@@ -233,6 +254,20 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Feed page integration (button + label wired up) | **Shipped** | REFRESH-TASK-009 |
 | Manual verification | **Shipped** | REFRESH-TASK-010 |
 | ARCHITECTURE.md Milestone 5 update | **Shipped** | REFRESH-TASK-011 |
+| `lib/config/feed.ts` (quota + discovery constants) | **Done** | DISC-TASK-001 |
+| `lib/types/article.ts` — `discoveryTopic` field | **Done** | DISC-TASK-002 |
+| `lib/discovery/topics.ts` — topic configuration | **Done** | DISC-TASK-003 |
+| `lib/discovery/braveSearch.ts` — Brave Search adapter | **Done** | DISC-TASK-004 |
+| `lib/discovery/qualityGate.ts` — quality gate | **Done** | DISC-TASK-005 |
+| `lib/discovery/run.ts` — discovery orchestrator | **Done** | DISC-TASK-006 |
+| `lib/pipeline/run.ts` — discovery integration + batch assembly | **Done** | DISC-TASK-007 |
+| `lib/pipeline/config.ts` — `ARTICLES_PER_DAY` re-export | **Done** | DISC-TASK-008 |
+| `app/api/feed/today/route.ts` — strip `discoveryTopic` | **Done** | DISC-TASK-009 |
+| Discovery integration verification | **Done** | DISC-TASK-010 |
+| `lib/db/discovery.ts` + DB schema (topic weights) | **Done** | DISC-TASK-011 |
+| `lib/discovery/run.ts` — topic weight feedback loop | **Done** | DISC-TASK-012 |
+| Topic weight loop verification | **Done** | DISC-TASK-013 |
+| ARCHITECTURE.md Milestone 7 update | **Done** | DISC-TASK-014 |
 
 ---
 
@@ -246,6 +281,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Milestone 3 — Identity Foundation | `agents/architect/design_user_auth_v1.md` | `agents/architect/tasks_user_auth_v1.md` |
 | Milestone 4 — Feed Personalization | `agents/architect/design_feed_personalization_v1.md` | `agents/architect/tasks_feed_personalization_v1.md` |
 | Milestone 5 — Feed Refresh and Source Diversity | `agents/architect/design_feed_refresh_v1.md` | `agents/architect/tasks_feed_refresh_v1.md` |
+| Milestone 7 — Proactive Content Discovery | `agents/architect/design_proactive_discovery_v1.md` | `agents/architect/tasks_proactive_discovery_v1.md` |
 
 ---
 
@@ -264,3 +300,6 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Dev Agent | All 5 Milestone 4 tasks shipped. lib/pipeline/ranker.ts created (rankFeed, Wilson score, suppression, exploration, diversity cap). GET /api/feed/today updated with identity resolution and graceful DB fallback. All algorithm edge cases verified. |
 | 2026-04-04 | Architect Agent | Milestone 5 design complete. Manual refresh endpoint with filesystem cooldown. Per-source article cap and failure isolation in run.ts. generatedAt exposed in FeedResponse. LastUpdatedLabel and RefreshButton UI components. 11 tasks, all Not started. |
 | 2026-04-04 | Dev Agent | REFRESH-TASK-001–009 shipped. Config constants, run.ts rewrite (allSettled isolation, per-source cap, diversity warning, forceOverwrite), cooldown.ts, POST /api/feed/refresh, generatedAt in FeedResponse + feed route, LastUpdatedLabel, RefreshButton, page.tsx integration. |
+| 2026-04-04 | Architect Agent | Milestone 7 design complete. Brave Search API selected. Quality gate (4 criteria: validator rules, freshness 72h, domain blocklist, specificity score). discoveryTopic in batch JSON, stripped from API. Topic weights in new DB table. Constants in new lib/config/feed.ts with startup assertion. 14 tasks, all Not started. |
+| 2026-04-04 | Dev Agent | DISC-TASK-001 through DISC-TASK-010 (P0) shipped. lib/config/feed.ts, lib/discovery/ (topics, braveSearch, qualityGate, run), pipeline/run.ts integration, pipeline/config.ts re-export, feed/today route strip. All 9 P0 DISC stories Released. |
+| 2026-04-04 | Dev Agent | Milestone 7 fully shipped. DISC-TASK-011 (lib/db/discovery.ts + discovery_topic_weights table), DISC-TASK-012 (topic weight feedback loop in runDiscovery), DISC-TASK-013 (verification), DISC-TASK-014 (ARCHITECTURE.md update) all Done. All 14 Milestone 7 tasks complete. Milestones 1–5 and 7 now shipped. |
