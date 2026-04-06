@@ -13,6 +13,8 @@ export interface RunOptions {
   forceOverwrite?: boolean;
   /** When set, the discovery topic selection uses this user's topic weights. */
   userId?: string | null;
+  /** When set, topic weight upserts use this device ID (required for correct upsert keying). */
+  deviceId?: string | null;
 }
 
 export interface RunResult {
@@ -128,7 +130,11 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     appendLog('[discovery] Starting discovery run...');
     let discoveryArticles: Article[] = [];
     try {
-      discoveryArticles = await runDiscovery(fixedArticleUrls, options.userId ?? null);
+      discoveryArticles = await runDiscovery(
+        fixedArticleUrls,
+        options.userId ?? null,
+        options.deviceId ?? null
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       appendLog(`[discovery] Discovery run failed entirely: ${msg}. Falling back to fixed-only batch.`);

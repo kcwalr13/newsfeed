@@ -1,6 +1,6 @@
 # Product Roadmap
 
-**Last Updated**: 2026-04-04 (Milestones 1–5 and 7 Released; Milestone 6 (Extended Features) pending)
+**Last Updated**: 2026-04-04 (Milestones 1–5, 7, and 8 Released; Milestone 6 (Extended Features) pending)
 **Maintained by**: PM Agent
 
 ---
@@ -287,6 +287,28 @@ over time are probed more often. The existing RSS and NewsAPI pipeline is untouc
 
 ---
 
+## Milestone 8 — Discovery Bug Fixes
+
+**Goal**: Eliminate three post-ship defects identified in the M7 review: topic
+weight double-counting due to unbounded feedback reprocessing, the
+`discoveryTopic` internal field leaking through `GET /api/articles/[id]`, and
+the `deviceId`/`userId` argument confusion in the topic weight upsert call.
+
+**Status**: Released
+**Shipped**: 2026-04-04
+**Prerequisite**: Milestone 7 (Proactive Content Discovery) shipped.
+**Task list**: `agents/architect/tasks_discovery_bugfix_v1.md`
+
+### Stories
+
+| Story ID | Title | Status |
+|----------|-------|--------|
+| BUG-001 | Topic weight double-counting — add last_processed_at guard | Released |
+| BUG-002 | discoveryTopic leaks via GET /api/articles/[id] | Released |
+| BUG-003 | deviceId/userId confusion in upsertTopicWeight call | Released |
+
+---
+
 ## Milestone 6 — Extended Features
 
 **Goal**: Quality-of-life features once the core loop is proven.
@@ -318,3 +340,5 @@ over time are probed more often. The existing RSS and NewsAPI pipeline is untouc
 | 2026-04-04 | Dev Agent | Milestone 7 P0 shipped. DISC-001 through DISC-008, DISC-010 all Released. P1 story DISC-009 (topic weight feedback loop) remains Planned. |
 | 2026-04-04 | Dev Agent | DISC-009 (Topic Weight Feedback Loop) verified (DISC-TASK-013). All six acceptance criteria pass by code inspection. DISC-009 marked Released. Milestone 7 still In Progress pending DISC-TASK-014 (ARCHITECTURE.md update). |
 | 2026-04-04 | Dev Agent | DISC-TASK-014 complete. ARCHITECTURE.md updated: status header, DISC-TASK-014 marked Done, changelog entry added. Milestone 7 marked Released. All 14 Milestone 7 tasks shipped. |
+| 2026-04-04 | Architect Agent | Milestone 8 (Discovery Bug Fixes) added as In Progress. Three bug stories (BUG-001, BUG-002, BUG-003) written from M7 post-ship review. Task list at agents/architect/tasks_discovery_bugfix_v1.md. |
+| 2026-04-04 | Dev Agent | Milestone 8 all three bug fixes shipped. BUG-001, BUG-002, BUG-003 all Released. Milestone 8 marked Released. |

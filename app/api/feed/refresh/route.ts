@@ -26,12 +26,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Read device ID for correct topic weight upsert keying
+  const deviceId = req.cookies.get('dd_device_id')?.value ?? null;
+
   // Log the manual refresh attempt
   appendLog(`[refresh] Manual refresh triggered. userId=${session.userId}`);
 
   // Run the full pipeline with overwrite enabled
   try {
-    const result = await runPipeline({ forceOverwrite: true });
+    const result = await runPipeline({ forceOverwrite: true, userId: session.userId, deviceId });
 
     // Record cooldown ONLY after success — failed refresh does not consume cooldown
     recordRefresh(session.userId);

@@ -20,5 +20,7 @@ export async function GET(
     return NextResponse.json({ error: 'Article not found' }, { status: 404 });
   }
 
-  return NextResponse.json(article);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { discoveryTopic: _dt, ...publicArticle } = article;
+  return NextResponse.json(publicArticle);
 }

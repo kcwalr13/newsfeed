@@ -13,6 +13,7 @@ import {
   getTopicWeightsForUser,
   getAllTopicWeightsAveraged,
   upsertTopicWeight,
+  setLastProcessedAt,
 } from '@/lib/db/discovery';
 import type { TopicWeightRow } from '@/lib/db/discovery';
 import { getFeedbackForUser } from '@/lib/db/feedback';
@@ -69,7 +70,8 @@ function selectTopics(
  */
 export async function runDiscovery(
   fixedArticleUrls: Set<string>,
-  userId?: string | null
+  userId?: string | null,
+  deviceId?: string | null
 ): Promise<Article[]> {
   appendLog(`[discovery] Starting discovery run. Topics available: ${DISCOVERY_TOPICS.length}`);
 
@@ -101,7 +103,21 @@ export async function runDiscovery(
 
     // Process feedback for weight updates (only for user-specific runs)
     if (userId) {
-      const feedbackRows = await getFeedbackForUser(userId);
+      // Determine the earliest last_processed_at across all loaded weight rows.
+      // If there are no rows, or any row has null (never processed), fall back to null (process all).
+      const cutoffIso: string | null =
+        weightRows.length > 0 && weightRows.every((r) => r.last_processed_at !== null)
+          ? weightRows.reduce((earliest, r) =>
+              r.last_processed_at! < earliest ? r.last_processed_at! : earliest,
+              weightRows[0].last_processed_at!
+            )
+          : null;
+
+      const allFeedbackRows = await getFeedbackForUser(userId);
+      const feedbackRows = cutoffIso === null
+        ? allFeedbackRows
+        : allFeedbackRows.filter((r) => r.updated_at > cutoffIso);
+
       const latestBatch = readLatestBatch();
       if (latestBatch) {
         const articleTopicMap = new Map<string, string>();  // article_id -> topic_id
@@ -117,10 +133,12 @@ export async function runDiscovery(
           const delta = row.value === 'like' ? TOPIC_WEIGHT_STEP : -TOPIC_WEIGHT_STEP;
           const updated = Math.max(TOPIC_WEIGHT_FLOOR, Math.min(TOPIC_WEIGHT_CEILING, current + delta));
           topicWeightMap.set(topicId, updated);
-          // userId is used as device_id for user-triggered runs (pragmatic simplification:
-          // device_id NOT NULL constraint met; UNIQUE on (user_id, device_id, topic_id) still works).
-          await upsertTopicWeight(userId, topicId, updated, userId);
+          await upsertTopicWeight(deviceId ?? userId ?? 'unknown', topicId, updated, userId);
         }
+      }
+
+      if (feedbackRows.length > 0) {
+        await setLastProcessedAt(userId, deviceId ?? userId ?? 'unknown');
       }
     }
   } catch (err) {

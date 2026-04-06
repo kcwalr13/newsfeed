@@ -7,12 +7,14 @@ export interface TopicWeightRow {
   device_id: string;
   topic_id: string;
   weight: number;
+  last_processed_at: string | null;  // ISO-8601 or null if never processed
 }
 
 /** Returns all topic weight rows for an authenticated user. */
 export async function getTopicWeightsForUser(userId: string): Promise<TopicWeightRow[]> {
   const rows = await sql`
-    SELECT user_id, device_id, topic_id, weight::float AS weight
+    SELECT user_id, device_id, topic_id, weight::float AS weight,
+           last_processed_at::text AS last_processed_at
     FROM discovery_topic_weights
     WHERE user_id = ${userId}
   `;
@@ -22,7 +24,8 @@ export async function getTopicWeightsForUser(userId: string): Promise<TopicWeigh
 /** Returns all topic weight rows for a device (anonymous or authenticated). */
 export async function getTopicWeightsForDevice(deviceId: string): Promise<TopicWeightRow[]> {
   const rows = await sql`
-    SELECT user_id, device_id, topic_id, weight::float AS weight
+    SELECT user_id, device_id, topic_id, weight::float AS weight,
+           last_processed_at::text AS last_processed_at
     FROM discovery_topic_weights
     WHERE device_id = ${deviceId}
   `;
@@ -61,5 +64,35 @@ export async function upsertTopicWeight(
     VALUES (${deviceId}, ${userId ?? null}, ${topicId}, ${clamped}, NOW())
     ON CONFLICT (user_id, device_id, topic_id)
     DO UPDATE SET weight = ${clamped}, updated_at = NOW()
+  `;
+}
+
+/**
+ * Updates last_processed_at to NOW() for all topic weight rows belonging to
+ * the given identity. Called after feedback processing is complete for a run.
+ */
+export async function setLastProcessedAt(
+  userId: string | null,
+  deviceId: string
+): Promise<void> {
+  await sql`
+    UPDATE discovery_topic_weights
+    SET last_processed_at = NOW()
+    WHERE device_id = ${deviceId}
+      AND (
+        (${userId}::text IS NULL AND user_id IS NULL)
+        OR user_id = ${userId}
+      )
+  `;
+}
+
+/**
+ * Idempotent DDL migration: adds last_processed_at column to discovery_topic_weights.
+ * Run once from a migration script or manually — not called on module import.
+ */
+export async function migrateDiscoverySchema(): Promise<void> {
+  await sql`
+    ALTER TABLE discovery_topic_weights
+      ADD COLUMN IF NOT EXISTS last_processed_at TIMESTAMPTZ
   `;
 }

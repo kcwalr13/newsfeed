@@ -3,13 +3,13 @@ import { sql } from './client';
 export interface DbFeedbackRow {
   article_id: string;
   value: 'like' | 'dislike';
-  updated_at: Date;
+  updated_at: string;
 }
 
 /** Returns all feedback rows for a device. */
 export async function getFeedbackForDevice(deviceId: string): Promise<DbFeedbackRow[]> {
   const rows = await sql`
-    SELECT article_id, value, updated_at
+    SELECT article_id, value, updated_at::text AS updated_at
     FROM feedback
     WHERE device_id = ${deviceId}
   `;
@@ -19,7 +19,7 @@ export async function getFeedbackForDevice(deviceId: string): Promise<DbFeedback
 /** Returns deduplicated feedback for an authenticated user (most-recent per article). */
 export async function getFeedbackForUser(userId: string): Promise<DbFeedbackRow[]> {
   const rows = await sql`
-    SELECT DISTINCT ON (article_id) article_id, value, updated_at
+    SELECT DISTINCT ON (article_id) article_id, value, updated_at::text AS updated_at
     FROM feedback
     WHERE user_id = ${userId}
     ORDER BY article_id, updated_at DESC
@@ -42,7 +42,7 @@ export async function upsertFeedback(
       value      = EXCLUDED.value,
       updated_at = NOW(),
       user_id    = COALESCE(EXCLUDED.user_id, feedback.user_id)
-    RETURNING article_id, value, updated_at
+    RETURNING article_id, value, updated_at::text AS updated_at
   `;
   return rows[0] as DbFeedbackRow;
 }

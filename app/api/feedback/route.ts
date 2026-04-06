@@ -25,7 +25,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     for (const row of rows) {
       result[row.article_id] = {
         value: row.value,
-        updatedAt: (row.updated_at as Date).toISOString(),
+        updatedAt: row.updated_at,
       };
     }
 
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const finalRes = NextResponse.json({
       articleId: row.article_id,
       value: row.value,
-      updatedAt: (row.updated_at as Date).toISOString(),
+      updatedAt: row.updated_at,
     });
     const setCookie = cookieRes.headers.get('Set-Cookie');
     if (setCookie) finalRes.headers.set('Set-Cookie', setCookie);

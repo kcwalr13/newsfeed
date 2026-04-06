@@ -268,6 +268,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `lib/discovery/run.ts` — topic weight feedback loop | **Done** | DISC-TASK-012 |
 | Topic weight loop verification | **Done** | DISC-TASK-013 |
 | ARCHITECTURE.md Milestone 7 update | **Done** | DISC-TASK-014 |
+| topic weight double-counting fix (last_processed_at DDL + filter) | **Done** | BUG-TASK-001 |
+| discoveryTopic strip from GET /api/articles/[id] | **Done** | BUG-TASK-002 |
+| deviceId threading fix in runDiscovery + upsertTopicWeight | **Done** | BUG-TASK-003 |
 
 ---
 
@@ -282,6 +285,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Milestone 4 — Feed Personalization | `agents/architect/design_feed_personalization_v1.md` | `agents/architect/tasks_feed_personalization_v1.md` |
 | Milestone 5 — Feed Refresh and Source Diversity | `agents/architect/design_feed_refresh_v1.md` | `agents/architect/tasks_feed_refresh_v1.md` |
 | Milestone 7 — Proactive Content Discovery | `agents/architect/design_proactive_discovery_v1.md` | `agents/architect/tasks_proactive_discovery_v1.md` |
+| Milestone 8 — Discovery Bug Fixes | _(no design doc; see README defect descriptions)_ | `agents/architect/tasks_discovery_bugfix_v1.md` |
 
 ---
 
@@ -303,3 +307,5 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Architect Agent | Milestone 7 design complete. Brave Search API selected. Quality gate (4 criteria: validator rules, freshness 72h, domain blocklist, specificity score). discoveryTopic in batch JSON, stripped from API. Topic weights in new DB table. Constants in new lib/config/feed.ts with startup assertion. 14 tasks, all Not started. |
 | 2026-04-04 | Dev Agent | DISC-TASK-001 through DISC-TASK-010 (P0) shipped. lib/config/feed.ts, lib/discovery/ (topics, braveSearch, qualityGate, run), pipeline/run.ts integration, pipeline/config.ts re-export, feed/today route strip. All 9 P0 DISC stories Released. |
 | 2026-04-04 | Dev Agent | Milestone 7 fully shipped. DISC-TASK-011 (lib/db/discovery.ts + discovery_topic_weights table), DISC-TASK-012 (topic weight feedback loop in runDiscovery), DISC-TASK-013 (verification), DISC-TASK-014 (ARCHITECTURE.md update) all Done. All 14 Milestone 7 tasks complete. Milestones 1–5 and 7 now shipped. |
+| 2026-04-04 | Architect Agent | Milestone 8 bug-fix tasks written. Three defects from M7 review: topic weight double-counting (BUG-TASK-001), discoveryTopic leak via articles/[id] route (BUG-TASK-002), deviceId/userId confusion in upsertTopicWeight (BUG-TASK-003). tasks_discovery_bugfix_v1.md created. |
+| 2026-04-04 | Dev Agent | Milestone 8 all three bug fixes shipped. BUG-TASK-001: added last_processed_at to TopicWeightRow + SELECT helpers, added setLastProcessedAt/migrateDiscoverySchema to lib/db/discovery.ts, updated feedback.ts updated_at to string, added cutoff filter in runDiscovery. BUG-TASK-002: stripped discoveryTopic from GET /api/articles/[id] response. BUG-TASK-003: threaded deviceId through runDiscovery signature, RunOptions, upsertTopicWeight call, setLastProcessedAt call, and refresh route. Also fixed downstream cast error in app/api/feedback/route.ts. npx tsc --noEmit passes. |
