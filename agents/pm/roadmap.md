@@ -1,6 +1,6 @@
 # Product Roadmap
 
-**Last Updated**: 2026-04-16 (Phase 1 Agentic Content Discovery complete; all 19 tasks Done)
+**Last Updated**: 2026-04-04 (Phase 2 Latent Aesthetic Space shipped; all 15 AESTH stories Released)
 **Maintained by**: PM Agent
 
 > **Vision shift (2026-04-07):** The project has been refined from a news aggregator
@@ -369,14 +369,63 @@ module) is accepted. The Architect must sequence tasks accordingly.
 
 ## Phase 2 — Latent Aesthetic Space (Pillar 2)
 
-**Goal**: Embed content along subjective dimensions (tone, pacing, complexity,
-emotional resonance) rather than topic tags. Build an embedding pipeline using
-pgvector in Neon. Enable cross-domain discovery based on aesthetic similarity.
-Seed the user's taste profile from explicit natural language feedback.
+**Goal**: Score every article along six orthogonal aesthetic dimensions (tone,
+pacing, abstraction, voice, register, emotional resonance) using LLM-based
+structured output at ingest time. Store scores as pgvector `vector(6)` in Neon.
+Maintain a per-user aesthetic centroid updated via EMA (alpha = 0.2) on each
+qualifying feedback event. Blend aesthetic proximity (30%) with source score (70%)
+in `rankFeed()` using cosine similarity. New users and articles without scores
+degrade gracefully to source-score-only ranking — no special-case cold-start code.
 
-**Status**: Backlog
-**Prerequisite**: Phase 1 shipped.
+**Status**: Released
+**Shipped**: 2026-04-04
+**Prerequisite**: Phase 1 (Agentic Content Discovery) shipped.
+**Stories doc**: `agents/pm/stories_aesthetic_space_phase2.md`
+**Source BRD**: `agents/ba/brd_aesthetic_space_phase2.md` (BRD-008)
+**Design doc**: `agents/architect/design_aesthetic_space_phase2_v1.md`
+**Task list**: `agents/architect/tasks_aesthetic_space_phase2_v1.md`
 **Vision reference**: `agents/ba/vision_discovery_companion.md` — Section: "Mapping Latent Aesthetic Spaces"
+
+### P0 Stories
+
+| Story ID | Title | Group | Status |
+|----------|-------|-------|--------|
+| AESTH-001 | Six-Dimension Aesthetic Schema Definition | A — Schema | Released |
+| AESTH-002 | Aesthetic Score TypeScript Type | A — Schema | Released |
+| AESTH-003 | Aesthetic Scoring Constants | A — Schema | Released |
+| AESTH-004 | Aesthetic Scorer Module | B — LLM Scoring | Released |
+| AESTH-005 | Aesthetic Scores Database Schema | B — LLM Scoring | Released |
+| AESTH-006 | Pipeline Integration: Score Every Article at Ingest | B — LLM Scoring | Released |
+| AESTH-007 | Scoring Failure Isolation | B — LLM Scoring | Released |
+| AESTH-008 | User Aesthetic Profile Database Schema | C — User Profile | Released |
+| AESTH-009 | Aesthetic Profile Update on Feedback | C — User Profile | Released |
+| AESTH-010 | Aesthetic Profile Read Path | C — User Profile | Released |
+| AESTH-011 | Cosine Similarity Utility | D — Ranking | Released |
+| AESTH-012 | Blended Score Computation in rankFeed() | D — Ranking | Released |
+| AESTH-013 | Feed API Integration for Aesthetic Ranking | D — Ranking | Released |
+| AESTH-014 | Zero Aesthetic Term for New Users | E — Cold Start | Released |
+| AESTH-015 | Graceful Degradation for Unscored Articles | E — Cold Start | Released |
+
+### Implementation Order Note
+
+Groups A and B must be implemented before Group C. Group C must be complete before
+Group D can begin. Group D must be complete before Group E can be fully verified.
+Groups A (schema/constants) can be implemented in parallel with each other.
+AESTH-004 (scorer module) and AESTH-005 (DB schema) can be implemented in parallel.
+AESTH-006 (pipeline integration) requires both AESTH-004 and AESTH-005 to be
+complete. Full dependency graph is in `agents/pm/stories_aesthetic_space_phase2.md`.
+
+### Deferred to Phase 3+
+
+| Story ID | Title | Status |
+|----------|-------|--------|
+| FUTURE-AESTH-001 | User-visible aesthetic profile dashboard | Backlog |
+| FUTURE-AESTH-002 | Retroactive scoring of pre-Phase-2 articles | Backlog |
+| FUTURE-AESTH-003 | Natural language aesthetic feedback | Backlog |
+| FUTURE-AESTH-004 | Dimension tuning without code change | Backlog |
+| FUTURE-AESTH-005 | Cross-modal aesthetics (audio, video, image) | Backlog |
+| FUTURE-AESTH-006 | Short-term vs. long-term aesthetic preference fusion | Backlog |
+| FUTURE-AESTH-007 | Per-user adaptive alpha | Backlog |
 
 ---
 
@@ -445,3 +494,5 @@ vision work. May be revisited as needed.
 | 2026-04-04 | PM Agent | Phase 1 (Agentic Content Discovery) stories written from BRD-007. 14 AGDISC stories across four groups: IndieWeb/Small Web seeding (A, 4 stories), body text extraction (B, 3 stories), LLM content evaluation (C, 3 stories), expanded search strategy (D, 4 stories). 13 P0, 1 P1. Phase 1 roadmap section updated from placeholder to full story table with group labels and implementation order note. Architect decisions flagged: source state storage mechanism, blogroll parsing scope, LLM model confirmation, prompt design, query bank storage path and schema, initialization trigger mechanism, Readability library version. |
 | 2026-04-04 | Dev Agent | Phase 1 AGDISC-TASK-001–017 implemented. All 14 P0 stories + AGDISC-010 (P1, observability) Released. DDL at lib/db/migrations/007_small_web_sources.sql must be applied manually in Neon before E2E verification (AGDISC-TASK-018). npx tsc --noEmit passes. |
 | 2026-04-16 | Dev Agent | Phase 1 complete. AGDISC-TASK-018 (E2E verification) complete by static code inspection + TypeScript clean build. AGDISC-TASK-019 (ARCHITECTURE.md final update) complete. All 19 Phase 1 tasks Done. Phase 1 milestone marked Released. |
+| 2026-04-04 | PM Agent | Phase 2 (Latent Aesthetic Space) scoped from BRD-008. 15 AESTH stories written across five groups: dimension schema (A, 3 stories), LLM scoring pipeline (B, 4 stories), user aesthetic profile (C, 3 stories), aesthetic-aware ranking (D, 3 stories), cold-start and graceful degradation (E, 2 stories). All 15 stories are P0. Phase 2 roadmap section updated from placeholder to full story table. Seven future items deferred to Phase 3+. Architect decisions flagged: pgvector DDL for two new tables, cosine similarity implementation location, EMA update atomicity, LLM model ID and prompt design, pipeline scoring integration point, feedback handler integration approach. |
+| 2026-04-04 | Dev Agent | Phase 2 (Latent Aesthetic Space) complete. AESTH-TASK-004 through AESTH-TASK-012 implemented. All 15 AESTH stories Released. Phase 2 milestone marked Released. |

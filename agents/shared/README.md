@@ -28,7 +28,7 @@ should reference this when making design decisions.
 
 ## Current Project State
 
-**Last updated**: 2026-04-16 (Phase 1 Agentic Content Discovery complete; all 19 tasks shipped)
+**Last updated**: 2026-04-04 (Phase 2 Latent Aesthetic Space complete; all 15 AESTH stories released)
 
 ### Foundation milestones shipped (v1 infrastructure)
 
@@ -43,11 +43,12 @@ should reference this when making design decisions.
 | 7 — Proactive Content Discovery (P0 + P1) | **Complete** |
 | 8 — Discovery Bug Fixes | **Complete** |
 
-### Phase 1 shipped (Pillar 1 — Agentic Web Discovery)
+### Phases shipped (four-pillar vision)
 
 | Phase | Status |
 |-------|--------|
 | Phase 1 — Agentic Content Discovery | **Complete** |
+| Phase 2 — Latent Aesthetic Space | **Complete** |
 
 Phase 1 delivered: Small Web / IndieWeb source seeding with blogroll expansion
 (OPML + HTML patterns), article body text extraction via Mozilla Readability,
@@ -56,19 +57,27 @@ scoring), multi-query topic search with rotation cursor, and committed query ban
 seed file. All 19 AGDISC tasks shipped. DDL: `lib/db/migrations/007_small_web_sources.sql`
 must be applied to Neon (confirmed by user).
 
+Phase 2 delivered: Six-dimension aesthetic scoring (contemplative, concrete, personal,
+playful, specialist, emotional) via Claude Haiku structured output at ingest time.
+Scores stored as `vector(6)` in Neon via pgvector (`article_aesthetic_scores` table).
+Per-user aesthetic centroid maintained via EMA (alpha=0.2) in `user_aesthetic_profiles`
+table, updated on each feedback event. Feed ranking blends cosine similarity (30%)
+with source Wilson score (70%) in `rankFeed()`. Full cold-start and graceful
+degradation to source-score-only ranking when profile or article scores are absent.
+DDL: `lib/db/migrations/009_aesthetic_scores.sql` applied in Neon (confirmed by user).
+
 ### In progress
 
-Nothing actively in flight. Ready to begin Phase 2.
+Nothing actively in flight. Ready to begin Phase 3.
 
 ### Next action
 
-Run the **BA agent** to produce BRD for Phase 2: Latent Aesthetic Space.
-This phase embeds content along subjective dimensions (tone, pacing, complexity,
-emotional resonance), builds an embedding pipeline using pgvector in Neon, and
-enables cross-domain discovery based on aesthetic similarity.
+Run the **BA agent** to produce BRD for Phase 3: Deep User Model.
+This phase builds a persistent cognitive model of the user's evolving taste, replaces
+topic weights with vector-based taste profiles, and adds natural language feedback.
 
 The BA agent prompt should reference `agents/ba/vision_discovery_companion.md`
-Section: "Mapping Latent Aesthetic Spaces".
+Section: "Longitudinal Dynamics and Memory Architectures".
 
 ### Key files for orientation
 
@@ -78,5 +87,5 @@ Section: "Mapping Latent Aesthetic Spaces".
 | Full product vision | `agents/ba/vision_discovery_companion.md` |
 | Architecture overview | `agents/architect/ARCHITECTURE.md` |
 | All milestones and roadmap | `agents/pm/roadmap.md` |
-| Phase 1 design doc | `agents/architect/design_agentic_discovery_phase1_v1.md` |
-| Phase 1 task list | `agents/architect/tasks_agentic_discovery_phase1_v1.md` |
+| Phase 2 design doc | `agents/architect/design_aesthetic_space_phase2_v1.md` |
+| Phase 2 task list | `agents/architect/tasks_aesthetic_space_phase2_v1.md` |

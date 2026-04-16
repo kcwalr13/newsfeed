@@ -1,5 +1,8 @@
 import type { Article } from '@/lib/types/article';
 import type { DbFeedbackRow } from '@/lib/db/feedback';
+import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthetic';
+import { vectorToArray, AESTHETIC_WEIGHT, SOURCE_SCORE_WEIGHT } from '@/lib/config/aesthetic';
+import { cosineSimilarity } from '@/lib/utils/cosineSimilarity';
 
 export const SUPPRESSION_MIN_EVENTS    = 5;
 export const SUPPRESSION_DISLIKE_RATIO = 0.80;
@@ -71,7 +74,9 @@ function applyDiversityCap(articles: Article[], cap: number): Article[] {
 
 export function rankFeed(
   articles: Article[],
-  feedbackRows: DbFeedbackRow[]
+  feedbackRows: DbFeedbackRow[],
+  aestheticProfile?: AestheticProfile | null,
+  aestheticScoreMap?: Map<string, AestheticScoreVector>
 ): Article[] {
   // Step 1: Build articleId → sourceSlug map from batch
   const sourceSlugMap = new Map<string, string>();
@@ -112,12 +117,31 @@ export function rankFeed(
     sourceScores.set(slug, { slug, ...raw, score, suppressed });
   }
 
-  // Step 4: Sort non-suppressed articles by (score DESC, publishedAt DESC)
+  // Precompute the user's centroid as a number[] for cosineSimilarity calls.
+  // null when no profile exists — collapses the aesthetic term to 0.0.
+  const centroidArray: number[] | null =
+    aestheticProfile ? vectorToArray(aestheticProfile.centroid) : null;
+
+  // Returns the blended rank score for an article.
+  // When aestheticProfile is absent, collapses to source score only.
+  function blendedScore(article: Article): number {
+    const ss = sourceScores.get(slugify(article.sourceName))!.score;
+    if (!centroidArray) return ss;
+
+    const scoreVec = aestheticScoreMap?.get(article.id);
+    const aestheticProximity = scoreVec
+      ? cosineSimilarity(centroidArray, vectorToArray(scoreVec))
+      : 0.0;
+
+    return SOURCE_SCORE_WEIGHT * ss + AESTHETIC_WEIGHT * aestheticProximity;
+  }
+
+  // Step 4: Sort non-suppressed articles by (blendedScore DESC, publishedAt DESC)
   const rankedCandidates = articles
     .filter(a => !sourceScores.get(slugify(a.sourceName))!.suppressed)
     .sort((a, b) => {
-      const scoreA = sourceScores.get(slugify(a.sourceName))!.score;
-      const scoreB = sourceScores.get(slugify(b.sourceName))!.score;
+      const scoreA = blendedScore(a);
+      const scoreB = blendedScore(b);
       if (scoreB !== scoreA) return scoreB - scoreA;
       return b.publishedAt.localeCompare(a.publishedAt);
     });

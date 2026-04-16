@@ -6,6 +6,9 @@ import { writeBatch, readBatch, appendLog } from './storage';
 import { fetchRssArticles } from './adapters/rssAdapter';
 import { fetchNewsApiArticles } from './adapters/newsApiAdapter';
 import { validateAndTrim } from './validator';
+import { scoreAesthetic, AestheticScoringError } from '@/lib/discovery/aestheticScorer';
+import { upsertArticleAestheticScore } from '@/lib/db/aesthetics';
+import { AESTHETIC_BODY_MIN_CHARS, AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
 import type { Article, ArticleBatch, Source } from '../types/article';
 
 export interface RunOptions {
@@ -53,6 +56,48 @@ function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle
     countBySource.set(a.sourceName, count + 1);
     return true;
   });
+}
+
+/**
+ * Scores every article aesthetically using Claude Haiku.
+ * Runs after the combined article list is assembled, before writeBatch().
+ * Failures are isolated per-article: an error for article N does not affect N+1.
+ * A scoring failure never removes the article from the batch.
+ */
+async function scoreArticlesAesthetic(articles: Article[]): Promise<void> {
+  const startMs = Date.now();
+  let scored = 0;
+  let skipped = 0;
+
+  for (const article of articles) {
+    // Prepare input text: prefer bodyText if long enough, else title + description
+    let inputText: string;
+    if (article.bodyText && article.bodyText.length >= AESTHETIC_BODY_MIN_CHARS) {
+      inputText = article.bodyText.slice(0, AESTHETIC_BODY_MAX_CHARS);
+    } else {
+      inputText = [article.title, article.description].filter(Boolean).join('. ');
+    }
+
+    try {
+      const scores = await scoreAesthetic(inputText);
+      await upsertArticleAestheticScore(article.id, scores);
+      scored++;
+    } catch (err) {
+      const msg = err instanceof AestheticScoringError
+        ? err.message
+        : err instanceof Error ? err.message : String(err);
+      appendLog(
+        `[aesthetic] SCORE_FAIL articleId=${article.id} url=${article.articleUrl} error=${msg}`
+      );
+      skipped++;
+      // Do not write a null row — absent row = no score. Article is not dropped.
+    }
+  }
+
+  const totalMs = Date.now() - startMs;
+  appendLog(
+    `[aesthetic] Run complete: scored=${scored} skipped=${skipped} totalMs=${totalMs}`
+  );
 }
 
 /**
@@ -158,6 +203,9 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     appendLog(
       `[pipeline] Batch: ${finalFixedCandidates.length} fixed-source, ${discoveryCount} discovery`
     );
+
+    // NEW: Score all articles aesthetically before writing the batch
+    await scoreArticlesAesthetic(articles);
 
     const batch: ArticleBatch = {
       batchDate: today,

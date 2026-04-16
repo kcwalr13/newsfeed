@@ -1,8 +1,8 @@
 # System Architecture
 
-**Last Updated**: 2026-04-16
+**Last Updated**: 2026-04-04
 **Maintained by**: Architect Agent
-**Status**: Active — Milestones 1–8 shipped (v1 foundation); Phase 1 (Agentic Discovery) complete
+**Status**: Active — Milestones 1–8, Phase 1, and Phase 2 shipped
 
 > **Vision (2026-04-07):** The project is a personalized content discovery companion,
 > not a news aggregator. Single-user scope (Kyle), starter sources provided, identity
@@ -70,13 +70,16 @@ newsfeed/
 │   ├── auth/                 ← Session middleware
 │   │   └── session.ts        ← resolveSession(), buildSessionCookie(), clearSessionCookie()
 │   ├── config/               ← Cross-module tuning constants
-│   │   └── feed.ts           ← Quota + discovery constants (ARTICLES_PER_DAY, DISCOVERY_*, etc.)
+│   │   ├── feed.ts           ← Quota + discovery constants (ARTICLES_PER_DAY, DISCOVERY_*, etc.)
+│   │   └── aesthetic.ts      ← Aesthetic constants, DIMENSION_KEYS, vectorToArray, arrayToVector (Phase 2+)
 │   ├── db/                   ← Database query helpers
+│   │   ├── aesthetics.ts     ← Aesthetic score + profile DB helpers (Phase 2+)
 │   │   ├── auth.ts           ← Users, sessions, tokens query helpers
 │   │   ├── client.ts         ← Neon DB connection singleton
 │   │   ├── discovery.ts      ← Topic weight DB helpers
 │   │   └── feedback.ts       ← Feedback query helpers
 │   ├── discovery/            ← Proactive content discovery subsystem
+│   │   ├── aestheticScorer.ts ← scoreAesthetic(), AestheticScoringError (Phase 2+)
 │   │   ├── braveSearch.ts    ← Brave Search API HTTP adapter
 │   │   ├── qualityGate.ts    ← evaluateCandidate() pure function module
 │   │   ├── run.ts            ← runDiscovery() orchestrator
@@ -95,10 +98,13 @@ newsfeed/
 │   │   ├── run.ts            ← Pipeline orchestrator (calls runDiscovery, assembles combined batch)
 │   │   ├── storage.ts        ← Batch file read/write
 │   │   └── validator.ts      ← Article validation and deduplication
-│   └── types/                ← Shared TypeScript types
-│       ├── article.ts        ← Article (+ discoveryTopic internal field), FeedResponse, ArticleBatch, Source
-│       ├── auth.ts           ← DbUser, DbSession, DbToken
-│       └── feedback.ts       ← QueuedWrite, ServerFeedbackMap
+│   ├── types/                ← Shared TypeScript types
+│   │   ├── aesthetic.ts      ← AestheticScoreVector, AestheticProfile (Phase 2+)
+│   │   ├── article.ts        ← Article (+ discoveryTopic internal field), FeedResponse, ArticleBatch, Source
+│   │   ├── auth.ts           ← DbUser, DbSession, DbToken
+│   │   └── feedback.ts       ← QueuedWrite, ServerFeedbackMap
+│   └── utils/                ← Pure utility functions (no I/O)
+│       └── cosineSimilarity.ts ← cosineSimilarity(a, b): number (Phase 2+)
 ├── public/                   ← Static assets
 │   ├── icons/                ← PWA icons (192x192, 512x512)
 │   ├── manifest.json         ← Web App Manifest
@@ -141,6 +147,26 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 **`discovery_topic_weights`** — DB table for per-identity soft topic weights.
 - `user_id` (nullable), `device_id`, `topic_id`, `weight` (0.1–2.0), `updated_at`
 - Helpers in `lib/db/discovery.ts`
+
+**`article_aesthetic_scores`** — DB table for per-article aesthetic score vectors (Phase 2+).
+- `article_id` (TEXT PK — matches `Article.id`), `scores vector(6)`, `scored_at TIMESTAMPTZ`
+- Vector element order: [contemplative, concrete, personal, playful, specialist, emotional]
+- DDL: `lib/db/migrations/009_aesthetic_scores.sql`
+- Helpers in `lib/db/aesthetics.ts`
+
+**`user_aesthetic_profiles`** — DB table for per-user aesthetic centroids (Phase 2+).
+- `id SERIAL PK`, `user_id TEXT` (nullable), `device_id TEXT NOT NULL`, `centroid vector(6)`,
+  `feedback_count INTEGER`, `updated_at TIMESTAMPTZ`, UNIQUE(user_id, device_id)
+- Matches identity pattern from `discovery_topic_weights`.
+- DDL: `lib/db/migrations/009_aesthetic_scores.sql`
+- Helpers in `lib/db/aesthetics.ts`
+
+**`AestheticScoreVector`** — TypeScript type in `lib/types/aesthetic.ts` (Phase 2+).
+- Six named numeric fields: `contemplative`, `concrete`, `personal`, `playful`, `specialist`, `emotional`
+- All values 1.0–5.0. Canonical index order defined in `lib/config/aesthetic.ts`.
+
+**`AestheticProfile`** — TypeScript type in `lib/types/aesthetic.ts` (Phase 2+).
+- `user_id`, `device_id`, `centroid: AestheticScoreVector`, `feedback_count`, `updated_at`
 
 **`small_web_sources`** — DB table for Small Web / IndieWeb source pool (Phase 1+).
 - `id`, `url` (unique), `feed_url`, `last_crawled_at`, `last_yielded_at`,
@@ -212,6 +238,16 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | LLM model for content evaluation | `claude-haiku-4-5-20251001` (Phase 1+) | Fast, cheap (~$2/month at expected volume), sufficient for classification and scoring task |
 | LLM output format | Tool use (structured output) with `score_article` tool (Phase 1+) | Eliminates fragile response parsing; JSON schema enforced by Anthropic API |
 | LLM body text truncation | First 3,000 characters sent to LLM (Phase 1+) | Cost control; sufficient for quality assessment of article-length prose |
+| Aesthetic constants file | New `lib/config/aesthetic.ts` (Phase 2+) | `lib/config/feed.ts` covers pipeline quota and discovery — mixing aesthetic concerns would conflate unrelated domains. Separate file per concern. |
+| Aesthetic article score DB key | `article.id` (`<source-slug>-<8-char-hash>`) (Phase 2+) | All other tables (feedback, topic weights) use this same ID. Using `articleUrl` as PK would introduce a different key convention requiring joins at query time. |
+| Cosine similarity | In-code utility in `lib/utils/cosineSimilarity.ts` (Phase 2+) | Ranking operates over O(20) articles per request — pgvector `<=>` operator buys nothing and adds round-trip complexity. In-code is independently testable. |
+| EMA update location | Synchronous inside `POST /api/feedback`, after primary feedback write (Phase 2+) | Keeps update in a single sequence. Async would add queue/retry complexity for negligible latency benefit at single-user scale. |
+| EMA update atomicity | Fetch-then-update in application code, no locking (Phase 2+) | Concurrent writes unlikely for single-user app. A race yields last-write-wins — acceptable for a taste profile. SQL-level locking would add latency per feedback event. |
+| EMA update failure handling | Log + swallow, never fails the feedback POST (Phase 2+) | Profile update is best-effort. A transient DB failure must not cause user to see 500 on a like/dislike action. |
+| Aesthetic scoring integration point | `lib/pipeline/run.ts`, after combined articles assembled, before `writeBatch()` (Phase 2+) | Only place where all articles (fixed + discovery) are co-located before batch write. Scoring in `runDiscovery()` would miss fixed-source articles. |
+| Aesthetic scoring execution | Sequential per-article (not parallel) (Phase 2+) | Anthropic API is rate-limited. Parallel calls at 20 articles would risk concurrency limit. Sequential adds ~20s to pipeline — acceptable for a once-daily scheduled run. |
+| Aesthetic scoring failure behavior | Log per-article, continue, no null row written (Phase 2+) | Absent row = no score; ranker treats both absent row and null as 0.0 aesthetic proximity. Absent row is cleaner than a sentinel null column. |
+| Aesthetic migration number | `009_aesthetic_scores.sql` (Phase 2+) | 007 and 008 already exist; next sequential number is 009. |
 | Body text extraction library | `@mozilla/readability` + `jsdom`, server-side only (Phase 1+) | Battle-tested on editorial/blog layouts (Firefox Reader Mode); no headless browser needed |
 | Query bank storage | `data/query_banks.json` (runtime, gitignored) + `data/query_banks.default.json` (committed seed) (Phase 1+) | Inspectable/editable by operator without redeploy; default seed prevents cold-start failure |
 | Query rotation cursor storage | `data/query_rotation_state.json` (separate from bank) (Phase 1+) | Decouples query content from cursor state; bank can be refreshed without corrupting cursor |
@@ -329,6 +365,18 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | lib/discovery/run.ts — integrate Small Web crawler | **Done** | AGDISC-TASK-017 |
 | End-to-end verification run | **Done** | AGDISC-TASK-018 |
 | ARCHITECTURE.md update (Phase 1 final) | **Done** | AGDISC-TASK-019 |
+| `lib/types/aesthetic.ts` — AestheticScoreVector + AestheticProfile types | **Done** | AESTH-TASK-001 |
+| `lib/config/aesthetic.ts` — dimension constants, utilities, startup assertion | **Done** | AESTH-TASK-002 |
+| `lib/db/migrations/009_aesthetic_scores.sql` — DDL (requires manual apply in Neon) | **Done** | AESTH-TASK-003 |
+| `lib/db/aesthetics.ts` — all DB helper functions (scores + profiles) | **Done** | AESTH-TASK-004 |
+| `lib/discovery/aestheticScorer.ts` — LLM scorer module (Claude Haiku) | **Done** | AESTH-TASK-005 |
+| `lib/pipeline/run.ts` — scoreArticlesAesthetic() integration | **Done** | AESTH-TASK-006 |
+| `lib/utils/cosineSimilarity.ts` — cosine similarity utility | **Done** | AESTH-TASK-007 |
+| `lib/pipeline/ranker.ts` — blended score extension (aesthetic + source) | **Done** | AESTH-TASK-008 |
+| `app/api/feed/today/route.ts` — aesthetic profile + score reads, rankFeed extension | **Done** | AESTH-TASK-009 |
+| `app/api/feedback/route.ts` — EMA aesthetic profile update | **Done** | AESTH-TASK-010 |
+| End-to-end verification (static code inspection) | **Done** | AESTH-TASK-011 |
+| ARCHITECTURE.md update (Phase 2) | **Done** | AESTH-TASK-012 |
 
 ---
 
@@ -345,6 +393,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Milestone 7 — Proactive Content Discovery | `agents/architect/design_proactive_discovery_v1.md` | `agents/architect/tasks_proactive_discovery_v1.md` |
 | Milestone 8 — Discovery Bug Fixes | _(no design doc; see README defect descriptions)_ | `agents/architect/tasks_discovery_bugfix_v1.md` |
 | Phase 1 — Agentic Content Discovery | `agents/architect/design_agentic_discovery_phase1_v1.md` | `agents/architect/tasks_agentic_discovery_phase1_v1.md` |
+| Phase 2 — Latent Aesthetic Space | `agents/architect/design_aesthetic_space_phase2_v1.md` | `agents/architect/tasks_aesthetic_space_phase2_v1.md` |
 
 ---
 
@@ -370,3 +419,5 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Dev Agent | Milestone 8 all three bug fixes shipped. BUG-TASK-001: added last_processed_at to TopicWeightRow + SELECT helpers, added setLastProcessedAt/migrateDiscoverySchema to lib/db/discovery.ts, updated feedback.ts updated_at to string, added cutoff filter in runDiscovery. BUG-TASK-002: stripped discoveryTopic from GET /api/articles/[id] response. BUG-TASK-003: threaded deviceId through runDiscovery signature, RunOptions, upsertTopicWeight call, setLastProcessedAt call, and refresh route. Also fixed downstream cast error in app/api/feedback/route.ts. npx tsc --noEmit passes. |
 | 2026-04-04 | Dev Agent | Phase 1 (Agentic Discovery) AGDISC-TASK-001 through AGDISC-TASK-017 implemented. Packages installed; feed.ts constants updated; SmallWebSource type; migration SQL file; lib/db/smallWeb.ts; seeds.ts; blogroll.ts; crawler.ts; bodyExtractor.ts; llmEvaluator.ts; qualityGate.ts Gate 4 removal; queryBank.ts; query_banks.default.json; scripts/refresh-query-banks.ts; run.ts fully rewritten (two-queries-per-topic, body extraction, LLM eval, Small Web integration). npx tsc --noEmit passes. DDL must be applied manually — see lib/db/migrations/007_small_web_sources.sql. AGDISC-TASK-018 (E2E verification) pending. |
 | 2026-04-04 | Dev Agent | Phase 1 complete. AGDISC-TASK-018 (E2E verification) confirmed by static code inspection: all log lines, extraction error codes, LLM threshold logging, bodyText field, discoveryTopic stripping, and query rotation logic present and correct. npx tsc --noEmit passes. AGDISC-TASK-019 (ARCHITECTURE.md update) confirmed: all Phase 1 sections already present from Architect pre-population. All 19 Phase 1 tasks Done. |
+| 2026-04-04 | Architect Agent | Phase 2 (Latent Aesthetic Space) design complete. Six aesthetic dimensions (contemplative, concrete, personal, playful, specialist, emotional), Claude Haiku scorer, pgvector article score table and user profile table, EMA centroid update in feedback handler, blended cosine-similarity ranking (30/70). 12 tasks, all Not started. Migration 009 requires manual Neon apply before AESTH-TASK-004. |
+| 2026-04-04 | Dev Agent | Phase 2 (Latent Aesthetic Space) complete. AESTH-TASK-004 through AESTH-TASK-012 implemented. lib/db/aesthetics.ts (5 helpers), lib/discovery/aestheticScorer.ts (Claude Haiku structured output), lib/utils/cosineSimilarity.ts, run.ts scoreArticlesAesthetic() integration, ranker.ts blended score (70/30 source/aesthetic), feed/today route parallel aesthetic reads, feedback route EMA profile update. npx tsc --noEmit passes. All 12 Phase 2 tasks Done. |
