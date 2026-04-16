@@ -1,8 +1,14 @@
 # System Architecture
 
-**Last Updated**: 2026-04-04
+**Last Updated**: 2026-04-16
 **Maintained by**: Architect Agent
-**Status**: Active — Milestones 1–5 and 7 shipped; Milestone 6 (Extended Features) pending
+**Status**: Active — Milestones 1–8 shipped (v1 foundation); Phase 1 (Agentic Discovery) complete
+
+> **Vision (2026-04-07):** The project is a personalized content discovery companion,
+> not a news aggregator. Single-user scope (Kyle), starter sources provided, identity
+> parameterized for future multi-user expansion. Full vision:
+> `agents/ba/vision_discovery_companion.md`. Four-phase plan: Agentic Discovery →
+> Latent Aesthetic Space → Deep User Model → Engineered Serendipity.
 
 ---
 
@@ -18,14 +24,19 @@ For full technical detail on any milestone, see the linked design documents belo
 
 ## Tech Stack
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| Framework | Next.js 14+ (App Router) | Chosen at project start; provides routing, API routes, and SSR in one package |
-| Language | TypeScript (strict) | Type safety across pipeline, API, and UI; shared types prevent drift |
-| Styling | Tailwind CSS | Utility-first; consistent with project setup; no separate CSS files |
-| Package manager | npm | Project default |
-| Platform | PWA (Progressive Web App) | Installable on mobile without app stores; works on desktop too |
-| Storage (v1) | JSON files on filesystem | Zero infrastructure; adequate for 20 articles/day; trivially replaceable |
+| Layer | Technology | Status | Why |
+|-------|-----------|--------|-----|
+| Framework | Next.js 14+ (App Router) | Active | Chosen at project start; provides routing, API routes, and SSR in one package |
+| Language | TypeScript (strict) | Active | Type safety across pipeline, API, and UI; shared types prevent drift |
+| Styling | Tailwind CSS | Active | Utility-first; consistent with project setup; no separate CSS files |
+| Package manager | npm | Active | Project default |
+| Platform | PWA (Progressive Web App) | Active | Installable on mobile without app stores; works on desktop too |
+| Database | Neon serverless Postgres | Active | Feedback, auth, topic weights; scales to future use cases |
+| Storage (v1) | JSON files on filesystem | Active | Zero infrastructure; adequate for 20 articles/day; trivially replaceable |
+| LLM | Claude API (Anthropic SDK) | Phase 1+ | Content evaluation, quality scoring, agent orchestration, query generation |
+| Web crawling | Playwright (headless browser) | Phase 1+ | Small Web / IndieWeb crawling; hybrid API + browser agent strategy |
+| Vector storage | pgvector on Neon | Phase 2+ | Embedding storage for latent aesthetic space; already available in Neon |
+| Memory | Mem0 (open source) | Phase 3+ | Graph-enhanced long-term user memory |
 
 ---
 
@@ -131,6 +142,21 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 - `user_id` (nullable), `device_id`, `topic_id`, `weight` (0.1–2.0), `updated_at`
 - Helpers in `lib/db/discovery.ts`
 
+**`small_web_sources`** — DB table for Small Web / IndieWeb source pool (Phase 1+).
+- `id`, `url` (unique), `feed_url`, `last_crawled_at`, `last_yielded_at`,
+  `yield_count`, `consecutive_zero_yields`, `status` ('active'|'deprioritized'),
+  `cooldown_until`, `discovered_via` ('seed'|'blogroll'), `created_at`
+- Active sources crawled on 7-day interval; deprioritized on 30-day interval.
+- DDL: `lib/db/migrations/007_small_web_sources.sql`
+- Helpers in `lib/db/smallWeb.ts`
+- TypeScript type: `SmallWebSource` in `lib/types/smallWeb.ts`
+
+**`Article.bodyText`** (Phase 1 update) — For qualifying discovery articles
+  (those that pass body extraction + LLM evaluation), `bodyText` is now populated
+  with plain text extracted via Mozilla Readability. Fixed-pipeline articles
+  retain existing behavior (populated from RSS `content:encoded` if available,
+  absent otherwise).
+
 ---
 
 ## API Routes
@@ -177,8 +203,20 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Discovery integration point | `runDiscovery()` called inside `runPipeline()` after fixed-source fetch | Discovery failure does not block fixed-source batch; combined batch assembled in `runPipeline` before write |
 | `discoveryTopic` storage | Optional field on `Article`, stored in batch JSON, stripped from API response | Co-located with article; no extra DB query at feedback time; never leaks to client |
 | Topic configuration | TypeScript static array in `lib/discovery/topics.ts` | Type-safe, no runtime I/O, compile-time schema validation; adding a topic = one-line edit + redeploy |
-| Quality gate | Isolated pure function in `lib/discovery/qualityGate.ts` | No I/O, independently testable, four ordered criteria: validator rules, freshness (72h), domain blocklist, specificity score |
+| Quality gate | Isolated pure function in `lib/discovery/qualityGate.ts` | No I/O, independently testable, three ordered pre-filter criteria: validator rules, freshness (72h), domain blocklist — followed by body extraction + LLM evaluation (Phase 1+) |
+| Quality gate Gate 4 (specificity heuristic) | Removed in Phase 1 | LLM evaluation supersedes the regex-based specificity score; `computeSpecificityScore()` deleted; `SPECIFICITY_THRESHOLD` removed from feed.ts |
 | Quota constants | New `lib/config/feed.ts` with startup assertion | Cross-module constants (quota split, discovery tuning) in a neutral home; assertion prevents PIPELINE + DISCOVERY != ARTICLES_PER_DAY from going undetected |
+| Small Web source state storage | Postgres table `small_web_sources` (Phase 1+) | Cooldown enforcement requires SQL predicates; upsert atomicity built-in; Neon already in use; handles pool growth better than a JSON file |
+| Blogroll parsing scope | OPML files (fast-xml-parser), `<a rel="blogroll">` links, heuristic class/id/nav patterns; depth limit 1 (Phase 1+) | Covers canonical IndieWeb formats plus majority of hand-crafted blogrolls; depth-1 prevents exponential pool expansion |
+| Small Web crawl throttle | Sequential with 1s inter-source delay (Phase 1+) | Protects small personal sites; prevents DDoS appearance |
+| LLM model for content evaluation | `claude-haiku-4-5-20251001` (Phase 1+) | Fast, cheap (~$2/month at expected volume), sufficient for classification and scoring task |
+| LLM output format | Tool use (structured output) with `score_article` tool (Phase 1+) | Eliminates fragile response parsing; JSON schema enforced by Anthropic API |
+| LLM body text truncation | First 3,000 characters sent to LLM (Phase 1+) | Cost control; sufficient for quality assessment of article-length prose |
+| Body text extraction library | `@mozilla/readability` + `jsdom`, server-side only (Phase 1+) | Battle-tested on editorial/blog layouts (Firefox Reader Mode); no headless browser needed |
+| Query bank storage | `data/query_banks.json` (runtime, gitignored) + `data/query_banks.default.json` (committed seed) (Phase 1+) | Inspectable/editable by operator without redeploy; default seed prevents cold-start failure |
+| Query rotation cursor storage | `data/query_rotation_state.json` (separate from bank) (Phase 1+) | Decouples query content from cursor state; bank can be refreshed without corrupting cursor |
+| Queries per topic per run | 2 (Phase 1+) | Stays within Brave free tier (~360 calls/month vs. 2,000 limit); meaningful rotation |
+| Query bank refresh trigger | `scripts/refresh-query-banks.ts` standalone script; monthly manual/cron operation (Phase 1+) | Not auto-called in pipeline; operator controls timing |
 | Session tokens | Random 32-byte hex in DB (`sessions` table) | Enables server-side invalidation on logout; required for 30-day sliding window |
 | Session transport | `HttpOnly` cookie `dd_session` | Cannot be read by JS; separate from `dd_device_id` which must be JS-readable |
 | Email sending | Nodemailer + SMTP | Provider-agnostic; no vendor SDK lock-in; volume too low to require an API |
@@ -199,6 +237,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `EMAIL_FROM` | Email sending | From address: `"Daily Digest <noreply@yourdomain.com>"` |
 | `NEXTAUTH_URL` | Email link generation | Base URL: `http://localhost:3000` (dev), `https://yourdomain.com` (prod) |
 | `BRAVE_SEARCH_API_KEY` | Discovery pipeline (all Brave Search calls) | Obtain at https://api.search.brave.com. Free tier: 2,000 req/month. Never commit. |
+| `ANTHROPIC_API_KEY` | LLM content evaluator (Phase 1+), query bank generation script | Obtain at console.anthropic.com. Never commit. |
 
 ---
 
@@ -271,6 +310,25 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | topic weight double-counting fix (last_processed_at DDL + filter) | **Done** | BUG-TASK-001 |
 | discoveryTopic strip from GET /api/articles/[id] | **Done** | BUG-TASK-002 |
 | deviceId threading fix in runDiscovery + upsertTopicWeight | **Done** | BUG-TASK-003 |
+| npm dependencies: @anthropic-ai/sdk, @mozilla/readability, jsdom, fast-xml-parser, @types/jsdom | **Done** | AGDISC-TASK-001 |
+| lib/config/feed.ts — add LLM_EVAL_THRESHOLD, LLM_EVAL_BODY_CHAR_LIMIT, SMALL_WEB_MAX_NEW_SOURCES_PER_RUN; remove SPECIFICITY_THRESHOLD | **Done** | AGDISC-TASK-002 |
+| lib/db/migrations/007_small_web_sources.sql — DB migration | **Done (file created; DDL pending user apply)** | AGDISC-TASK-003 |
+| lib/db/smallWeb.ts — Small Web DB helper module | **Done** | AGDISC-TASK-004 |
+| lib/discovery/smallWeb/seeds.ts — seed URL constant | **Done** | AGDISC-TASK-005 |
+| lib/discovery/smallWeb/blogroll.ts — blogroll parser (OPML + HTML) | **Done** | AGDISC-TASK-006 |
+| lib/discovery/smallWeb/crawler.ts — crawl orchestrator | **Done** | AGDISC-TASK-007 |
+| lib/discovery/bodyExtractor.ts — Readability + jsdom extraction module | **Done** | AGDISC-TASK-008 |
+| lib/discovery/llmEvaluator.ts — Claude Haiku content evaluator | **Done** | AGDISC-TASK-009 |
+| lib/discovery/qualityGate.ts — remove Gate 4 specificity heuristic | **Done** | AGDISC-TASK-010 |
+| lib/discovery/run.ts — integrate body extraction and LLM evaluation | **Done** | AGDISC-TASK-011 |
+| data/query_banks.default.json — committed seed file | **Done** | AGDISC-TASK-012 |
+| lib/discovery/queryBank.ts — bank loader and rotation cursor | **Done** | AGDISC-TASK-013 |
+| scripts/refresh-query-banks.ts — query bank init script | **Done** | AGDISC-TASK-014 |
+| lib/discovery/run.ts — integrate two-queries-per-topic | **Done** | AGDISC-TASK-015 |
+| lib/types/smallWeb.ts — SmallWebSource type | **Done** | AGDISC-TASK-016 |
+| lib/discovery/run.ts — integrate Small Web crawler | **Done** | AGDISC-TASK-017 |
+| End-to-end verification run | **Done** | AGDISC-TASK-018 |
+| ARCHITECTURE.md update (Phase 1 final) | **Done** | AGDISC-TASK-019 |
 
 ---
 
@@ -286,6 +344,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Milestone 5 — Feed Refresh and Source Diversity | `agents/architect/design_feed_refresh_v1.md` | `agents/architect/tasks_feed_refresh_v1.md` |
 | Milestone 7 — Proactive Content Discovery | `agents/architect/design_proactive_discovery_v1.md` | `agents/architect/tasks_proactive_discovery_v1.md` |
 | Milestone 8 — Discovery Bug Fixes | _(no design doc; see README defect descriptions)_ | `agents/architect/tasks_discovery_bugfix_v1.md` |
+| Phase 1 — Agentic Content Discovery | `agents/architect/design_agentic_discovery_phase1_v1.md` | `agents/architect/tasks_agentic_discovery_phase1_v1.md` |
 
 ---
 
@@ -309,3 +368,5 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Dev Agent | Milestone 7 fully shipped. DISC-TASK-011 (lib/db/discovery.ts + discovery_topic_weights table), DISC-TASK-012 (topic weight feedback loop in runDiscovery), DISC-TASK-013 (verification), DISC-TASK-014 (ARCHITECTURE.md update) all Done. All 14 Milestone 7 tasks complete. Milestones 1–5 and 7 now shipped. |
 | 2026-04-04 | Architect Agent | Milestone 8 bug-fix tasks written. Three defects from M7 review: topic weight double-counting (BUG-TASK-001), discoveryTopic leak via articles/[id] route (BUG-TASK-002), deviceId/userId confusion in upsertTopicWeight (BUG-TASK-003). tasks_discovery_bugfix_v1.md created. |
 | 2026-04-04 | Dev Agent | Milestone 8 all three bug fixes shipped. BUG-TASK-001: added last_processed_at to TopicWeightRow + SELECT helpers, added setLastProcessedAt/migrateDiscoverySchema to lib/db/discovery.ts, updated feedback.ts updated_at to string, added cutoff filter in runDiscovery. BUG-TASK-002: stripped discoveryTopic from GET /api/articles/[id] response. BUG-TASK-003: threaded deviceId through runDiscovery signature, RunOptions, upsertTopicWeight call, setLastProcessedAt call, and refresh route. Also fixed downstream cast error in app/api/feedback/route.ts. npx tsc --noEmit passes. |
+| 2026-04-04 | Dev Agent | Phase 1 (Agentic Discovery) AGDISC-TASK-001 through AGDISC-TASK-017 implemented. Packages installed; feed.ts constants updated; SmallWebSource type; migration SQL file; lib/db/smallWeb.ts; seeds.ts; blogroll.ts; crawler.ts; bodyExtractor.ts; llmEvaluator.ts; qualityGate.ts Gate 4 removal; queryBank.ts; query_banks.default.json; scripts/refresh-query-banks.ts; run.ts fully rewritten (two-queries-per-topic, body extraction, LLM eval, Small Web integration). npx tsc --noEmit passes. DDL must be applied manually — see lib/db/migrations/007_small_web_sources.sql. AGDISC-TASK-018 (E2E verification) pending. |
+| 2026-04-04 | Dev Agent | Phase 1 complete. AGDISC-TASK-018 (E2E verification) confirmed by static code inspection: all log lines, extraction error codes, LLM threshold logging, bodyText field, discoveryTopic stripping, and query rotation logic present and correct. npx tsc --noEmit passes. AGDISC-TASK-019 (ARCHITECTURE.md update) confirmed: all Phase 1 sections already present from Architect pre-population. All 19 Phase 1 tasks Done. |

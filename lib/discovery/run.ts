@@ -2,12 +2,18 @@
 
 import crypto from 'crypto';
 import type { Article } from '@/lib/types/article';
-import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING } from '@/lib/config/feed';
+import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD } from '@/lib/config/feed';
 import { DISCOVERY_TOPICS } from './topics';
 import type { DiscoveryTopic } from './topics';
 import { searchBrave } from './braveSearch';
 import type { BraveSearchResult } from './braveSearch';
 import { evaluateCandidate } from './qualityGate';
+import { extractBodyText } from './bodyExtractor';
+import type { ExtractionFailureReason } from './bodyExtractor';
+import { evaluateWithLLM } from './llmEvaluator';
+import type { LLMScores } from './llmEvaluator';
+import { loadQueryBanks, loadRotationState, saveRotationState, selectNextTwoQueries } from './queryBank';
+import { runSmallWebCrawl } from './smallWeb/crawler';
 import { appendLog, readLatestBatch } from '@/lib/pipeline/storage';
 import {
   getTopicWeightsForUser,
@@ -17,6 +23,24 @@ import {
 } from '@/lib/db/discovery';
 import type { TopicWeightRow } from '@/lib/db/discovery';
 import { getFeedbackForUser } from '@/lib/db/feedback';
+
+interface EvalStats {
+  candidatesAttempted: number;
+  extractionFailed: Partial<Record<ExtractionFailureReason, number>>;
+  llmFailed: Partial<Record<'parse_error' | 'api_error', number>>;
+  llmThresholdFailed: number;
+  llmCallCount: number;
+  llmPassCount: number;
+  llmWallTimeMs: number;
+  qualified: number;
+}
+
+interface ScoredCandidate {
+  result: BraveSearchResult;
+  topic: DiscoveryTopic;
+  llmScores: LLMScores;
+  bodyText: string;
+}
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -62,11 +86,13 @@ function selectTopics(
 
 /**
  * Runs the proactive content discovery pipeline:
- * selects topics, searches Brave, filters through quality gate, deduplicates,
- * enforces quota, and returns Article[] ready to merge with the fixed pipeline.
+ * selects topics, searches Brave (2 queries per topic), filters through quality gate
+ * (Gates 1-3, body extraction, LLM evaluation), deduplicates, enforces quota,
+ * and returns Article[] ready to merge with the fixed pipeline.
  *
  * @param fixedArticleUrls - Canonical URLs of articles already in the fixed pipeline.
- * @param userId - Optional user ID for user-specific topic weights (used in P1).
+ * @param userId - Optional user ID for user-specific topic weights.
+ * @param deviceId - Optional device ID for anonymous topic weights.
  */
 export async function runDiscovery(
   fixedArticleUrls: Set<string>,
@@ -128,7 +154,7 @@ export async function runDiscovery(
         }
         for (const row of feedbackRows) {
           const topicId = articleTopicMap.get(row.article_id);
-          if (!topicId || topicId === 'uncategorized') continue;
+          if (!topicId || topicId === 'uncategorized' || topicId === 'small-web') continue;
           const current = topicWeightMap.get(topicId) ?? 1.0;
           const delta = row.value === 'like' ? TOPIC_WEIGHT_STEP : -TOPIC_WEIGHT_STEP;
           const updated = Math.max(TOPIC_WEIGHT_FLOOR, Math.min(TOPIC_WEIGHT_CEILING, current + delta));
@@ -153,23 +179,47 @@ export async function runDiscovery(
 
   const topicsToProbe = selectTopics(DISCOVERY_TOPICS, DISCOVERY_TOPICS_PER_RUN, topicWeightMap);
 
-  const searchResults = await Promise.allSettled(
-    topicsToProbe.map((topic) =>
-      searchBrave(topic.searchQueries[0], DISCOVERY_CANDIDATES_PER_TOPIC)
-        .then((results) => ({ topic, results }))
-    )
-  );
+  // Load query banks and rotation state (Group D)
+  const queryBanks = loadQueryBanks();
+  const rotationState = loadRotationState();
+  const updatedRotationState = new Map<string, number>(rotationState);
 
-  // Quality gate pass + within-discovery dedup
-  const seenCanonical = new Set<string>();
+  // Issue two queries per selected topic
+  const searchPromises: Promise<{ topic: DiscoveryTopic; results: BraveSearchResult[] }>[] = [];
+  for (const topic of topicsToProbe) {
+    const queries = queryBanks.get(topic.id) ?? topic.searchQueries;
+    const cursor = rotationState.get(topic.id) ?? -1;
+    const { selected, newCursor } = selectNextTwoQueries(queries, cursor);
+    updatedRotationState.set(topic.id, newCursor);
+    for (const query of selected) {
+      searchPromises.push(
+        searchBrave(query, DISCOVERY_CANDIDATES_PER_TOPIC).then((results) => ({ topic, results }))
+      );
+    }
+  }
+  const searchResults = await Promise.allSettled(searchPromises);
 
-  interface ScoredCandidate {
-    result: BraveSearchResult;
-    topic: DiscoveryTopic;
-    specificityScore: number;
+  // Group A: Small Web crawl
+  let smallWebCandidates: BraveSearchResult[] = [];
+  try {
+    smallWebCandidates = await runSmallWebCrawl();
+    appendLog(`[discovery] Small Web crawl yielded ${smallWebCandidates.length} candidates`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    appendLog(`[discovery] Small Web crawl failed (non-blocking): ${msg}`);
   }
 
-  const qualified: ScoredCandidate[] = [];
+  // Flatten all candidates into (topic, result) pairs for evaluation.
+  // Small Web candidates use a synthetic 'small-web' topic.
+  const syntheticSmallWebTopic: DiscoveryTopic = {
+    id: 'small-web',
+    label: 'Small Web',
+    searchQueries: [],
+    defaultWeight: 1.0,
+  };
+
+  type CandidatePair = { topic: DiscoveryTopic; result: BraveSearchResult };
+  const allCandidatePairs: CandidatePair[] = [];
 
   for (const settled of searchResults) {
     if (settled.status === 'rejected') {
@@ -177,43 +227,118 @@ export async function runDiscovery(
       appendLog(`[discovery] Topic search failed: ${reason}`);
       continue;
     }
-
     const { topic, results } = settled.value;
-
     for (const result of results) {
-      const gateResult = evaluateCandidate(result);
-
-      if (!gateResult.pass) {
-        appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- ${gateResult.reason}`);
-        continue;
-      }
-
-      const canonical = canonicalizeUrl(result.url);
-
-      // Pass 2: dedup against fixed pipeline
-      if (fixedArticleUrls.has(canonical)) {
-        appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- DUPLICATE_FIXED`);
-        continue;
-      }
-
-      // Pass 1: within-discovery dedup
-      if (seenCanonical.has(canonical)) {
-        appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- DUPLICATE_DISCOVERY`);
-        continue;
-      }
-
-      seenCanonical.add(canonical);
-      qualified.push({ result, topic, specificityScore: gateResult.specificityScore });
+      allCandidatePairs.push({ topic, result });
     }
   }
 
-  // Sort by specificity score descending, enforce quota
-  qualified.sort((a, b) => b.specificityScore - a.specificityScore);
+  for (const result of smallWebCandidates) {
+    allCandidatePairs.push({ topic: syntheticSmallWebTopic, result });
+  }
+
+  // Quality gate pass + within-discovery dedup + body extraction + LLM evaluation
+  const seenCanonical = new Set<string>();
+  const qualified: ScoredCandidate[] = [];
+
+  const stats: EvalStats = {
+    candidatesAttempted: 0,
+    extractionFailed: {},
+    llmFailed: {},
+    llmThresholdFailed: 0,
+    llmCallCount: 0,
+    llmPassCount: 0,
+    llmWallTimeMs: 0,
+    qualified: 0,
+  };
+
+  for (const { topic, result } of allCandidatePairs) {
+    // Gate 1–3: synchronous pre-filter
+    const gateResult = evaluateCandidate(result);
+    if (!gateResult.pass) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- ${gateResult.reason}`);
+      continue;
+    }
+
+    // Dedup check (before the expensive LLM call)
+    const canonical = canonicalizeUrl(result.url);
+    if (fixedArticleUrls.has(canonical)) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- DUPLICATE_FIXED`);
+      continue;
+    }
+    if (seenCanonical.has(canonical)) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- DUPLICATE_DISCOVERY`);
+      continue;
+    }
+
+    stats.candidatesAttempted++;
+
+    // Group B: body text extraction
+    const extractResult = await extractBodyText(result.url);
+    if (!extractResult.success) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- extraction:${extractResult.reason}`);
+      stats.extractionFailed[extractResult.reason] = (stats.extractionFailed[extractResult.reason] ?? 0) + 1;
+      continue;
+    }
+
+    // Group C: LLM evaluation
+    const llmStart = Date.now();
+    stats.llmCallCount++;
+    const llmResult = await evaluateWithLLM(result.title, result.description ?? '', extractResult.bodyText);
+    stats.llmWallTimeMs += Date.now() - llmStart;
+
+    if (!llmResult.success) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- llm:${llmResult.reason}`);
+      stats.llmFailed[llmResult.reason] = (stats.llmFailed[llmResult.reason] ?? 0) + 1;
+      continue;
+    }
+
+    if (llmResult.scores.composite < LLM_EVAL_THRESHOLD) {
+      appendLog(
+        `[discovery] DISCARD [${topic.id}] ${result.url} -- llm_threshold_not_met ` +
+        `(composite:${llmResult.scores.composite}, ` +
+        `sub:${llmResult.scores.intellectual_substance} ` +
+        `orig:${llmResult.scores.originality} ` +
+        `cross:${llmResult.scores.cross_disciplinary_appeal} ` +
+        `ever:${llmResult.scores.evergreen_durability} ` +
+        `write:${llmResult.scores.writing_quality})`
+      );
+      stats.llmThresholdFailed++;
+      continue;
+    }
+
+    stats.llmPassCount++;
+    seenCanonical.add(canonical);
+    qualified.push({ result, topic, llmScores: llmResult.scores, bodyText: extractResult.bodyText });
+  }
+
+  // Sort by LLM composite score descending, enforce quota
+  qualified.sort((a, b) => b.llmScores.composite - a.llmScores.composite);
   const top = qualified.slice(0, DISCOVERY_ARTICLES_PER_DAY);
+
+  stats.qualified = top.length;
+
+  const extractFailSummary = Object.entries(stats.extractionFailed)
+    .map(([k, v]) => `${v} ${k}`).join(', ') || '0';
+  const llmFailSummary = Object.entries(stats.llmFailed)
+    .map(([k, v]) => `${v} ${k}`).join(', ') || '0';
+
+  appendLog(
+    `[discovery] Run summary: ${stats.candidatesAttempted} candidates attempted, ` +
+    `extraction failures: ${extractFailSummary}, ` +
+    `LLM failures: ${llmFailSummary}, ` +
+    `${stats.llmThresholdFailed} below threshold, ` +
+    `${stats.llmPassCount} LLM pass, ` +
+    `${stats.qualified} qualified after dedup+quota. ` +
+    `LLM: ${stats.llmCallCount} calls, ${stats.llmWallTimeMs}ms total`
+  );
+
+  // Save updated rotation state
+  saveRotationState(updatedRotationState);
 
   // Map to Article objects
   const now = new Date().toISOString();
-  const discoveryArticles: Article[] = top.map(({ result, topic }) => ({
+  const discoveryArticles: Article[] = top.map(({ result, topic, bodyText }) => ({
     id: makeId(result.sourceName, result.url),
     title: result.title,
     description: result.description,
@@ -224,7 +349,7 @@ export async function runDiscovery(
     fetchedAt: now,
     batchDate: '',                       // will be set by runPipeline during assembly
     imageUrl: undefined,
-    bodyText: undefined,
+    bodyText: bodyText,
     feedbackSlot: null,
     discoveryTopic: topic.id,            // internal metadata
   }));

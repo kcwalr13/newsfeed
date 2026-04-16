@@ -1,7 +1,14 @@
 # Product Roadmap
 
-**Last Updated**: 2026-04-04 (Milestones 1–5, 7, and 8 Released; Milestone 6 (Extended Features) pending)
+**Last Updated**: 2026-04-16 (Phase 1 Agentic Content Discovery complete; all 19 tasks Done)
 **Maintained by**: PM Agent
+
+> **Vision shift (2026-04-07):** The project has been refined from a news aggregator
+> to a personalized content discovery companion. Scope is single-user first (Kyle),
+> with starter content sources provided by the user. Identity is parameterized
+> throughout for future multi-user expansion. The full vision is documented in
+> `agents/ba/vision_discovery_companion.md`. Milestones 1–8 are the v1 foundation.
+> Future work follows a four-phase plan aligned with the vision's four pillars.
 
 ---
 
@@ -309,9 +316,101 @@ the `deviceId`/`userId` argument confusion in the topic weight upsert call.
 
 ---
 
-## Milestone 6 — Extended Features
+## Phase 1 — Agentic Content Discovery (Pillar 1)
 
-**Goal**: Quality-of-life features once the core loop is proven.
+**Goal**: Replace the Brave Search keyword approach with richer, more intelligent
+discovery from the Small Web, IndieWeb, and decentralized sources. Surface the
+kind of content The Browser, The Marginalian, or Arts & Letters Daily would
+feature. Includes IndieWeb/Small Web source seeding with organic blogroll expansion,
+article body text extraction, LLM-based content evaluation (replacing the regex
+quality gate), and expanded multi-query search strategies with rotation and
+LLM-generated query banks.
+
+**Status**: Released
+**Shipped**: 2026-04-16
+**Prerequisite**: Milestone 8 (Discovery Bug Fixes) shipped.
+**Stories doc**: `agents/pm/stories_agentic_discovery_phase1.md`
+**Source BRD**: `agents/ba/brd_agentic_discovery_phase1.md` (BRD-007)
+**Design doc**: `agents/architect/design_agentic_discovery_phase1_v1.md`
+**Task list**: `agents/architect/tasks_agentic_discovery_phase1_v1.md`
+**Vision reference**: `agents/ba/vision_discovery_companion.md` — Section: "Agentic Deep Research and Multi-Agent Collaboration"
+
+### P0 Stories
+
+| Story ID | Title | Group | Status |
+|----------|-------|-------|--------|
+| AGDISC-001 | Small Web Source State Store | A — IndieWeb Seeding | Released |
+| AGDISC-002 | Small Web Source Crawl Scheduler | A — IndieWeb Seeding | Released |
+| AGDISC-003 | Blogroll Discovery and Source Pool Expansion | A — IndieWeb Seeding | Released |
+| AGDISC-004 | Small Web Article Fetching and Feed Parsing | A — IndieWeb Seeding | Released |
+| AGDISC-005 | Article Body Text Extraction Module | B — Body Extraction | Released |
+| AGDISC-006 | Extraction Failure Logging and Pipeline Continuity | B — Body Extraction | Released |
+| AGDISC-007 | Body Text Population on Article Record | B — Body Extraction | Released |
+| AGDISC-008 | LLM Content Evaluator Module | C — LLM Evaluation | Released |
+| AGDISC-009 | Quality Gate: Replace Specificity Heuristic with LLM Evaluation | C — LLM Evaluation | Released |
+| AGDISC-011 | Multi-Query Topic Bank Schema | D — Expanded Search | Released |
+| AGDISC-012 | Query Rotation Cursor | D — Expanded Search | Released |
+| AGDISC-013 | Two-Queries-Per-Topic Execution | D — Expanded Search | Released |
+| AGDISC-014 | LLM-Generated Query Bank Initialization and Refresh | D — Expanded Search | Released |
+
+### P1 Stories
+
+| Story ID | Title | Group | Status |
+|----------|-------|-------|--------|
+| AGDISC-010 | LLM Evaluation Cost and Run-Time Observability | C — LLM Evaluation | Released |
+
+### Implementation Order Note
+
+Groups A and D can be implemented in parallel with each other and with Group B.
+Group C (AGDISC-008, AGDISC-009) cannot begin until AGDISC-005 (body extraction
+module) is accepted. The Architect must sequence tasks accordingly.
+
+---
+
+## Phase 2 — Latent Aesthetic Space (Pillar 2)
+
+**Goal**: Embed content along subjective dimensions (tone, pacing, complexity,
+emotional resonance) rather than topic tags. Build an embedding pipeline using
+pgvector in Neon. Enable cross-domain discovery based on aesthetic similarity.
+Seed the user's taste profile from explicit natural language feedback.
+
+**Status**: Backlog
+**Prerequisite**: Phase 1 shipped.
+**Vision reference**: `agents/ba/vision_discovery_companion.md` — Section: "Mapping Latent Aesthetic Spaces"
+
+---
+
+## Phase 3 — Deep User Model (Pillars 2+3)
+
+**Goal**: Build a persistent cognitive model of the user's evolving taste. Replace
+the topic weight system with a vector-based taste profile. Add natural language
+feedback alongside like/dislike. Implement short-term/long-term preference fusion.
+Use Mem0-style graph-enhanced memory for longitudinal relationship tracking.
+
+**Status**: Backlog
+**Prerequisite**: Phase 2 shipped.
+**Vision reference**: `agents/ba/vision_discovery_companion.md` — Section: "Longitudinal Dynamics and Memory Architectures"
+
+---
+
+## Phase 4 — Engineered Serendipity (Pillar 4)
+
+**Goal**: Compute serendipity via semantic distance, relevance, and diversity.
+Implement active learning to test blind spots and contradict the machine's
+assumptions. Deploy structured randomness weighted by the user's psychographic
+profile. Balance exploration and exploitation to continuously expand intellectual
+boundaries.
+
+**Status**: Backlog
+**Prerequisite**: Phase 3 shipped.
+**Vision reference**: `agents/ba/vision_discovery_companion.md` — Section: "Engineering Serendipity and Mapping the Unknown"
+
+---
+
+## Milestone 6 — Extended Features (Deferred)
+
+**Goal**: Quality-of-life features. Deprioritized in favor of the four-phase
+vision work. May be revisited as needed.
 
 **Status**: Backlog
 
@@ -342,3 +441,7 @@ the `deviceId`/`userId` argument confusion in the topic weight upsert call.
 | 2026-04-04 | Dev Agent | DISC-TASK-014 complete. ARCHITECTURE.md updated: status header, DISC-TASK-014 marked Done, changelog entry added. Milestone 7 marked Released. All 14 Milestone 7 tasks shipped. |
 | 2026-04-04 | Architect Agent | Milestone 8 (Discovery Bug Fixes) added as In Progress. Three bug stories (BUG-001, BUG-002, BUG-003) written from M7 post-ship review. Task list at agents/architect/tasks_discovery_bugfix_v1.md. |
 | 2026-04-04 | Dev Agent | Milestone 8 all three bug fixes shipped. BUG-001, BUG-002, BUG-003 all Released. Milestone 8 marked Released. |
+| 2026-04-07 | Manual | Vision refined: project is now a personalized content discovery companion (not a news aggregator). Scope narrowed to single-user first (Kyle) with user-supplied starter sources. Identity parameterized for future multi-user expansion. Four-phase plan added (Agentic Discovery, Latent Aesthetic Space, Deep User Model, Engineered Serendipity). M6 Extended Features deprioritized. Vision doc at agents/ba/vision_discovery_companion.md. |
+| 2026-04-04 | PM Agent | Phase 1 (Agentic Content Discovery) stories written from BRD-007. 14 AGDISC stories across four groups: IndieWeb/Small Web seeding (A, 4 stories), body text extraction (B, 3 stories), LLM content evaluation (C, 3 stories), expanded search strategy (D, 4 stories). 13 P0, 1 P1. Phase 1 roadmap section updated from placeholder to full story table with group labels and implementation order note. Architect decisions flagged: source state storage mechanism, blogroll parsing scope, LLM model confirmation, prompt design, query bank storage path and schema, initialization trigger mechanism, Readability library version. |
+| 2026-04-04 | Dev Agent | Phase 1 AGDISC-TASK-001–017 implemented. All 14 P0 stories + AGDISC-010 (P1, observability) Released. DDL at lib/db/migrations/007_small_web_sources.sql must be applied manually in Neon before E2E verification (AGDISC-TASK-018). npx tsc --noEmit passes. |
+| 2026-04-16 | Dev Agent | Phase 1 complete. AGDISC-TASK-018 (E2E verification) complete by static code inspection + TypeScript clean build. AGDISC-TASK-019 (ARCHITECTURE.md final update) complete. All 19 Phase 1 tasks Done. Phase 1 milestone marked Released. |

@@ -44,4 +44,6 @@ next-env.d.ts
 /data/batches/
 /data/pipeline.log
 /data/refresh_cooldowns.json
+/data/query_banks.json
+/data/query_rotation_state.json
 .env.local

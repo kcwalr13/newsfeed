@@ -28,9 +28,6 @@ export const DISCOVERY_TOPICS_PER_RUN = 6;
 /** Number of raw search results requested per topic query (Brave count param). */
 export const DISCOVERY_CANDIDATES_PER_TOPIC = 10;
 
-/** Minimum specificity score (0.0-1.0) for a candidate title to pass the quality gate. */
-export const SPECIFICITY_THRESHOLD = 0.4;
-
 /** Magnitude of topic weight adjustment per feedback event (like or dislike). */
 export const TOPIC_WEIGHT_STEP = 0.1;
 
@@ -39,3 +36,12 @@ export const TOPIC_WEIGHT_FLOOR = 0.1;
 
 /** Ceiling on topic weights. No single topic can dominate the rotation. */
 export const TOPIC_WEIGHT_CEILING = 2.0;
+
+/** LLM composite score threshold (0–5) for a discovery candidate to pass the quality gate. */
+export const LLM_EVAL_THRESHOLD = 3.5;
+
+/** Maximum characters of body text sent to the LLM evaluator per call (cost control). */
+export const LLM_EVAL_BODY_CHAR_LIMIT = 3000;
+
+/** Maximum new sources added to the Small Web pool per crawl run (blogroll expansion cap). */
+export const SMALL_WEB_MAX_NEW_SOURCES_PER_RUN = 20;

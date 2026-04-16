@@ -1,0 +1,113 @@
+{
+  "generated_at": "2026-04-04T00:00:00Z",
+  "topics": {
+    "fringe-science": {
+      "queries": [
+        "overlooked scientific phenomena that contradicted established consensus",
+        "measurement anomalies that changed our understanding of physical constants",
+        "marginal research traditions later vindicated by mainstream science",
+        "scientists working outside institutional frameworks who made lasting contributions",
+        "unexpected connections between disparate fields of scientific inquiry"
+      ]
+    },
+    "music-audio-culture": {
+      "queries": [
+        "underground music communities that shaped but never reached mainstream culture",
+        "acoustic phenomena that influenced composition across different traditions",
+        "forgotten instrument makers and the sounds that died with them",
+        "geographic isolation as a driver of distinct musical evolution",
+        "the economics and sociology of independent music distribution before streaming"
+      ]
+    },
+    "visual-art-design": {
+      "queries": [
+        "design solutions born from severe material or economic constraints",
+        "vernacular visual traditions that influenced formal art movements",
+        "artists working at the intersection of craft and industrial production",
+        "color theory and perception research applied outside academic contexts",
+        "the typography and layout of documents that changed how information was understood"
+      ]
+    },
+    "architecture": {
+      "queries": [
+        "buildings that solved social problems their architects did not anticipate",
+        "structural techniques developed in one culture adopted by another",
+        "the relationship between building materials and the societies that used them",
+        "small-scale architecture that influenced thinking about urban scale",
+        "failed utopian housing projects and what they reveal about planning assumptions"
+      ]
+    },
+    "fashion-material-culture": {
+      "queries": [
+        "textile production techniques that shaped economic and social structures",
+        "garments as evidence of cross-cultural contact and trade routes",
+        "the politics of clothing and dress codes across different historical periods",
+        "materials that carried meaning beyond their physical properties",
+        "craft traditions at risk of disappearing and why they matter"
+      ]
+    },
+    "nature-ecology": {
+      "queries": [
+        "ecological relationships so subtle they went unnoticed for decades",
+        "species whose behavior revealed unexpected complexity in natural systems",
+        "the long-term effects of human alteration of landscape on non-target species",
+        "overlooked organisms that play disproportionate roles in their ecosystems",
+        "natural systems that recovered from apparent irreversible damage"
+      ]
+    },
+    "math-philosophy": {
+      "queries": [
+        "mathematical results with profound philosophical implications rarely discussed",
+        "philosophical problems that turned out to be mathematical ones in disguise",
+        "logicians and mathematicians whose work was ignored for decades then became foundational",
+        "the relationship between formal systems and the limits of what can be known",
+        "informal mathematical thinking that preceded formal proofs by centuries"
+      ]
+    },
+    "film-visual-storytelling": {
+      "queries": [
+        "filmmakers who developed techniques in isolation that others independently discovered",
+        "the visual language of non-commercial cinema traditions",
+        "documentary approaches that changed how factual storytelling was conceived",
+        "the influence of working constraints on visual style in cinema",
+        "films that failed commercially but shaped subsequent filmmaking"
+      ]
+    },
+    "literature-language": {
+      "queries": [
+        "literary forms that emerged from specific social and material conditions",
+        "writers who worked in the gaps between recognized genres or traditions",
+        "languages with structural features that shaped the thought of their speakers",
+        "translations that changed how a literature was received in a new context",
+        "the relationship between oral tradition and written form in specific cultures"
+      ]
+    },
+    "craft-making": {
+      "queries": [
+        "hand processes that machine production failed to replicate and why",
+        "makers who reconstructed lost techniques from surviving objects",
+        "the tacit knowledge embedded in traditional craft that resists documentation",
+        "material properties discovered through practice before scientific explanation",
+        "craft communities that preserved techniques through periods of suppression"
+      ]
+    },
+    "economics-behavioral": {
+      "queries": [
+        "economic behaviors that persisted despite being individually irrational",
+        "historical financial crises that followed patterns not recognized until later",
+        "behavioral research that contradicted assumptions built into economic models",
+        "informal economic systems that operated alongside formal ones",
+        "the cognitive limits that shape how people perceive and respond to risk"
+      ]
+    },
+    "history-archaeology": {
+      "queries": [
+        "archaeological discoveries that required revision of well-established historical narratives",
+        "historical events whose significance was not recognized by contemporaries",
+        "material evidence that survived when written records did not",
+        "technologies that appeared, disappeared, and were independently reinvented",
+        "the persistence of pre-modern practices into periods assumed to have abandoned them"
+      ]
+    }
+  }
+}
