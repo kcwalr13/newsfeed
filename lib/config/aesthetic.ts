@@ -40,6 +40,56 @@ export const AESTHETIC_BODY_MIN_CHARS = 300;
  *  (cost control; sufficient for aesthetic quality assessment). */
 export const AESTHETIC_BODY_MAX_CHARS = 3000;
 
+// ── Phase 3: Short-term / long-term blend weights ─────────────────────────────
+
+/** Short-term centroid weight in the blended centroid (normal, no drift). */
+export const SHORT_TERM_WEIGHT       = 0.35;
+/** Long-term centroid weight in the blended centroid (normal, no drift). */
+export const LONG_TERM_WEIGHT        = 0.65;
+/** Short-term centroid weight during a detected drift period. */
+export const DRIFT_SHORT_TERM_WEIGHT = 0.65;
+/** Long-term centroid weight during a detected drift period. */
+export const DRIFT_LONG_TERM_WEIGHT  = 0.35;
+
+// Invariant: both pairs must sum to 1.0
+if (Math.abs(SHORT_TERM_WEIGHT + LONG_TERM_WEIGHT - 1.0) > 1e-10) {
+  throw new Error(
+    `[config/aesthetic] Blend weight mismatch: SHORT_TERM_WEIGHT (${SHORT_TERM_WEIGHT}) ` +
+    `+ LONG_TERM_WEIGHT (${LONG_TERM_WEIGHT}) must equal 1.0`
+  );
+}
+if (Math.abs(DRIFT_SHORT_TERM_WEIGHT + DRIFT_LONG_TERM_WEIGHT - 1.0) > 1e-10) {
+  throw new Error(
+    `[config/aesthetic] Drift blend weight mismatch: DRIFT_SHORT_TERM_WEIGHT ` +
+    `(${DRIFT_SHORT_TERM_WEIGHT}) + DRIFT_LONG_TERM_WEIGHT (${DRIFT_LONG_TERM_WEIGHT}) ` +
+    `must equal 1.0`
+  );
+}
+
+/** Cosine distance threshold above which the system enters a drift period. */
+export const DRIFT_THRESHOLD         = 0.25;
+/** Trailing days for the short-term preference window. */
+export const SHORT_TERM_WINDOW_DAYS  = 21;
+/** Minimum qualifying feedback events before short-term centroid is trusted. */
+export const SHORT_TERM_MIN_EVENTS   = 3;
+
+// ── Phase 3: Engagement weight constants ─────────────────────────────────────
+
+/** Dwell time threshold (seconds) for medium engagement weighting. */
+export const DWELL_MEDIUM_THRESHOLD  = 60;
+/** Dwell time threshold (seconds) for deep engagement weighting. */
+export const DWELL_LONG_THRESHOLD    = 180;
+/** Engagement weight for a default like (no dwell or very short dwell). */
+export const WEIGHT_LIKE_DEFAULT     = 1.0;
+/** Engagement weight for a like with medium dwell (60–179s). */
+export const WEIGHT_LIKE_MEDIUM      = 1.2;
+/** Engagement weight for a like with long dwell (180s+). */
+export const WEIGHT_LIKE_LONG        = 1.5;
+/** Engagement weight for a like on an already-saved article. */
+export const WEIGHT_SAVE_WITH_LIKE   = 1.8;
+/** Engagement weight for a save without an explicit like. */
+export const WEIGHT_SAVE_NO_LIKE     = 1.2;
+
 // ── Dimension key ordering ────────────────────────────────────────────────────
 
 /** Canonical key order for the six aesthetic dimensions.

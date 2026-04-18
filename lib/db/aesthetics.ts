@@ -1,8 +1,14 @@
-// DB helper functions for aesthetic scoring and user aesthetic profiles (Phase 2).
+// DB helper functions for aesthetic scoring and user aesthetic profiles (Phase 2 + Phase 3).
 
 import { sql } from './client';
 import type { AestheticScoreVector, AestheticProfile } from '@/lib/types/aesthetic';
-import { arrayToVector, vectorToArray } from '@/lib/config/aesthetic';
+import {
+  arrayToVector,
+  vectorToArray,
+  SHORT_TERM_WINDOW_DAYS,
+  SHORT_TERM_MIN_EVENTS,
+  DRIFT_THRESHOLD,
+} from '@/lib/config/aesthetic';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,7 +107,12 @@ export async function getAestheticProfile(
   if (userId) {
     rows = await sql`
       SELECT user_id, device_id, centroid::text AS centroid, feedback_count,
-             updated_at::text AS updated_at
+             updated_at::text AS updated_at,
+             short_term_centroid::text AS short_term_centroid,
+             short_term_feedback_count,
+             short_term_window_start::text AS short_term_window_start,
+             is_drifting,
+             drift_detected_at::text AS drift_detected_at
       FROM user_aesthetic_profiles
       WHERE user_id = ${userId} AND device_id = ${deviceId}
       LIMIT 1
@@ -109,7 +120,12 @@ export async function getAestheticProfile(
   } else {
     rows = await sql`
       SELECT user_id, device_id, centroid::text AS centroid, feedback_count,
-             updated_at::text AS updated_at
+             updated_at::text AS updated_at,
+             short_term_centroid::text AS short_term_centroid,
+             short_term_feedback_count,
+             short_term_window_start::text AS short_term_window_start,
+             is_drifting,
+             drift_detected_at::text AS drift_detected_at
       FROM user_aesthetic_profiles
       WHERE user_id IS NULL AND device_id = ${deviceId}
       LIMIT 1
@@ -118,21 +134,33 @@ export async function getAestheticProfile(
   if (rows.length === 0) return null;
 
   const row = rows[0] as {
-    user_id: string | null;
-    device_id: string;
-    centroid: string | null;
-    feedback_count: number;
-    updated_at: string;
+    user_id:                     string | null;
+    device_id:                   string;
+    centroid:                    string | null;
+    feedback_count:              number;
+    updated_at:                  string;
+    short_term_centroid:         string | null;
+    short_term_feedback_count:   number;
+    short_term_window_start:     string | null;
+    is_drifting:                 boolean;
+    drift_detected_at:           string | null;
   };
 
   if (!row.centroid) return null; // centroid column is null (should not happen after init, but be safe)
 
   return {
-    user_id:        row.user_id,
-    device_id:      row.device_id,
-    centroid:       arrayToVector(parseVectorString(row.centroid)),
-    feedback_count: row.feedback_count,
-    updated_at:     row.updated_at,
+    user_id:                     row.user_id,
+    device_id:                   row.device_id,
+    centroid:                    arrayToVector(parseVectorString(row.centroid)),
+    feedback_count:              row.feedback_count,
+    updated_at:                  row.updated_at,
+    short_term_centroid:         row.short_term_centroid
+                                   ? arrayToVector(parseVectorString(row.short_term_centroid))
+                                   : null,
+    short_term_feedback_count:   row.short_term_feedback_count,
+    short_term_window_start:     row.short_term_window_start,
+    is_drifting:                 row.is_drifting,
+    drift_detected_at:           row.drift_detected_at,
   };
 }
 
@@ -159,5 +187,109 @@ export async function upsertAestheticProfile(
       centroid       = EXCLUDED.centroid,
       feedback_count = EXCLUDED.feedback_count,
       updated_at     = NOW()
+  `;
+}
+
+/**
+ * Recomputes the 21-day rolling short-term centroid for the given identity
+ * by averaging all qualifying feedback events in the window.
+ * 'save' events are excluded from centroid computation.
+ * Exits silently if no profile row exists yet.
+ * Throws on DB error.
+ */
+export async function recomputeShortTermCentroid(
+  userId: string | null,
+  deviceId: string
+): Promise<void> {
+  // Check profile exists first — if not, exit without creating a row.
+  // Row creation is the Phase 2 EMA path's responsibility.
+  const profileRows = await sql`
+    SELECT id FROM user_aesthetic_profiles
+    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND device_id = ${deviceId}
+    LIMIT 1
+  `;
+  if (profileRows.length === 0) return;
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - SHORT_TERM_WINDOW_DAYS);
+
+  // Fetch all feedback events within the 21-day window that have aesthetic scores.
+  // 'save' events are excluded from centroid computation.
+  const rows = await sql`
+    SELECT f.article_id, f.value, f.updated_at::text AS created_at,
+           s.scores::text AS scores
+    FROM feedback f
+    JOIN article_aesthetic_scores s ON s.article_id = f.article_id
+    WHERE f.device_id = ${deviceId}
+      AND (f.user_id = ${userId} OR (f.user_id IS NULL AND ${userId} IS NULL))
+      AND f.value IN ('like', 'dislike')
+      AND f.updated_at >= ${cutoff.toISOString()}
+    ORDER BY f.updated_at ASC
+  `;
+
+  const count = rows.length;
+
+  if (count < SHORT_TERM_MIN_EVENTS) {
+    // Not enough events — write null centroid.
+    await sql`
+      UPDATE user_aesthetic_profiles
+      SET short_term_centroid       = NULL,
+          short_term_feedback_count = ${count},
+          short_term_window_start   = NULL
+      WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+        AND device_id = ${deviceId}
+    `;
+    return;
+  }
+
+  // Compute unweighted average.
+  const acc = [0, 0, 0, 0, 0, 0];
+  let oldestTs: string | null = null;
+  for (const row of rows as Array<{ value: string; scores: string; created_at: string }>) {
+    const vec = parseVectorString(row.scores);
+    for (let i = 0; i < 6; i++) {
+      acc[i] += row.value === 'like' ? vec[i] : (6 - vec[i]);
+    }
+    if (!oldestTs) oldestTs = row.created_at;
+  }
+  const averaged = acc.map(v => v / count);
+  const vecStr2 = formatVectorString(averaged);
+
+  await sql`
+    UPDATE user_aesthetic_profiles
+    SET short_term_centroid       = ${vecStr2}::vector,
+        short_term_feedback_count = ${count},
+        short_term_window_start   = ${oldestTs}
+    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND device_id = ${deviceId}
+  `;
+}
+
+/**
+ * Updates the drift state columns on the user's aesthetic profile.
+ * Uses a single UPDATE with CASE logic to avoid a round-trip fetch.
+ * Clears drift state when driftScore is null or below threshold.
+ * Throws on DB error.
+ */
+export async function updateDriftState(
+  userId: string | null,
+  deviceId: string,
+  driftScore: number | null
+): Promise<void> {
+  await sql`
+    UPDATE user_aesthetic_profiles
+    SET
+      is_drifting = CASE
+        WHEN ${driftScore} IS NULL OR ${driftScore} < ${DRIFT_THRESHOLD} THEN FALSE
+        ELSE TRUE
+      END,
+      drift_detected_at = CASE
+        WHEN ${driftScore} IS NULL OR ${driftScore} < ${DRIFT_THRESHOLD} THEN NULL
+        WHEN is_drifting = FALSE AND ${driftScore} >= ${DRIFT_THRESHOLD} THEN NOW()
+        ELSE drift_detected_at
+      END
+    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND device_id = ${deviceId}
   `;
 }

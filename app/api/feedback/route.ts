@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFeedbackForDevice, getFeedbackForUser, upsertFeedback } from '@/lib/db/feedback';
-import { resolveSession, buildSessionCookie, extractDeviceId } from '@/lib/auth/session';
+import { getFeedbackForDevice, getFeedbackForUser, upsertFeedback, getFeedbackRow } from '@/lib/db/feedback';
+import { resolveSession, extractDeviceId } from '@/lib/auth/session';
 import {
   getArticleAestheticScore,
   getAestheticProfile,
   upsertAestheticProfile,
+  recomputeShortTermCentroid,
+  updateDriftState,
 } from '@/lib/db/aesthetics';
+import { upsertConceptGraph } from '@/lib/db/concepts';
+import { extractConcepts } from '@/lib/discovery/conceptExtractor';
+import { computeDriftScore } from '@/lib/utils/driftScore';
 import type { AestheticScoreVector } from '@/lib/types/aesthetic';
-import { AESTHETIC_ALPHA } from '@/lib/config/aesthetic';
+import {
+  AESTHETIC_ALPHA,
+  DWELL_MEDIUM_THRESHOLD,
+  DWELL_LONG_THRESHOLD,
+  WEIGHT_LIKE_DEFAULT,
+  WEIGHT_LIKE_MEDIUM,
+  WEIGHT_LIKE_LONG,
+  WEIGHT_SAVE_WITH_LIKE,
+  WEIGHT_SAVE_NO_LIKE,
+} from '@/lib/config/aesthetic';
 
 export const dynamic = 'force-dynamic';
 
@@ -137,29 +151,96 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { articleId, value } = body as Record<string, unknown>;
+  const { articleId, value, dwellSeconds } = body as Record<string, unknown>;
 
   if (!articleId || typeof articleId !== 'string') {
     return NextResponse.json({ error: 'articleId is required' }, { status: 400 });
   }
-  if (value !== 'like' && value !== 'dislike') {
-    return NextResponse.json({ error: "value must be 'like' or 'dislike'" }, { status: 400 });
+  if (value !== 'like' && value !== 'dislike' && value !== 'save' && value !== null) {
+    return NextResponse.json(
+      { error: "value must be 'like', 'dislike', 'save', or null" },
+      { status: 400 }
+    );
   }
+
+  const parsedDwell = typeof dwellSeconds === 'number' && dwellSeconds >= 0
+    ? Math.floor(dwellSeconds) : 0;
 
   const cookieRes = new NextResponse();
   const session = await resolveSession(req, cookieRes);
   const userId = session?.userId ?? null;
 
   try {
-    const row = await upsertFeedback(deviceId, articleId, value, userId);
+    // null value = dwell beacon only; do not write a feedback record
+    let row: { article_id: string; value: string; updated_at: string } | null = null;
+    if (value !== null) {
+      row = await upsertFeedback(deviceId, articleId, value, userId);
+    }
 
-    // Update aesthetic profile via EMA (synchronous, failure swallowed).
-    await updateAestheticProfile(userId, deviceId, articleId, value);
+    // Update aesthetic profile via EMA — only for like/dislike (not save or null)
+    if (value === 'like' || value === 'dislike') {
+      await updateAestheticProfile(userId, deviceId, articleId, value);
+    }
+
+    // Phase 3: short-term recompute + drift update (failure swallowed)
+    try {
+      await recomputeShortTermCentroid(userId, deviceId);
+      const updatedProfile = await getAestheticProfile(userId, deviceId);
+      if (updatedProfile) {
+        const driftScore = computeDriftScore(updatedProfile);
+        await updateDriftState(userId, deviceId, driftScore);
+      }
+    } catch (err) {
+      console.error('[Phase3] short-term recompute/drift update failed:', err);
+      // swallow — never fail the feedback POST
+    }
+
+    // Phase 3: concept extraction + graph upsert (only on like and save)
+    if ((value === 'like' || value === 'save') && articleId) {
+      // Run fire-and-forget to not delay the response
+      (async () => {
+        try {
+          const { readBatch, readLatestBatch } = await import('@/lib/pipeline/storage');
+          const today = new Date().toISOString().slice(0, 10);
+          const batch = readBatch(today) ?? readLatestBatch();
+          const article = batch?.articles.find(a => a.id === articleId);
+          if (!article?.bodyText) return;
+
+          // Compute engagement weight
+          let engagementWeight = WEIGHT_LIKE_DEFAULT;
+          if (value === 'save') {
+            engagementWeight = WEIGHT_SAVE_NO_LIKE;
+          } else {
+            // value === 'like': check if article is already saved
+            const existingRow = await getFeedbackRow(deviceId, articleId, userId);
+            const alreadySaved = existingRow?.value === 'save';
+            if (alreadySaved) {
+              engagementWeight = WEIGHT_SAVE_WITH_LIKE;
+            } else if (parsedDwell >= DWELL_LONG_THRESHOLD) {
+              engagementWeight = WEIGHT_LIKE_LONG;
+            } else if (parsedDwell >= DWELL_MEDIUM_THRESHOLD) {
+              engagementWeight = WEIGHT_LIKE_MEDIUM;
+            } else {
+              engagementWeight = WEIGHT_LIKE_DEFAULT;
+            }
+          }
+
+          const concepts = await extractConcepts(article.bodyText);
+          await upsertConceptGraph(userId, deviceId, concepts, engagementWeight);
+        } catch (err) {
+          console.error('[Phase3] concept extraction/graph upsert failed:', err);
+          // swallow — never fail the feedback POST
+        }
+      })();
+    }
+
+    // Return consistent shape; for beacon (value === null), synthesize a minimal response
+    const responseRow = row ?? { article_id: articleId, value: null, updated_at: new Date().toISOString() };
 
     const finalRes = NextResponse.json({
-      articleId: row.article_id,
-      value: row.value,
-      updatedAt: row.updated_at,
+      articleId: responseRow.article_id,
+      value: responseRow.value,
+      updatedAt: responseRow.updated_at,
     });
     const setCookie = cookieRes.headers.get('Set-Cookie');
     if (setCookie) finalRes.headers.set('Set-Cookie', setCookie);

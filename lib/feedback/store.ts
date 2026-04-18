@@ -23,7 +23,7 @@ function writeStore(store: FeedbackStore): void {
 /**
  * Returns the feedback value for one article, or undefined if none recorded.
  */
-export function getFeedback(articleId: string): 'like' | 'dislike' | undefined {
+export function getFeedback(articleId: string): 'like' | 'dislike' | 'save' | undefined {
   return readStore()[articleId]?.value;
 }
 
@@ -31,13 +31,30 @@ export function getFeedback(articleId: string): 'like' | 'dislike' | undefined {
  * Writes or overwrites the feedback for one article.
  * Sets updatedAt to the current time.
  */
-export function setFeedback(articleId: string, value: 'like' | 'dislike'): void {
+export function setFeedback(articleId: string, value: 'like' | 'dislike' | 'save'): void {
   if (typeof window === 'undefined') return;
   const store = readStore();
   const record: FeedbackRecord = { value, updatedAt: new Date().toISOString() };
   store[articleId] = record;
   writeStore(store);
   void serverSetFeedback(articleId, value).catch(() => {});
+}
+
+/**
+ * Writes or overwrites the feedback for one article, including a dwell time.
+ * Sets updatedAt to the current time. Used by the article reading view.
+ */
+export function setFeedbackWithDwell(
+  articleId: string,
+  value: 'like' | 'dislike' | 'save',
+  dwellSeconds: number
+): void {
+  if (typeof window === 'undefined') return;
+  const store = readStore();
+  const record: FeedbackRecord = { value, updatedAt: new Date().toISOString() };
+  store[articleId] = record;
+  writeStore(store);
+  void serverSetFeedback(articleId, value, dwellSeconds).catch(() => {});
 }
 
 /**
@@ -93,12 +110,18 @@ function enqueue(item: QueuedWrite): void {
  * On failure, enqueues the write for retry.
  * Fire-and-forget — not exported.
  */
-async function serverSetFeedback(articleId: string, value: 'like' | 'dislike'): Promise<void> {
+async function serverSetFeedback(
+  articleId: string,
+  value: 'like' | 'dislike' | 'save',
+  dwellSeconds?: number
+): Promise<void> {
   try {
+    const body: Record<string, unknown> = { articleId, value };
+    if (dwellSeconds !== undefined) body.dwellSeconds = dwellSeconds;
     const res = await fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getDeviceHeaders() },
-      body: JSON.stringify({ articleId, value }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
   } catch (err) {

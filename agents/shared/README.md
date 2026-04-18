@@ -19,16 +19,16 @@ seed discovery quality from day one.
 should reference this when making design decisions.
 
 **Four pillars** (built in sequence):
-1. Agentic Web Discovery (Phase 1 — next)
-2. Latent Aesthetic Space (Phase 2)
-3. Graph-Enhanced Long-Term Memory (Phase 3)
-4. Engineered Serendipity (Phase 4)
+1. Agentic Web Discovery (Phase 1 — complete)
+2. Latent Aesthetic Space (Phase 2 — complete)
+3. Graph-Enhanced Long-Term Memory (Phase 3 — complete)
+4. Engineered Serendipity (Phase 4 — next)
 
 ---
 
 ## Current Project State
 
-**Last updated**: 2026-04-04 (Phase 2 Latent Aesthetic Space complete; all 15 AESTH stories released)
+**Last updated**: 2026-04-04 (Phase 3 — Deep User Model — shipped)
 
 ### Foundation milestones shipped (v1 infrastructure)
 
@@ -49,35 +49,43 @@ should reference this when making design decisions.
 |-------|--------|
 | Phase 1 — Agentic Content Discovery | **Complete** |
 | Phase 2 — Latent Aesthetic Space | **Complete** |
+| Phase 3 — Deep User Model | **Complete** |
 
 Phase 1 delivered: Small Web / IndieWeb source seeding with blogroll expansion
 (OPML + HTML patterns), article body text extraction via Mozilla Readability,
 LLM-based content evaluation (Claude Haiku, structured tool-use output, 5-dimension
 scoring), multi-query topic search with rotation cursor, and committed query bank
-seed file. All 19 AGDISC tasks shipped. DDL: `lib/db/migrations/007_small_web_sources.sql`
-must be applied to Neon (confirmed by user).
+seed file. All 19 AGDISC tasks shipped.
 
 Phase 2 delivered: Six-dimension aesthetic scoring (contemplative, concrete, personal,
 playful, specialist, emotional) via Claude Haiku structured output at ingest time.
 Scores stored as `vector(6)` in Neon via pgvector (`article_aesthetic_scores` table).
 Per-user aesthetic centroid maintained via EMA (alpha=0.2) in `user_aesthetic_profiles`
 table, updated on each feedback event. Feed ranking blends cosine similarity (30%)
-with source Wilson score (70%) in `rankFeed()`. Full cold-start and graceful
-degradation to source-score-only ranking when profile or article scores are absent.
-DDL: `lib/db/migrations/009_aesthetic_scores.sql` applied in Neon (confirmed by user).
+with source Wilson score (70%) in `rankFeed()`.
+
+Phase 3 delivered: Two-window preference memory system (21-day short-term centroid
+blended 35/65 with long-term EMA, inverted to 65/35 during taste drift). Concept
+graph (`user_concepts` + `user_concept_edges` tables) built from LLM-extracted
+concept labels from liked articles, used as supplementary ranking signal via
+`applyConceptBonus()`. Drift detection via cosine distance (threshold 0.25).
+Implicit engagement signals: dwell time tracking via `visibilitychange` API,
+passive beacon, and save/bookmark feedback value. All Phase 3 code is additive;
+no Phase 2 infrastructure replaced. DDL: `lib/db/migrations/010_deep_user_model.sql`
+applied in Neon (confirmed by user). All 14 DEPTH tasks Done, all 17 DEPTH stories Released.
 
 ### In progress
 
-Nothing actively in flight. Ready to begin Phase 3.
+Nothing actively in flight. Ready to begin Phase 4 (Engineered Serendipity).
 
 ### Next action
 
-Run the **BA agent** to produce BRD for Phase 3: Deep User Model.
-This phase builds a persistent cognitive model of the user's evolving taste, replaces
-topic weights with vector-based taste profiles, and adds natural language feedback.
+Run the **BA agent** to produce BRD for Phase 4: Engineered Serendipity.
+This phase adds serendipity scoring, active learning, structured randomness weighted
+by the user's psychographic profile, and exploration/exploitation balance.
 
 The BA agent prompt should reference `agents/ba/vision_discovery_companion.md`
-Section: "Longitudinal Dynamics and Memory Architectures".
+Section: "Engineering Serendipity and Mapping the Unknown".
 
 ### Key files for orientation
 
@@ -89,3 +97,7 @@ Section: "Longitudinal Dynamics and Memory Architectures".
 | All milestones and roadmap | `agents/pm/roadmap.md` |
 | Phase 2 design doc | `agents/architect/design_aesthetic_space_phase2_v1.md` |
 | Phase 2 task list | `agents/architect/tasks_aesthetic_space_phase2_v1.md` |
+| Phase 3 design doc | `agents/architect/design_deep_user_model_phase3_v1.md` |
+| Phase 3 task list | `agents/architect/tasks_deep_user_model_phase3_v1.md` |
+| Small Web starter seeds (43 URLs) | `lib/discovery/smallWeb/seeds.ts` |
+| Phase 3 DB migration (applied in Neon) | `lib/db/migrations/010_deep_user_model.sql` |

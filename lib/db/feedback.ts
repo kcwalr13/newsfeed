@@ -2,7 +2,7 @@ import { sql } from './client';
 
 export interface DbFeedbackRow {
   article_id: string;
-  value: 'like' | 'dislike';
+  value: 'like' | 'dislike' | 'save';
   updated_at: string;
 }
 
@@ -31,7 +31,7 @@ export async function getFeedbackForUser(userId: string): Promise<DbFeedbackRow[
 export async function upsertFeedback(
   deviceId: string,
   articleId: string,
-  value: 'like' | 'dislike',
+  value: 'like' | 'dislike' | 'save',
   userId?: string | null
 ): Promise<DbFeedbackRow> {
   const rows = await sql`
@@ -45,6 +45,21 @@ export async function upsertFeedback(
     RETURNING article_id, value, updated_at::text AS updated_at
   `;
   return rows[0] as DbFeedbackRow;
+}
+
+/**
+ * Returns a single feedback row for the given identity and article, or null if not found.
+ * Used by the Phase 3 engagement weight computation to check prior save status.
+ */
+export async function getFeedbackRow(
+  deviceId: string,
+  articleId: string,
+  userId: string | null
+): Promise<DbFeedbackRow | null> {
+  const rows = userId
+    ? await sql`SELECT article_id, value, updated_at::text AS updated_at FROM feedback WHERE user_id = ${userId} AND article_id = ${articleId} LIMIT 1`
+    : await sql`SELECT article_id, value, updated_at::text AS updated_at FROM feedback WHERE device_id = ${deviceId} AND user_id IS NULL AND article_id = ${articleId} LIMIT 1`;
+  return rows.length > 0 ? (rows[0] as DbFeedbackRow) : null;
 }
 
 /** Deletes a feedback record. No-op if not found. */
@@ -95,7 +110,7 @@ export async function associateFeedbackToUser(
  */
 export async function migrateFeedbackRecords(
   deviceId: string,
-  records: Array<{ articleId: string; value: 'like' | 'dislike'; updatedAt: string }>
+  records: Array<{ articleId: string; value: 'like' | 'dislike' | 'save'; updatedAt: string }>
 ): Promise<number> {
   let written = 0;
   await Promise.all(

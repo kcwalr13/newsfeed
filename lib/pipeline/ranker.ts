@@ -1,8 +1,18 @@
 import type { Article } from '@/lib/types/article';
 import type { DbFeedbackRow } from '@/lib/db/feedback';
 import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthetic';
-import { vectorToArray, AESTHETIC_WEIGHT, SOURCE_SCORE_WEIGHT } from '@/lib/config/aesthetic';
+import {
+  vectorToArray,
+  AESTHETIC_WEIGHT,
+  SOURCE_SCORE_WEIGHT,
+  SHORT_TERM_WEIGHT,
+  LONG_TERM_WEIGHT,
+  DRIFT_SHORT_TERM_WEIGHT,
+  DRIFT_LONG_TERM_WEIGHT,
+  SHORT_TERM_MIN_EVENTS,
+} from '@/lib/config/aesthetic';
 import { cosineSimilarity } from '@/lib/utils/cosineSimilarity';
+import { applyConceptBonus } from '@/lib/pipeline/conceptBonus';
 
 export const SUPPRESSION_MIN_EVENTS    = 5;
 export const SUPPRESSION_DISLIKE_RATIO = 0.80;
@@ -72,11 +82,48 @@ function applyDiversityCap(articles: Article[], cap: number): Article[] {
   return result;
 }
 
+/**
+ * Returns the blended centroid to use for aesthetic proximity scoring.
+ *
+ * - If no long-term centroid exists (new user): returns null
+ *   → rankFeed degrades to source-score-only
+ * - If no reliable short-term centroid (< SHORT_TERM_MIN_EVENTS or null):
+ *   returns the long-term centroid unchanged → Phase 2 behavior
+ * - If profile.is_drifting: uses 65% short-term / 35% long-term
+ * - Normal: uses 35% short-term / 65% long-term
+ */
+export function blendCentroids(profile: AestheticProfile): AestheticScoreVector | null {
+  if (!profile.centroid) return null;
+
+  if (
+    !profile.short_term_centroid ||
+    profile.short_term_feedback_count < SHORT_TERM_MIN_EVENTS
+  ) {
+    return profile.centroid;
+  }
+
+  const stWeight = profile.is_drifting ? DRIFT_SHORT_TERM_WEIGHT : SHORT_TERM_WEIGHT;
+  const ltWeight = profile.is_drifting ? DRIFT_LONG_TERM_WEIGHT  : LONG_TERM_WEIGHT;
+
+  const st = profile.short_term_centroid;
+  const lt = profile.centroid;
+
+  return {
+    contemplative: stWeight * st.contemplative + ltWeight * lt.contemplative,
+    concrete:      stWeight * st.concrete      + ltWeight * lt.concrete,
+    personal:      stWeight * st.personal      + ltWeight * lt.personal,
+    playful:       stWeight * st.playful       + ltWeight * lt.playful,
+    specialist:    stWeight * st.specialist    + ltWeight * lt.specialist,
+    emotional:     stWeight * st.emotional     + ltWeight * lt.emotional,
+  };
+}
+
 export function rankFeed(
   articles: Article[],
   feedbackRows: DbFeedbackRow[],
   aestheticProfile?: AestheticProfile | null,
-  aestheticScoreMap?: Map<string, AestheticScoreVector>
+  aestheticScoreMap?: Map<string, AestheticScoreVector>,
+  topConceptLabels?: string[]
 ): Article[] {
   // Step 1: Build articleId → sourceSlug map from batch
   const sourceSlugMap = new Map<string, string>();
@@ -117,10 +164,10 @@ export function rankFeed(
     sourceScores.set(slug, { slug, ...raw, score, suppressed });
   }
 
-  // Precompute the user's centroid as a number[] for cosineSimilarity calls.
+  // Precompute the blended centroid as a number[] for cosineSimilarity calls.
   // null when no profile exists — collapses the aesthetic term to 0.0.
-  const centroidArray: number[] | null =
-    aestheticProfile ? vectorToArray(aestheticProfile.centroid) : null;
+  const blendedCentroid = aestheticProfile ? blendCentroids(aestheticProfile) : null;
+  const centroidArray: number[] | null = blendedCentroid ? vectorToArray(blendedCentroid) : null;
 
   // Returns the blended rank score for an article.
   // When aestheticProfile is absent, collapses to source score only.
@@ -137,14 +184,21 @@ export function rankFeed(
   }
 
   // Step 4: Sort non-suppressed articles by (blendedScore DESC, publishedAt DESC)
-  const rankedCandidates = articles
+  // Apply concept resonance bonus to mid-ranked articles before final sort.
+  const allScores = articles
     .filter(a => !sourceScores.get(slugify(a.sourceName))!.suppressed)
+    .map(a => ({ article: a, rawScore: blendedScore(a) }));
+
+  const withBonus = topConceptLabels && topConceptLabels.length > 0
+    ? applyConceptBonus(allScores, topConceptLabels)
+    : allScores;
+
+  const rankedCandidates = withBonus
     .sort((a, b) => {
-      const scoreA = blendedScore(a);
-      const scoreB = blendedScore(b);
-      if (scoreB !== scoreA) return scoreB - scoreA;
-      return b.publishedAt.localeCompare(a.publishedAt);
-    });
+      if (b.rawScore !== a.rawScore) return b.rawScore - a.rawScore;
+      return b.article.publishedAt.localeCompare(a.article.publishedAt);
+    })
+    .map(s => s.article);
 
   // Step 5: Identify exploration candidates: sources with zero feedback AND not suppressed.
   // Exploration only applies when the user has at least some feedback for today's batch;

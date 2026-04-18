@@ -2,7 +2,7 @@
 
 **Last Updated**: 2026-04-04
 **Maintained by**: Architect Agent
-**Status**: Active — Milestones 1–8, Phase 1, and Phase 2 shipped
+**Status**: Active — Milestones 1–8, Phase 1, Phase 2, and Phase 3 shipped
 
 > **Vision (2026-04-07):** The project is a personalized content discovery companion,
 > not a news aggregator. Single-user scope (Kyle), starter sources provided, identity
@@ -165,8 +165,36 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 - Six named numeric fields: `contemplative`, `concrete`, `personal`, `playful`, `specialist`, `emotional`
 - All values 1.0–5.0. Canonical index order defined in `lib/config/aesthetic.ts`.
 
-**`AestheticProfile`** — TypeScript type in `lib/types/aesthetic.ts` (Phase 2+).
-- `user_id`, `device_id`, `centroid: AestheticScoreVector`, `feedback_count`, `updated_at`
+**`AestheticProfile`** — TypeScript type in `lib/types/aesthetic.ts` (Phase 2+; extended Phase 3).
+- Phase 2 fields: `user_id`, `device_id`, `centroid: AestheticScoreVector`, `feedback_count`, `updated_at`
+- Phase 3 additions: `short_term_centroid: AestheticScoreVector | null`, `short_term_feedback_count: number`,
+  `short_term_window_start: string | null`, `is_drifting: boolean`, `drift_detected_at: string | null`
+
+**`user_aesthetic_profiles`** — Phase 3 column additions (migration 010):
+- `short_term_centroid vector(6)` — nullable; 21-day rolling average centroid
+- `short_term_feedback_count INTEGER NOT NULL DEFAULT 0` — qualifying events in current window
+- `short_term_window_start TIMESTAMPTZ` — nullable; oldest qualifying event timestamp
+- `is_drifting BOOLEAN NOT NULL DEFAULT FALSE` — true when cosine distance >= 0.25
+- `drift_detected_at TIMESTAMPTZ` — nullable; when drift period began
+
+**`user_concepts`** — DB table for Phase 3 concept graph nodes.
+- `id SERIAL PK`, `user_id TEXT` (nullable), `device_id TEXT NOT NULL`, `label TEXT NOT NULL`,
+  `extraction_count INTEGER NOT NULL DEFAULT 1`, `engagement_weight NUMERIC(5,2) NOT NULL DEFAULT 1.0`,
+  `last_seen_at TIMESTAMPTZ`, `created_at TIMESTAMPTZ`
+- UNIQUE(user_id, device_id, label); index on (device_id, engagement_weight DESC)
+- DDL: `lib/db/migrations/010_deep_user_model.sql`
+- Helpers: `lib/db/concepts.ts`
+
+**`user_concept_edges`** — DB table for Phase 3 concept graph edges (undirected).
+- `id SERIAL PK`, `user_id TEXT` (nullable), `device_id TEXT NOT NULL`,
+  `concept_a TEXT NOT NULL`, `concept_b TEXT NOT NULL` (alphabetically ordered; enforced in app code),
+  `co_occurrence_count INTEGER NOT NULL DEFAULT 1`, `last_seen_at TIMESTAMPTZ`
+- UNIQUE(user_id, device_id, concept_a, concept_b); index on (device_id, concept_a, concept_b)
+- DDL: `lib/db/migrations/010_deep_user_model.sql`
+- Helpers: `lib/db/concepts.ts`
+
+**`UserConcept`** — TypeScript type in `lib/types/concepts.ts` (Phase 3+).
+**`UserConceptEdge`** — TypeScript type in `lib/types/concepts.ts` (Phase 3+).
 
 **`small_web_sources`** — DB table for Small Web / IndieWeb source pool (Phase 1+).
 - `id`, `url` (unique), `feed_url`, `last_crawled_at`, `last_yielded_at`,
@@ -193,7 +221,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | GET | `/api/articles/[id]` | Returns single article by ID | None |
 | POST | `/api/pipeline/run` | Triggers content pipeline | `Authorization: Bearer <CRON_SECRET>` |
 | GET | `/api/feedback` | Returns feedback for current device or user | Device cookie / `X-Device-ID` header |
-| POST | `/api/feedback` | Upserts a feedback record | Device cookie / `X-Device-ID` header |
+| POST | `/api/feedback` | Upserts a feedback record (`value: 'like' \| 'dislike' \| 'save'`); accepts optional `dwellSeconds: number` (Phase 3+) | Device cookie / `X-Device-ID` header |
 | DELETE | `/api/feedback/[articleId]` | Deletes a feedback record | Device cookie / `X-Device-ID` header |
 | POST | `/api/feedback/migrate` | One-time bulk upsert from localStorage | Device cookie / `X-Device-ID` header |
 | POST | `/api/auth/register` | Create user account | None |
@@ -256,6 +284,18 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Session tokens | Random 32-byte hex in DB (`sessions` table) | Enables server-side invalidation on logout; required for 30-day sliding window |
 | Session transport | `HttpOnly` cookie `dd_session` | Cannot be read by JS; separate from `dd_device_id` which must be JS-readable |
 | Email sending | Nodemailer + SMTP | Provider-agnostic; no vendor SDK lock-in; volume too low to require an API |
+| Phase 3 DDL migration number | `010_deep_user_model.sql` (Phase 3+) | Bundles all Phase 3 DDL (short-term centroid columns, drift columns, user_concepts, user_concept_edges) into one file and one apply operation |
+| Phase 3 drift columns migration | Bundled with short-term centroid columns in migration 010 (Phase 3+) | Single apply; all Phase 3 DB changes are logically related |
+| Phase 3 concept_a/concept_b ordering | Application-layer sort before upsert (Phase 3+) | Simpler than DB CHECK or trigger; single-writer single-user; testable in TypeScript |
+| Phase 3 concept pruning score | Computed in application code, not SQL (Phase 3+) | Formula uses Math.log and conditional branches; easier to unit test; node count ≤300 makes full fetch trivial |
+| Phase 3 dwell time storage | Transient only — not persisted (Phase 3+) | No current query needs raw dwell; avoids schema churn; `engagementWeight` is computed and discarded |
+| Phase 3 dwell beacon endpoint | `POST /api/feedback` with `value: null` (Phase 3+) | Avoids a new route; all engagement signals flow through one handler |
+| Phase 3 save/bookmark API route | `POST /api/feedback` with `value: 'save'` — NOT a new `/api/articles/[id]/save` route (Phase 3+) | `'save'` is a feedback value; reuses auth, device resolution, feedback DB, and concept pipeline already in the handler |
+| Phase 3 blend weight constants | Added to `lib/config/aesthetic.ts` (Phase 3+) | Co-located with Phase 2 aesthetic constants; avoids a new config file for five constants |
+| Phase 3 short-term centroid mechanism | Full recompute from feedback table on every event (Phase 3+) | 21-day bounded window, single user, trivially small set; incremental adds complexity for no benefit |
+| Phase 3 top-20 concept fetch | One query per `rankFeed()` call, not cached (Phase 3+) | O(20) query is negligible; caching adds state management complexity at single-user scale |
+| Phase 3 concept label normalization | Lowercase + punctuation-strip substring match (Phase 3+) | Handles most mismatches without fragile stemming; concept labels are phrases, not single words |
+| Phase 3 drift state update SQL | Single UPDATE with CASE expressions, no fetch-then-write (Phase 3+) | Avoids round trip; CASE preserves drift_detected_at onset when already drifting |
 
 ---
 
@@ -346,6 +386,8 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | topic weight double-counting fix (last_processed_at DDL + filter) | **Done** | BUG-TASK-001 |
 | discoveryTopic strip from GET /api/articles/[id] | **Done** | BUG-TASK-002 |
 | deviceId threading fix in runDiscovery + upsertTopicWeight | **Done** | BUG-TASK-003 |
+| `lib/discovery/smallWeb/seeds.ts` — 43 starter seed URLs across five categories (Discovery Directories, Master Curators, Digital Gardens, Literary, Science/Tech); 7 unresolved sources remain commented out | **Done** | Seeds expansion 2026-04-16 |
+| `lib/db/migrations/008_seed_starter_sources.sql` — back-fill migration for the 43 seed URLs; safe to re-run (ON CONFLICT DO NOTHING); required because seedSourcesIfEmpty() only fires on an empty table | **Done (file created; apply in Neon)** | Seeds expansion 2026-04-16 |
 | npm dependencies: @anthropic-ai/sdk, @mozilla/readability, jsdom, fast-xml-parser, @types/jsdom | **Done** | AGDISC-TASK-001 |
 | lib/config/feed.ts — add LLM_EVAL_THRESHOLD, LLM_EVAL_BODY_CHAR_LIMIT, SMALL_WEB_MAX_NEW_SOURCES_PER_RUN; remove SPECIFICITY_THRESHOLD | **Done** | AGDISC-TASK-002 |
 | lib/db/migrations/007_small_web_sources.sql — DB migration | **Done (file created; DDL pending user apply)** | AGDISC-TASK-003 |
@@ -377,6 +419,20 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `app/api/feedback/route.ts` — EMA aesthetic profile update | **Done** | AESTH-TASK-010 |
 | End-to-end verification (static code inspection) | **Done** | AESTH-TASK-011 |
 | ARCHITECTURE.md update (Phase 2) | **Done** | AESTH-TASK-012 |
+| `lib/db/migrations/010_deep_user_model.sql` — Phase 3 DDL (applied in Neon) | **Done** | DEPTH-TASK-001 |
+| `lib/config/aesthetic.ts` — Phase 3 blend weight + engagement weight constants | **Done** | DEPTH-TASK-002 |
+| `lib/types/aesthetic.ts` / `article.ts` / `concepts.ts` — Phase 3 type extensions | **Done** | DEPTH-TASK-003 |
+| `lib/db/aesthetics.ts` — recomputeShortTermCentroid, updateDriftState, extended getAestheticProfile | **Done** | DEPTH-TASK-004 |
+| `lib/utils/driftScore.ts` — computeDriftScore() pure function | **Done** | DEPTH-TASK-005 |
+| `lib/pipeline/ranker.ts` — blendCentroids(), concept bonus hook, blended centroid integration | **Done** | DEPTH-TASK-006 |
+| `app/api/feedback/route.ts` — dwellSeconds, save, short-term recompute, drift, concept pipeline | **Done** | DEPTH-TASK-007 |
+| `lib/db/concepts.ts` — all concept graph DB helpers | **Done** | DEPTH-TASK-008 |
+| `lib/pipeline/conceptBonus.ts` — applyConceptBonus() pure function | **Done** | DEPTH-TASK-009 |
+| `lib/discovery/conceptExtractor.ts` — extractConcepts() LLM module (Claude Haiku) | **Done** | DEPTH-TASK-010 |
+| `app/api/feed/today/route.ts` — fetch top concept nodes, pass to rankFeed | **Done** | DEPTH-TASK-011 |
+| `app/articles/[id]/` — dwell timer + save/bookmark button UI (ArticleInteractions component) | **Done** | DEPTH-TASK-012 |
+| End-to-end verification (Phase 3) | **Done** | DEPTH-TASK-013 |
+| ARCHITECTURE.md update (Phase 3) | **Done** | DEPTH-TASK-014 |
 
 ---
 
@@ -394,6 +450,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Milestone 8 — Discovery Bug Fixes | _(no design doc; see README defect descriptions)_ | `agents/architect/tasks_discovery_bugfix_v1.md` |
 | Phase 1 — Agentic Content Discovery | `agents/architect/design_agentic_discovery_phase1_v1.md` | `agents/architect/tasks_agentic_discovery_phase1_v1.md` |
 | Phase 2 — Latent Aesthetic Space | `agents/architect/design_aesthetic_space_phase2_v1.md` | `agents/architect/tasks_aesthetic_space_phase2_v1.md` |
+| Phase 3 — Deep User Model | `agents/architect/design_deep_user_model_phase3_v1.md` | `agents/architect/tasks_deep_user_model_phase3_v1.md` |
 
 ---
 
@@ -421,3 +478,6 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Dev Agent | Phase 1 complete. AGDISC-TASK-018 (E2E verification) confirmed by static code inspection: all log lines, extraction error codes, LLM threshold logging, bodyText field, discoveryTopic stripping, and query rotation logic present and correct. npx tsc --noEmit passes. AGDISC-TASK-019 (ARCHITECTURE.md update) confirmed: all Phase 1 sections already present from Architect pre-population. All 19 Phase 1 tasks Done. |
 | 2026-04-04 | Architect Agent | Phase 2 (Latent Aesthetic Space) design complete. Six aesthetic dimensions (contemplative, concrete, personal, playful, specialist, emotional), Claude Haiku scorer, pgvector article score table and user profile table, EMA centroid update in feedback handler, blended cosine-similarity ranking (30/70). 12 tasks, all Not started. Migration 009 requires manual Neon apply before AESTH-TASK-004. |
 | 2026-04-04 | Dev Agent | Phase 2 (Latent Aesthetic Space) complete. AESTH-TASK-004 through AESTH-TASK-012 implemented. lib/db/aesthetics.ts (5 helpers), lib/discovery/aestheticScorer.ts (Claude Haiku structured output), lib/utils/cosineSimilarity.ts, run.ts scoreArticlesAesthetic() integration, ranker.ts blended score (70/30 source/aesthetic), feed/today route parallel aesthetic reads, feedback route EMA profile update. npx tsc --noEmit passes. All 12 Phase 2 tasks Done. |
+| 2026-04-16 | Manual | Expanded seeds.ts from 3 placeholder URLs to 43 curated starter sources across five categories (Discovery Directories, Master Curators & Idea Aggregators, Digital Gardens & Personal Sites, Literary & Creative, Science/Tech). Created lib/db/migrations/008_seed_starter_sources.sql to back-fill the new seeds into an already-initialized database. 7 sources remain commented out pending URL confirmation (Wander, Scaling Synthesis, Chromatic, Burny, The Beginning of Infinity, occasionally humdrum, Industrial Nation). Migration 008 must be applied in Neon before next pipeline run. |
+| 2026-04-04 | Architect Agent | Phase 3 (Deep User Model) design complete. Short-term 21-day centroid, drift detection, concept graph (user_concepts + user_concept_edges), implicit engagement signals (dwell time + save/bookmark). 14 tasks, all Not started. Migration 010 requires manual Neon apply before DEPTH-TASK-004+ can proceed. |
+| 2026-04-04 | Dev Agent | Phase 3 (Deep User Model) fully implemented. migration 010 SQL file, 12 Phase 3 constants + 2 assertions in aesthetic.ts, AestheticProfile extended with 5 fields, lib/types/concepts.ts, lib/db/aesthetics.ts extended (recomputeShortTermCentroid + updateDriftState), lib/utils/driftScore.ts, lib/db/concepts.ts (8 helpers), lib/pipeline/conceptBonus.ts, lib/discovery/conceptExtractor.ts, lib/pipeline/ranker.ts (blendCentroids + topConceptLabels), app/api/feedback/route.ts (save + dwell + concept pipeline), app/api/feed/today/route.ts (concept nodes parallel fetch), app/components/ArticleInteractions.tsx (dwell timer + save button). npx tsc --noEmit passes. All 14 DEPTH tasks Done. |

@@ -6,6 +6,8 @@ import type { DbFeedbackRow } from '@/lib/db/feedback';
 import { rankFeed } from '@/lib/pipeline/ranker';
 import { getAestheticProfile, getArticleAestheticScores } from '@/lib/db/aesthetics';
 import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthetic';
+import { getTopConceptNodes } from '@/lib/db/concepts';
+import type { UserConcept } from '@/lib/types/concepts';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,7 @@ export async function GET(req: NextRequest) {
   let feedbackRows: DbFeedbackRow[] = [];
   let aestheticProfile: AestheticProfile | null = null;
   let aestheticScoreMap: Map<string, AestheticScoreVector> = new Map();
+  let topConceptNodes: UserConcept[] = [];
   let setCookieHeader: string | null = null;
 
   try {
@@ -39,7 +42,7 @@ export async function GET(req: NextRequest) {
     const articleIds = batch.articles.map(a => a.id);
 
     // Resolve identity-dependent reads in parallel
-    const [fbRows, profile, scoreMap] = await Promise.all([
+    const [fbRows, profile, scoreMap, topConceptResult] = await Promise.all([
       userId
         ? getFeedbackForUser(userId)
         : deviceId ? getFeedbackForDevice(deviceId) : Promise.resolve([]),
@@ -47,11 +50,18 @@ export async function GET(req: NextRequest) {
         ? getAestheticProfile(userId, deviceId)
         : Promise.resolve(null),
       getArticleAestheticScores(articleIds),
+      deviceId
+        ? getTopConceptNodes(userId, deviceId, 20).catch((err: unknown) => {
+            console.error('[feed] concept nodes fetch failed:', err);
+            return [] as UserConcept[];
+          })
+        : Promise.resolve([] as UserConcept[]),
     ]);
 
     feedbackRows      = fbRows;
     aestheticProfile  = profile;
     aestheticScoreMap = scoreMap;
+    topConceptNodes   = topConceptResult;
   } catch (err) {
     console.error('[feed/today] identity/feedback/aesthetic fetch failed, returning unranked:', err);
     const publicBatchArticles = batch.articles.map(
@@ -64,7 +74,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const rankedArticles = rankFeed(batch.articles, feedbackRows, aestheticProfile, aestheticScoreMap);
+  const topConceptLabels = topConceptNodes.map(n => n.label);
+  const rankedArticles = rankFeed(batch.articles, feedbackRows, aestheticProfile, aestheticScoreMap, topConceptLabels);
 
   const publicArticles = rankedArticles.map(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

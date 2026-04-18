@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { readBatch, readLatestBatch } from '@/lib/pipeline/storage';
 import ViewSourceLink from '@/app/components/ViewSourceLink';
-import FeedbackButtons from '@/app/components/FeedbackButtons';
+import ArticleInteractions from '@/app/components/ArticleInteractions';
 import AccountIcon from '@/app/components/AccountIcon';
 
 interface Props {
@@ -60,7 +60,7 @@ export default async function ArticlePage({ params }: Props) {
         </h1>
 
         <div className="mb-6">
-          <FeedbackButtons articleId={article.id} />
+          <ArticleInteractions articleId={article.id} />
         </div>
 
         {article.bodyText ? (

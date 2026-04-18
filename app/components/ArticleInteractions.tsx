@@ -1,41 +1,123 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getFeedback, setFeedback, clearFeedback } from '@/lib/feedback/store';
+// Client component for the article reading view: dwell timer, like/dislike, and save button.
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { getFeedback, setFeedbackWithDwell, setFeedback, clearFeedback } from '@/lib/feedback/store';
 
 interface Props {
   articleId: string;
 }
 
-export default function FeedbackButtons({ articleId }: Props) {
+/**
+ * Tracks foreground dwell time using the visibilitychange API.
+ * Returns a stable getter function that computes total foreground seconds at call time.
+ */
+function useDwellTimer(): () => number {
+  const dwellMsRef = useRef(0);
+  const lastVisibleRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Initialize: if page is already visible, start counting
+    if (document.visibilityState === 'visible') {
+      lastVisibleRef.current = Date.now();
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        lastVisibleRef.current = Date.now();
+      } else if (lastVisibleRef.current !== null) {
+        dwellMsRef.current += Date.now() - lastVisibleRef.current;
+        lastVisibleRef.current = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  return useCallback(() => {
+    let total = dwellMsRef.current;
+    if (lastVisibleRef.current !== null) total += Date.now() - lastVisibleRef.current;
+    return Math.floor(total / 1000);
+  }, []);
+}
+
+export default function ArticleInteractions({ articleId }: Props) {
   const [feedback, setFeedbackState] = useState<'like' | 'dislike' | 'save' | null>(null);
+  const feedbackGivenRef = useRef(false);
+  const getDwellSeconds = useDwellTimer();
 
   useEffect(() => {
     setFeedbackState(getFeedback(articleId) ?? null);
   }, [articleId]);
 
+  // Passive beacon: send dwell time when user leaves without explicit feedback
+  useEffect(() => {
+    const sendBeacon = () => {
+      const dwell = getDwellSeconds();
+      if (dwell < 5) return;
+      if (feedbackGivenRef.current) return; // explicit feedback already sent dwell with it
+
+      const payload = JSON.stringify({ articleId, value: null, dwellSeconds: dwell });
+      navigator.sendBeacon('/api/feedback', new Blob([payload], { type: 'application/json' }));
+    };
+
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') sendBeacon();
+    };
+
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('beforeunload', sendBeacon);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('beforeunload', sendBeacon);
+    };
+  }, [articleId, getDwellSeconds]);
+
   function handleLike() {
+    const dwell = getDwellSeconds();
     if (feedback === 'like') {
       clearFeedback(articleId);
       setFeedbackState(null);
+      feedbackGivenRef.current = false;
     } else {
-      setFeedback(articleId, 'like');
+      setFeedbackWithDwell(articleId, 'like', dwell);
       setFeedbackState('like');
+      feedbackGivenRef.current = true;
     }
   }
 
   function handleDislike() {
+    const dwell = getDwellSeconds();
     if (feedback === 'dislike') {
       clearFeedback(articleId);
       setFeedbackState(null);
+      feedbackGivenRef.current = false;
     } else {
-      setFeedback(articleId, 'dislike');
+      setFeedbackWithDwell(articleId, 'dislike', dwell);
       setFeedbackState('dislike');
+      feedbackGivenRef.current = true;
+    }
+  }
+
+  function handleSave() {
+    if (feedback === 'save') {
+      clearFeedback(articleId);
+      setFeedbackState(null);
+      feedbackGivenRef.current = false;
+    } else {
+      setFeedback(articleId, 'save');
+      setFeedbackState('save');
+      feedbackGivenRef.current = true;
     }
   }
 
   return (
     <div className="flex items-center gap-1">
+      {/* Like button */}
       <button
         onClick={handleLike}
         aria-label="Like this article"
@@ -57,6 +139,7 @@ export default function FeedbackButtons({ articleId }: Props) {
         )}
       </button>
 
+      {/* Dislike button */}
       <button
         onClick={handleDislike}
         aria-label="Dislike this article"
@@ -77,6 +160,29 @@ export default function FeedbackButtons({ articleId }: Props) {
           </svg>
         )}
       </button>
+
+      {/* Save/bookmark button */}
+      <button
+        onClick={handleSave}
+        aria-label={feedback === 'save' ? 'Remove bookmark' : 'Save for later'}
+        aria-pressed={feedback === 'save'}
+        className={
+          feedback === 'save'
+            ? 'rounded-full p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-white bg-blue-600 transition-colors'
+            : 'rounded-full p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors'
+        }
+      >
+        {feedback === 'save' ? (
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0111.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 01-1.085.67L12 18.089l-7.165 3.583A.75.75 0 013.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93z" clipRule="evenodd" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }
+

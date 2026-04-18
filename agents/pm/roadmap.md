@@ -1,6 +1,6 @@
 # Product Roadmap
 
-**Last Updated**: 2026-04-04 (Phase 2 Latent Aesthetic Space shipped; all 15 AESTH stories Released)
+**Last Updated**: 2026-04-04 (Phase 3 shipped)
 **Maintained by**: PM Agent
 
 > **Vision shift (2026-04-07):** The project has been refined from a news aggregator
@@ -431,14 +431,71 @@ complete. Full dependency graph is in `agents/pm/stories_aesthetic_space_phase2.
 
 ## Phase 3 — Deep User Model (Pillars 2+3)
 
-**Goal**: Build a persistent cognitive model of the user's evolving taste. Replace
-the topic weight system with a vector-based taste profile. Add natural language
-feedback alongside like/dislike. Implement short-term/long-term preference fusion.
-Use Mem0-style graph-enhanced memory for longitudinal relationship tracking.
+**Goal**: Extend the Phase 2 aesthetic preference model with two structural
+additions: (1) a two-window preference memory system (21-day rolling short-term
+centroid blended 35/65 with the existing long-term EMA centroid, inverted to
+65/35 during detected taste drift), and (2) a concept graph — a persistent,
+LLM-derived map of the specific ideas the user repeatedly engages with, stored in
+Postgres, used as a supplementary ranking signal. Taste drift detection (cosine
+distance >= 0.25 between centroids) and implicit engagement signals (dwell time
+via `visibilitychange`, save/bookmark) complete the phase. All changes are
+additive; no existing Phase 2 infrastructure is replaced.
 
-**Status**: Backlog
-**Prerequisite**: Phase 2 shipped.
+**Status**: Released
+**Shipped**: 2026-04-04
+**Prerequisite**: Phase 2 (Latent Aesthetic Space) shipped.
+**Stories doc**: `agents/pm/stories_deep_user_model_phase3.md`
+**Source BRD**: `agents/ba/brd_deep_user_model_phase3.md` (BRD-009)
+**Design doc**: `agents/architect/design_deep_user_model_phase3_v1.md`
+**Task list**: `agents/architect/tasks_deep_user_model_phase3_v1.md`
 **Vision reference**: `agents/ba/vision_discovery_companion.md` — Section: "Longitudinal Dynamics and Memory Architectures"
+
+### P0 Stories (must ship)
+
+| Story ID | Title | Group | Status |
+|----------|-------|-------|--------|
+| DEPTH-001 | Short-Term Centroid Database Schema | A — Short/Long Memory | Released |
+| DEPTH-002 | Short-Term Centroid TypeScript Type Extensions | A — Short/Long Memory | Released |
+| DEPTH-003 | Short-Term Centroid Recompute Function | A — Short/Long Memory | Released |
+| DEPTH-004 | Blended Centroid at Ranking Time | A — Short/Long Memory | Released |
+| DEPTH-005 | Concept Graph Database Schema | B — Concept Graph | Released |
+| DEPTH-006 | Concept Extraction from Liked Articles | B — Concept Graph | Released |
+| DEPTH-007 | Concept Graph Upsert and Edge Creation | B — Concept Graph | Released |
+| DEPTH-008 | Concept Graph Pruning | B — Concept Graph | Released |
+| DEPTH-009 | Concept Resonance Bonus at Ranking Time | B — Concept Graph | Released |
+| DEPTH-010 | Concept Graph DB Helpers | B — Concept Graph | Released |
+
+### P1 Stories (can slip to next minor)
+
+| Story ID | Title | Group | Status |
+|----------|-------|-------|--------|
+| DEPTH-011 | Drift Score Computation | C — Taste Drift | Released |
+| DEPTH-012 | Drift State Persistence | C — Taste Drift | Released |
+| DEPTH-013 | Blend Inversion During Drift | C — Taste Drift | Released |
+| DEPTH-014 | Dwell Time Client Tracking | D — Implicit Signals | Released |
+| DEPTH-015 | Dwell Time Server Acceptance and Storage | D — Implicit Signals | Released |
+| DEPTH-016 | Concept Weight Modulation from Implicit Signals | D — Implicit Signals | Released |
+| DEPTH-017 | Save/Bookmark Action | D — Implicit Signals | Released |
+
+### Implementation Order Note
+
+Group A (short-term centroid) and Group B (concept graph) can be implemented in
+parallel. Group C (drift detection) cannot begin until DEPTH-003 is complete.
+Group D (implicit signals) can begin in parallel with A and B, but DEPTH-016
+requires DEPTH-007. See full dependency graph in `agents/pm/stories_deep_user_model_phase3.md`.
+
+### Deferred to Phase 4+
+
+| Story ID | Title | Status |
+|----------|-------|--------|
+| FUTURE-DEPTH-001 | Graph traversal for serendipity injection | Backlog |
+| FUTURE-DEPTH-002 | User-visible concept graph dashboard | Backlog |
+| FUTURE-DEPTH-003 | Drift indicator in feed UI | Backlog |
+| FUTURE-DEPTH-004 | Natural language feedback | Backlog |
+| FUTURE-DEPTH-005 | Scroll depth as engagement proxy | Backlog |
+| FUTURE-DEPTH-006 | Per-user adaptive blend weights | Backlog |
+| FUTURE-DEPTH-007 | Retroactive concept extraction on pre-Phase-3 liked articles | Backlog |
+| FUTURE-DEPTH-008 | Cross-device concept graph merge on login | Backlog |
 
 ---
 
@@ -496,3 +553,5 @@ vision work. May be revisited as needed.
 | 2026-04-16 | Dev Agent | Phase 1 complete. AGDISC-TASK-018 (E2E verification) complete by static code inspection + TypeScript clean build. AGDISC-TASK-019 (ARCHITECTURE.md final update) complete. All 19 Phase 1 tasks Done. Phase 1 milestone marked Released. |
 | 2026-04-04 | PM Agent | Phase 2 (Latent Aesthetic Space) scoped from BRD-008. 15 AESTH stories written across five groups: dimension schema (A, 3 stories), LLM scoring pipeline (B, 4 stories), user aesthetic profile (C, 3 stories), aesthetic-aware ranking (D, 3 stories), cold-start and graceful degradation (E, 2 stories). All 15 stories are P0. Phase 2 roadmap section updated from placeholder to full story table. Seven future items deferred to Phase 3+. Architect decisions flagged: pgvector DDL for two new tables, cosine similarity implementation location, EMA update atomicity, LLM model ID and prompt design, pipeline scoring integration point, feedback handler integration approach. |
 | 2026-04-04 | Dev Agent | Phase 2 (Latent Aesthetic Space) complete. AESTH-TASK-004 through AESTH-TASK-012 implemented. All 15 AESTH stories Released. Phase 2 milestone marked Released. |
+| 2026-04-04 | PM Agent | Phase 3 (Deep User Model) scoped from BRD-009. 17 DEPTH stories written across four groups: short/long-term preference memory (A, 4 stories), concept graph (B, 6 stories), taste drift detection (C, 3 stories), implicit engagement signals (D, 4 stories). 10 P0 stories (Groups A and B), 7 P1 stories (Groups C and D). Phase 3 roadmap section updated from placeholder to full story table. 8 future items deferred to Phase 4+. Architect decisions flagged: short-term centroid migration DDL, concept graph table schema and index strategy, dwell time storage approach, drift state persistence strategy, blend weight constants location, LLM extraction call site and failure handling, concept resonance check implementation. |
+| 2026-04-04 | Dev Agent | Phase 3 (Deep User Model) fully shipped. All 17 DEPTH stories Released. All 14 DEPTH tasks Done. Phase 3 milestone marked Released. Implemented: migration 010, 12 Phase 3 constants, AestheticProfile extended, UserConcept/UserConceptEdge types, recomputeShortTermCentroid, updateDriftState, computeDriftScore, lib/db/concepts.ts, conceptBonus.ts, conceptExtractor.ts, blendCentroids + topConceptLabels in ranker, feedback route Phase 3 integration (save + dwell + concept pipeline), feed route concept nodes, ArticleInteractions UI component (dwell timer + save button). npx tsc --noEmit passes. |

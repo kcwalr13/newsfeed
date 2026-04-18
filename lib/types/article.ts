@@ -22,8 +22,8 @@ export interface Article {
   imageUrl?: string;
   /** Full body text of the article, if available via RSS content:encoded. */
   bodyText?: string;
-  /** Reserved for the future like/dislike feedback system. null = no feedback given. */
-  feedbackSlot?: 'like' | 'dislike' | null;
+  /** Reserved for the like/dislike/save feedback system. null = no feedback given. */
+  feedbackSlot?: 'like' | 'dislike' | 'save' | null;
   /**
    * For discovery-sourced articles only: the topic ID from DISCOVERY_TOPICS that
    * produced this article. Used by the topic weight feedback loop.
@@ -77,8 +77,8 @@ export interface Source {
 
 /** A single feedback record stored per article in localStorage. */
 export interface FeedbackRecord {
-  /** The feedback value. */
-  value: 'like' | 'dislike';
+  /** The feedback value. 'save' marks an article for later reading without aesthetic endorsement. */
+  value: 'like' | 'dislike' | 'save';
   /** ISO-8601 timestamp of the last set or change operation. */
   updatedAt: string;
 }
