@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Daily Digest",
-  description: "Your personalized daily news digest.",
+  title: "Tangent",
+  description: "Your personalized content discovery companion.",
 };
 
 export default function RootLayout({

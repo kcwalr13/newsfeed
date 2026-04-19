@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS verification_tokens_user_id_idx ON verification_token
    SMTP_PORT=587
    SMTP_USER=<your-mailtrap-user>
    SMTP_PASS=<your-mailtrap-pass>
-   EMAIL_FROM=Daily Digest <noreply@dailydigest.local>
+   EMAIL_FROM=Tangent <noreply@tangent.local>
    NEXTAUTH_URL=http://localhost:3000
    ```
 
@@ -680,12 +680,12 @@ export async function sendEmail(options: {
 }): Promise<void>
 
 export async function sendVerificationEmail(to: string, token: string): Promise<void>
-// subject: "Verify your Daily Digest email address"
+// subject: "Verify your Tangent email address"
 // link: `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`
 // html: <p>Click <a href="${link}">here</a> to verify your email. Link expires in 24 hours.</p>
 
 export async function sendPasswordResetEmail(to: string, token: string): Promise<void>
-// subject: "Reset your Daily Digest password"
+// subject: "Reset your Tangent password"
 // link: `${process.env.NEXTAUTH_URL}/auth?reset_token=${token}`
 // html: <p>Click <a href="${link}">here</a> to reset your password. Link expires in 1 hour.</p>
 ```
@@ -1093,7 +1093,7 @@ from auth context flows into feedback writes. Verify anonymous path is unbroken.
    ```typescript
    <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
      <div className="max-w-2xl mx-auto px-4 py-4 flex justify-between items-center">
-       <h1 className="text-xl font-bold text-gray-900 tracking-tight">Daily Digest</h1>
+       <h1 className="text-xl font-bold text-gray-900 tracking-tight">Tangent</h1>
        <AccountIcon />
      </div>
    </header>
