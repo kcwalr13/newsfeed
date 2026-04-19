@@ -42,6 +42,26 @@ It rests on four foundational pillars, to be built in sequence:
 - Version control: GitHub
 - Platform: Web (desktop browser) + installable on mobile via PWA — no app stores
 
+## Required Environment Variables
+- `ANTHROPIC_API_KEY` — **required**. Used by the aesthetic scorer, concept extractor, and LLM content evaluator. Without it, aesthetic scoring silently skips and articles are ranked by source score only.
+- `DATABASE_URL` — Neon serverless Postgres connection string.
+- `BRAVE_SEARCH_API_KEY` — Used by the proactive discovery pipeline.
+- See `.env.local.example` (if present) for the full list.
+
+## Key Implementation Notes
+
+### RSS Adapter helpers (`lib/pipeline/adapters/rssAdapter.ts`)
+- `htmlToPlainText(html)` — strips HTML tags from RSS `content:encoded` fields before storing as `bodyText`. Required because RSS feeds often embed raw HTML.
+- `decodeEntities(str)` — decodes numeric HTML entities (e.g. `&#8217;` → `'`) that `rss-parser` does not handle. Applied to `title`, `description`, and `bodyText` at ingest time.
+
+### Exploration slot badges (`app/components/ArticleCard.tsx`)
+- `explorationSlotType` is now passed through the feed API response (it was previously stripped).
+- `ArticleCard` renders a violet badge for exploration-slot articles: **Stretch**, **Blind spot**, or **Wildcard** depending on `explorationSlotType`.
+
+### Database migrations
+- Migration 011 (`lib/db/migrations/011_serendipity.sql`) — fixed a typo that referenced `user_feedback` instead of `feedback`. This caused every feedback upsert to fail with HTTP 500.
+- Migration 012 (`lib/db/migrations/012_fix_feedback_dwell.sql`) — safe `IF NOT EXISTS` corrective migration. Apply this to any already-deployed database to add the missing `dwell_seconds` and `receptivity_score` / `exploration_budget` columns.
+
 ## Agent Pipeline
 This project is developed using a four-agent system. Each agent has a defined role
 and produces structured outputs that feed the next agent. Do not skip stages.
