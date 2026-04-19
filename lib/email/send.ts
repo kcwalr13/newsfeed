@@ -27,8 +27,8 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
   const link = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`;
   await sendEmail({
     to,
-    subject: 'Verify your Daily Digest email address',
-    html: `<p>Click <a href="${link}">here</a> to verify your email address. This link expires in 24 hours.</p><p>If you did not register for Daily Digest, you can ignore this email.</p>`,
+    subject: 'Verify your Tangent email address',
+    html: `<p>Click <a href="${link}">here</a> to verify your email address. This link expires in 24 hours.</p><p>If you did not register for Tangent, you can ignore this email.</p>`,
   });
 }
 
@@ -36,7 +36,7 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
   const link = `${process.env.NEXTAUTH_URL}/auth?reset_token=${token}`;
   await sendEmail({
     to,
-    subject: 'Reset your Daily Digest password',
+    subject: 'Reset your Tangent password',
     html: `<p>Click <a href="${link}">here</a> to reset your password. This link expires in 1 hour.</p><p>If you did not request a password reset, you can ignore this email.</p>`,
   });
 }

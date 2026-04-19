@@ -1,4 +1,4 @@
-# Project: Discovery Companion
+# Project: Tangent (Discovery Companion)
 
 ## What This Is
 A personalized content discovery application that acts as a trusted companion,

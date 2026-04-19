@@ -972,7 +972,7 @@ ANTHROPIC_API_KEY=
 Expected file tree after all Phase 1 tasks are complete. New files are marked `[NEW]`. Modified files are marked `[MOD]`.
 
 ```
-newsfeed/
+tangent/
 ├── agents/
 │   ├── architect/
 │   │   ├── design_agentic_discovery_phase1_v1.md  [NEW]

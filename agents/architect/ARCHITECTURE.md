@@ -43,7 +43,7 @@ For full technical detail on any milestone, see the linked design documents belo
 ## Repository Structure
 
 ```
-newsfeed/
+tangent/
 ├── agents/                   ← Agent shared memory (never delete)
 │   ├── ba/                   ← BRDs produced by the BA agent
 │   ├── pm/                   ← User stories and roadmap produced by the PM agent
@@ -345,7 +345,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `SMTP_PORT` | Email sending | `587` (STARTTLS, default) or `465` (SSL) |
 | `SMTP_USER` | Email sending | SMTP username or API token |
 | `SMTP_PASS` | Email sending | SMTP password or API token secret |
-| `EMAIL_FROM` | Email sending | From address: `"Daily Digest <noreply@yourdomain.com>"` |
+| `EMAIL_FROM` | Email sending | From address: `"Tangent <noreply@yourdomain.com>"` |
 | `NEXTAUTH_URL` | Email link generation | Base URL: `http://localhost:3000` (dev), `https://yourdomain.com` (prod) |
 | `BRAVE_SEARCH_API_KEY` | Discovery pipeline (all Brave Search calls) | Obtain at https://api.search.brave.com. Free tier: 2,000 req/month. Never commit. |
 | `ANTHROPIC_API_KEY` | LLM content evaluator (Phase 1+), query bank generation script | Obtain at console.anthropic.com. Never commit. |
@@ -489,7 +489,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 
 | Milestone | Design Doc | Task List |
 |-----------|-----------|-----------|
-| Milestone 1 — Core Daily Digest | `agents/architect/design_article_feed_v1.md` | `agents/architect/tasks_article_feed_v1.md` |
+| Milestone 1 — Core Feed | `agents/architect/design_article_feed_v1.md` | `agents/architect/tasks_article_feed_v1.md` |
 | Milestone 2 — Feedback System | `agents/architect/design_feedback_capture_v1.md` | `agents/architect/tasks_feedback_capture_v1.md` |
 | Milestone 2.5 — Feedback Durability | `agents/architect/design_server_feedback_v1.md` | `agents/architect/tasks_server_feedback_v1.md` |
 | Milestone 3 — Identity Foundation | `agents/architect/design_user_auth_v1.md` | `agents/architect/tasks_user_auth_v1.md` |

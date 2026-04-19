@@ -24,7 +24,7 @@ status "Planned" and breaks them into technical tasks.
 
 ---
 
-## Milestone 1 — Core Daily Digest (v1)
+## Milestone 1 — Core Feed (v1)
 
 **Goal**: A user can open the app, see 20 articles curated from the web, read each
 article inside the app, and tap through to the original source. The feed refreshes

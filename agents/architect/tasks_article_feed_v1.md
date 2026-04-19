@@ -639,7 +639,7 @@ Render:
 Layout:
 - Max-width container centered on desktop.
 - Single-column on mobile.
-- Page has a simple header with the app name ("Daily Digest" or similar).
+- Page has a simple header with the app name ("Tangent" or similar).
 
 ### Acceptance Criteria
 
@@ -742,8 +742,8 @@ All assets and configuration required to make the app installable as a PWA.
 **manifest.json**:
 ```json
 {
-  "name": "Daily Digest",
-  "short_name": "Digest",
+  "name": "Tangent",
+  "short_name": "Tangent",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

@@ -12,7 +12,7 @@
 
 ## Problem Statement
 
-Daily Digest currently shows the same feed to every user with no way to signal what
+Tangent currently shows the same feed to every user with no way to signal what
 is interesting or irrelevant. Without capturing explicit feedback, the app cannot
 improve over time. This BRD closes the first gap in that loop: giving users a way
 to record a like or dislike on any article, and ensuring that signal is durably

@@ -532,7 +532,7 @@ Architect sessions.
 Final expected file tree after all v1 tasks are complete:
 
 ```
-newsfeed/
+tangent/
 ├── app/
 │   ├── api/
 │   │   ├── articles/
