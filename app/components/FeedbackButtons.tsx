@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { getFeedback, setFeedback, clearFeedback } from '@/lib/feedback/store';
 
 interface Props {
@@ -8,11 +8,9 @@ interface Props {
 }
 
 export default function FeedbackButtons({ articleId }: Props) {
-  const [feedback, setFeedbackState] = useState<'like' | 'dislike' | 'save' | null>(null);
-
-  useEffect(() => {
-    setFeedbackState(getFeedback(articleId) ?? null);
-  }, [articleId]);
+  const [feedback, setFeedbackState] = useState<'like' | 'dislike' | 'save' | null>(
+    () => getFeedback(articleId) ?? null
+  );
 
   function handleLike() {
     if (feedback === 'like') {

@@ -21,6 +21,7 @@ interface NewsApiResponse {
  * Returns an array of partial Article objects ready for the validator.
  * On error or missing API key, logs a warning and returns an empty array (does not throw).
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function fetchNewsApiArticles(_source: Source): Promise<PartialArticle[]> {
   const apiKey = process.env.NEWSAPI_KEY;
   if (!apiKey) {

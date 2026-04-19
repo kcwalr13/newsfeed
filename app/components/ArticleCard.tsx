@@ -6,7 +6,17 @@ interface Props {
   onClick?: () => void;
 }
 
+const EXPLORATION_LABELS: Record<NonNullable<Article['explorationSlotType']>, string> = {
+  semantic_stretch: 'Stretch',
+  blind_spot_probe: 'Blind spot',
+  wildcard:         'Wildcard',
+};
+
 export default function ArticleCard({ article, onClick }: Props) {
+  const explorationLabel = article.explorationSlotType
+    ? EXPLORATION_LABELS[article.explorationSlotType]
+    : null;
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg hover:border-gray-400 hover:shadow-sm transition-all">
       <button
@@ -20,8 +30,13 @@ export default function ArticleCard({ article, onClick }: Props) {
             className="w-full h-40 object-cover rounded-md mb-3"
           />
         )}
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-2">
           {article.sourceName}
+          {explorationLabel && (
+            <span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold tracking-wide rounded bg-violet-100 text-violet-700 normal-case">
+              {explorationLabel}
+            </span>
+          )}
         </p>
         <h2 className="text-base font-semibold text-gray-900 leading-snug">
           {article.title}

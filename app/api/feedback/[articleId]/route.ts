@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFeedback } from '@/lib/db/feedback';
-import { resolveSession, buildSessionCookie, extractDeviceId } from '@/lib/auth/session';
+import { resolveSession, extractDeviceId } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +17,7 @@ export async function DELETE(
 
   // Resolve session to refresh sliding window (userId not used for delete)
   const cookieRes = new NextResponse();
-  const session = await resolveSession(req, cookieRes);
+  await resolveSession(req, cookieRes);
 
   try {
     await deleteFeedback(deviceId, articleId);

@@ -36,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_blind_spot_clusters_device_status
 
 -- ── Step 2: Dwell time persistence on user_feedback ──────────────────────────
 
-ALTER TABLE user_feedback
+ALTER TABLE feedback
   ADD COLUMN IF NOT EXISTS dwell_seconds NUMERIC(7,2);
 
 -- ── Step 3: Receptivity columns on user_aesthetic_profiles ───────────────────

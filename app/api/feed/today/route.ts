@@ -83,8 +83,7 @@ export async function GET(req: NextRequest) {
     console.error('[feed/today] identity/feedback/aesthetic fetch failed, returning unranked:', err);
     const publicBatchArticles = batch.articles.map(article => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec,
-              serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
+      const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, ...rest } = article;
       return rest;
     });
     return NextResponse.json(
@@ -112,8 +111,7 @@ export async function GET(req: NextRequest) {
   // Strip all internal fields before sending to client
   const publicArticles = rankedArticles.map(article => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec,
-            serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
+    const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
     return rest;
   });
 
