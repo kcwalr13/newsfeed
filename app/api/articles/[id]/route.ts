@@ -21,6 +21,7 @@ export async function GET(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { discoveryTopic: _dt, ...publicArticle } = article;
+  const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec,
+          serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...publicArticle } = article;
   return NextResponse.json(publicArticle);
 }

@@ -9,6 +9,7 @@ import { validateAndTrim } from './validator';
 import { scoreAesthetic, AestheticScoringError } from '@/lib/discovery/aestheticScorer';
 import { upsertArticleAestheticScore } from '@/lib/db/aesthetics';
 import { AESTHETIC_BODY_MIN_CHARS, AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
+import { extractConcepts } from '@/lib/discovery/conceptExtractor';
 import type { Article, ArticleBatch, Source } from '../types/article';
 
 export interface RunOptions {
@@ -206,6 +207,21 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
 
     // NEW: Score all articles aesthetically before writing the batch
     await scoreArticlesAesthetic(articles);
+
+    // Phase 4: Extract concepts for all articles before writing the batch.
+    // Sequential to respect Anthropic API rate limits (same reason as aesthetic scoring).
+    for (const article of articles) {
+      try {
+        const text = article.bodyText?.trim()
+          ? article.bodyText
+          : `${article.title} ${article.description ?? ''}`;
+        const concepts = await extractConcepts(text);
+        article.extractedConcepts = concepts;
+      } catch (err) {
+        console.error(`[pipeline] concept extraction failed for ${article.id}:`, err);
+        article.extractedConcepts = [];
+      }
+    }
 
     const batch: ArticleBatch = {
       batchDate: today,

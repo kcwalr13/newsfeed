@@ -2,7 +2,7 @@
 
 **Last Updated**: 2026-04-04
 **Maintained by**: Architect Agent
-**Status**: Active — Milestones 1–8, Phase 1, Phase 2, and Phase 3 shipped
+**Status**: Active — Milestones 1–8, Phase 1, Phase 2, Phase 3, and Phase 4 shipped
 
 > **Vision (2026-04-07):** The project is a personalized content discovery companion,
 > not a news aggregator. Single-user scope (Kyle), starter sources provided, identity
@@ -125,8 +125,14 @@ Full TypeScript definitions live in `lib/types/`. Summary:
   `fetchedAt`, `batchDate`
 - Optional: `description`, `imageUrl`, `bodyText`, `feedbackSlot`
 - `feedbackSlot?: 'like' | 'dislike' | null`
-- `discoveryTopic?: string | null` — internal metadata only; set on discovery-sourced articles;
-  never sent to the client (stripped from `GET /api/feed/today` response before serialization)
+- `discoveryTopic?: string | null` — internal; set on discovery-sourced articles;
+  never sent to the client (stripped from API responses)
+- Phase 4 internal fields (all stripped from API responses):
+  - `llmScore?: number` — LLM composite quality score [1.0, 5.0]; set at pipeline time for discovery articles
+  - `extractedConcepts?: string[]` — concepts extracted at pipeline time; stored in batch JSON
+  - `serendipityScore?: number` — transient; computed in `rankFeed()`, never written to batch JSON
+  - `explorationSlotType?: 'semantic_stretch' | 'blind_spot_probe' | 'wildcard' | null` — written to batch JSON; analytics only
+  - `probeInfo?: { probeType: 'blind_spot'; clusterLabel: string }` — set only on probe articles; written to batch JSON
 
 **`FeedResponse`** — envelope returned by `GET /api/feed/today`
 - `batchDate: string` (YYYY-MM-DD) + `articles: Article[]`
@@ -176,6 +182,23 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 - `short_term_window_start TIMESTAMPTZ` — nullable; oldest qualifying event timestamp
 - `is_drifting BOOLEAN NOT NULL DEFAULT FALSE` — true when cosine distance >= 0.25
 - `drift_detected_at TIMESTAMPTZ` — nullable; when drift period began
+
+**`blind_spot_clusters`** — DB table for Phase 4 blind spot cluster state (Phase 4+).
+- `id SERIAL PK`, `user_id TEXT` (nullable), `device_id TEXT NOT NULL`,
+  `cluster_label TEXT NOT NULL`, `status TEXT` CHECK ('active','suppressed','promoted'),
+  `suppress_until TIMESTAMPTZ`, `promote_until TIMESTAMPTZ`,
+  `probe_count INTEGER`, `like_count INTEGER`, `dislike_count INTEGER`, `ignore_count INTEGER`,
+  `last_probed_at TIMESTAMPTZ`, `created_at TIMESTAMPTZ`
+- UNIQUE(user_id, device_id, cluster_label); index on (device_id, status)
+- DDL: `lib/db/migrations/011_serendipity.sql`
+- Helpers: `lib/db/blindSpots.ts`
+
+**`user_feedback`** — Phase 4 column addition (migration 011):
+- `dwell_seconds NUMERIC(7,2)` — nullable; persisted when `dwellSeconds` is in the feedback request body
+
+**`user_aesthetic_profiles`** — Phase 4 column additions (migration 011):
+- `receptivity_score NUMERIC(4,3)` — nullable; updated in `POST /api/feedback` after each event
+- `exploration_budget INTEGER NOT NULL DEFAULT 4` — current exploration slot count (2–6)
 
 **`user_concepts`** — DB table for Phase 3 concept graph nodes.
 - `id SERIAL PK`, `user_id TEXT` (nullable), `device_id TEXT NOT NULL`, `label TEXT NOT NULL`,
@@ -296,6 +319,18 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Phase 3 top-20 concept fetch | One query per `rankFeed()` call, not cached (Phase 3+) | O(20) query is negligible; caching adds state management complexity at single-user scale |
 | Phase 3 concept label normalization | Lowercase + punctuation-strip substring match (Phase 3+) | Handles most mismatches without fragile stemming; concept labels are phrases, not single words |
 | Phase 3 drift state update SQL | Single UPDATE with CASE expressions, no fetch-then-write (Phase 3+) | Avoids round trip; CASE preserves drift_detected_at onset when already drifting |
+| Phase 4 quality score source | `LLMScores.composite` from `llmEvaluator.ts` (range 1.0–5.0), not `qualityGate.ts` (boolean) (Phase 4+) | `qualityGate.ts` is boolean-only; composite is the actual numeric scorer confirmed by code inspection |
+| Phase 4 quality weight formula | `0.5 + (llm_score - 1.0) * 0.125`; fixed-source articles default to 0.75 (Phase 4+) | Linear map [1.0,5.0]→[0.5,1.0]; 0.75 neutral midpoint for articles without LLM scores |
+| Phase 4 serendipity integration point | Pre-pass inside `rankFeed()` after Phase 3 blend computation (Phase 4+) | Co-locates all ranking logic; preserves Phase 3 exploitation formula unchanged |
+| Phase 4 feed interleaving | Deterministic evenly-spaced positions: `Math.round(2 + i * (20 / budget))` (Phase 4+) | Reproducible; avoids clustering; no random variation between requests |
+| Phase 4 concept extraction timing | Pipeline time, stored in batch JSON as `extractedConcepts` (Phase 4+) | Avoids per-request LLM calls; one call per candidate per run |
+| Phase 4 `explorationSlotType` storage | Transient on Article during `rankFeed()`; written to batch JSON for analytics; DB column advisory (Phase 4+) | Runtime does not depend on DB column; file-backed architecture is sufficient |
+| Phase 4 blind spot cluster identity | LLM-provided cluster label string (Phase 4+) | Human-readable; stable enough for single-user; no hash needed |
+| Phase 4 like during suppression | Clears suppression immediately and sets cluster to promoted (Phase 4+) | Like is a stronger signal than timer; should not be delayed |
+| Phase 4 dwell time persistence | `dwell_seconds` column added to `user_feedback` in migration 011 (Phase 4+) | Phase 3 computed engagementWeight transiently but never persisted raw dwell for future receptivity use |
+| Phase 4 diversity score cluster proxy | Distinct concept labels per liked article (not graph traversal) (Phase 4+) | Phase 3 does not store explicit cluster assignments; label-level proxy is sufficient at single-user scale |
+| Phase 4 receptivity storage | `receptivity_score` + `exploration_budget` on `user_aesthetic_profiles` (Phase 4+) | Updated in feedback handler for observability; recomputed fresh on each feed request for correctness |
+| Phase 4 constants location | New `lib/config/serendipity.ts` (Phase 4+) | 12+ constants + lookup table; too substantial to add to `lib/config/feed.ts` |
 
 ---
 
@@ -387,7 +422,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | discoveryTopic strip from GET /api/articles/[id] | **Done** | BUG-TASK-002 |
 | deviceId threading fix in runDiscovery + upsertTopicWeight | **Done** | BUG-TASK-003 |
 | `lib/discovery/smallWeb/seeds.ts` — 43 starter seed URLs across five categories (Discovery Directories, Master Curators, Digital Gardens, Literary, Science/Tech); 7 unresolved sources remain commented out | **Done** | Seeds expansion 2026-04-16 |
-| `lib/db/migrations/008_seed_starter_sources.sql` — back-fill migration for the 43 seed URLs; safe to re-run (ON CONFLICT DO NOTHING); required because seedSourcesIfEmpty() only fires on an empty table | **Done (file created; apply in Neon)** | Seeds expansion 2026-04-16 |
+| `lib/db/migrations/008_seed_starter_sources.sql` — back-fill migration for the 43 seed URLs; safe to re-run (ON CONFLICT DO NOTHING); required because seedSourcesIfEmpty() only fires on an empty table | **Done (applied in Neon)** | Seeds expansion 2026-04-16 |
 | npm dependencies: @anthropic-ai/sdk, @mozilla/readability, jsdom, fast-xml-parser, @types/jsdom | **Done** | AGDISC-TASK-001 |
 | lib/config/feed.ts — add LLM_EVAL_THRESHOLD, LLM_EVAL_BODY_CHAR_LIMIT, SMALL_WEB_MAX_NEW_SOURCES_PER_RUN; remove SPECIFICITY_THRESHOLD | **Done** | AGDISC-TASK-002 |
 | lib/db/migrations/007_small_web_sources.sql — DB migration | **Done (file created; DDL pending user apply)** | AGDISC-TASK-003 |
@@ -433,6 +468,20 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `app/articles/[id]/` — dwell timer + save/bookmark button UI (ArticleInteractions component) | **Done** | DEPTH-TASK-012 |
 | End-to-end verification (Phase 3) | **Done** | DEPTH-TASK-013 |
 | ARCHITECTURE.md update (Phase 3) | **Done** | DEPTH-TASK-014 |
+| `lib/db/migrations/011_serendipity.sql` — Phase 4 DDL (applied in Neon) | **Done** | SEREN-TASK-001 |
+| `lib/config/serendipity.ts` — all Phase 4 constants + slot allocation table | **Done** | SEREN-TASK-002 |
+| `lib/types/article.ts` — 5 new internal fields; `lib/pipeline/serendipityScorer.ts` — 4 pure functions; `lib/db/concepts.ts` — 2 new helpers | **Done** | SEREN-TASK-003 |
+| `lib/pipeline/run.ts` — pipeline-time concept extraction + llmScore persistence | **Done** | SEREN-TASK-004 |
+| `lib/db/blindSpots.ts` — BlindSpotCluster type + 6 DB helpers | **Done** | SEREN-TASK-006 |
+| `lib/pipeline/blindSpotProber.ts` — cluster identification, probe selection, ignore detection | **Done** | SEREN-TASK-007 |
+| `app/api/feedback/route.ts` — probe response routing + dwell_seconds persistence | **Done** | SEREN-TASK-008 |
+| `lib/pipeline/explorationAssembler.ts` — three-pool construction + slot assembly + deduplication | **Done** | SEREN-TASK-009 |
+| `lib/pipeline/ranker.ts` — Phase 4 serendipity pre-pass + two-pool feed assembly | **Done** | SEREN-TASK-010 |
+| `app/api/feed/today/route.ts` — concept graph reads + exploration budget + internal field stripping | **Done** | SEREN-TASK-011 |
+| `lib/pipeline/receptivity.ts` — diversity, probe acceptance, dwell ratio, receptivity score, budget mapping | **Done** | SEREN-TASK-012 |
+| `lib/db/aesthetics.ts` + feedback route — receptivity persistence; feed route — budget from stored profile | **Done** | SEREN-TASK-013 |
+| End-to-end verification (Phase 4) | **Done** | SEREN-TASK-014 |
+| ARCHITECTURE.md + roadmap update (Phase 4) | **Done** | SEREN-TASK-015 |
 
 ---
 
@@ -451,6 +500,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Phase 1 — Agentic Content Discovery | `agents/architect/design_agentic_discovery_phase1_v1.md` | `agents/architect/tasks_agentic_discovery_phase1_v1.md` |
 | Phase 2 — Latent Aesthetic Space | `agents/architect/design_aesthetic_space_phase2_v1.md` | `agents/architect/tasks_aesthetic_space_phase2_v1.md` |
 | Phase 3 — Deep User Model | `agents/architect/design_deep_user_model_phase3_v1.md` | `agents/architect/tasks_deep_user_model_phase3_v1.md` |
+| Phase 4 — Engineered Serendipity | `agents/architect/design_engineered_serendipity_phase4_v1.md` | `agents/architect/tasks_engineered_serendipity_phase4_v1.md` |
 
 ---
 
@@ -480,4 +530,6 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Dev Agent | Phase 2 (Latent Aesthetic Space) complete. AESTH-TASK-004 through AESTH-TASK-012 implemented. lib/db/aesthetics.ts (5 helpers), lib/discovery/aestheticScorer.ts (Claude Haiku structured output), lib/utils/cosineSimilarity.ts, run.ts scoreArticlesAesthetic() integration, ranker.ts blended score (70/30 source/aesthetic), feed/today route parallel aesthetic reads, feedback route EMA profile update. npx tsc --noEmit passes. All 12 Phase 2 tasks Done. |
 | 2026-04-16 | Manual | Expanded seeds.ts from 3 placeholder URLs to 43 curated starter sources across five categories (Discovery Directories, Master Curators & Idea Aggregators, Digital Gardens & Personal Sites, Literary & Creative, Science/Tech). Created lib/db/migrations/008_seed_starter_sources.sql to back-fill the new seeds into an already-initialized database. 7 sources remain commented out pending URL confirmation (Wander, Scaling Synthesis, Chromatic, Burny, The Beginning of Infinity, occasionally humdrum, Industrial Nation). Migration 008 must be applied in Neon before next pipeline run. |
 | 2026-04-04 | Architect Agent | Phase 3 (Deep User Model) design complete. Short-term 21-day centroid, drift detection, concept graph (user_concepts + user_concept_edges), implicit engagement signals (dwell time + save/bookmark). 14 tasks, all Not started. Migration 010 requires manual Neon apply before DEPTH-TASK-004+ can proceed. |
+| 2026-04-04 | Architect Agent | Phase 4 (Engineered Serendipity) design complete. Serendipity scorer (4 pure functions), blind spot cluster DB + prober, exploration assembler (3-pool), receptivity signal (4 functions), rankFeed 2-pool extension. 15 tasks. Migration 011 requires manual Neon apply before SEREN-TASK-006+. |
 | 2026-04-04 | Dev Agent | Phase 3 (Deep User Model) fully implemented. migration 010 SQL file, 12 Phase 3 constants + 2 assertions in aesthetic.ts, AestheticProfile extended with 5 fields, lib/types/concepts.ts, lib/db/aesthetics.ts extended (recomputeShortTermCentroid + updateDriftState), lib/utils/driftScore.ts, lib/db/concepts.ts (8 helpers), lib/pipeline/conceptBonus.ts, lib/discovery/conceptExtractor.ts, lib/pipeline/ranker.ts (blendCentroids + topConceptLabels), app/api/feedback/route.ts (save + dwell + concept pipeline), app/api/feed/today/route.ts (concept nodes parallel fetch), app/components/ArticleInteractions.tsx (dwell timer + save button). npx tsc --noEmit passes. All 14 DEPTH tasks Done. |
+| 2026-04-04 | Dev Agent | Phase 4 (Engineered Serendipity) fully implemented and verified. migration 011 SQL applied. lib/config/serendipity.ts (15 constants + startup assertion), Article type extended (5 new @internal fields), lib/pipeline/serendipityScorer.ts (4 pure functions), lib/db/concepts.ts (2 new graph-read helpers), lib/pipeline/run.ts (llmScore + concept extraction), lib/db/blindSpots.ts (6 cluster helpers), lib/pipeline/blindSpotProber.ts (3 functions), lib/pipeline/explorationAssembler.ts (5 functions), lib/pipeline/ranker.ts (Phase 4 two-pool assembly replaces Phase 3 source-diversity exploration), lib/pipeline/receptivity.ts (5 functions), lib/db/aesthetics.ts (updateReceptivity), app/api/feedback/route.ts (probe routing + receptivity update), app/api/feed/today/route.ts (concept graph reads + budget from profile + field stripping), app/api/articles/[id]/route.ts (5 new internal fields stripped). npx tsc --noEmit passes clean. All 15 SEREN tasks Done. |

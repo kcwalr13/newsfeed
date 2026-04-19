@@ -1,6 +1,6 @@
 # Product Roadmap
 
-**Last Updated**: 2026-04-04 (Phase 3 shipped)
+**Last Updated**: 2026-04-04 (Phase 4 Released — all four phases complete)
 **Maintained by**: PM Agent
 
 > **Vision shift (2026-04-07):** The project has been refined from a news aggregator
@@ -501,15 +501,87 @@ requires DEPTH-007. See full dependency graph in `agents/pm/stories_deep_user_mo
 
 ## Phase 4 — Engineered Serendipity (Pillar 4)
 
-**Goal**: Compute serendipity via semantic distance, relevance, and diversity.
-Implement active learning to test blind spots and contradict the machine's
-assumptions. Deploy structured randomness weighted by the user's psychographic
-profile. Balance exploration and exploitation to continuously expand intellectual
-boundaries.
+**Goal**: Compute a serendipity score for every candidate article by combining
+hop-distance from the user's concept graph with a quality weight. Reserve a
+structured exploration budget (4 baseline slots, adaptive 2–6) in the daily 20-
+article feed, allocated across semantic stretch, blind spot probe, and complete
+wildcard slot types. Implement blind spot probing: identify conceptual domains
+absent from the concept graph, inject probe articles targeting those domains, and
+learn from the user's like/dislike/ignore response to direct future probing.
+Compute a receptivity signal from three observable signals (topic diversity, probe
+acceptance rate, dwell ratio) and use it to modulate the exploration budget within
+the floor/ceiling bounds. All changes are additive and system-internal; no new UI.
 
-**Status**: Backlog
-**Prerequisite**: Phase 3 shipped.
+**Status**: Released
+**Shipped**: 2026-04-04
+**Prerequisite**: Phase 3 (Deep User Model) shipped.
+**Stories doc**: `agents/pm/stories_engineered_serendipity_phase4.md`
+**Source BRD**: `agents/ba/brd_engineered_serendipity_phase4.md` (BRD-010)
+**Design doc**: `agents/architect/design_engineered_serendipity_phase4_v1.md`
+**Task list**: `agents/architect/tasks_engineered_serendipity_phase4_v1.md`
 **Vision reference**: `agents/ba/vision_discovery_companion.md` — Section: "Engineering Serendipity and Mapping the Unknown"
+
+### P0 Stories (must ship)
+
+| Story ID | Title | Group | Status |
+|----------|-------|-------|--------|
+| SEREN-001 | Concept Distance Classification Utilities | A — Surprise Scoring | Released |
+| SEREN-002 | Raw Surprise Score Computation | A — Surprise Scoring | Released |
+| SEREN-003 | Quality Weight Normalization | A — Surprise Scoring | Released |
+| SEREN-004 | Serendipity Score Assembly | A — Surprise Scoring | Released |
+| SEREN-005 | Concept Extraction for All Candidate Articles | A — Surprise Scoring | Released |
+| SEREN-013 | Exploration Budget Constants and Slot Type Allocation Table | C — Exploration Budget | Released |
+| SEREN-014 | Slot Type Candidate Pool Construction | C — Exploration Budget | Released |
+| SEREN-015 | Exploration Slot Assembly | C — Exploration Budget | Released |
+| SEREN-016 | Exploration vs. Exploitation Deduplication | C — Exploration Budget | Released |
+| SEREN-017 | Feed Assembly Integration in `rankFeed()` | C — Exploration Budget | Released |
+
+### P1 Stories (can slip to next minor)
+
+| Story ID | Title | Group | Status |
+|----------|-------|-------|--------|
+| SEREN-006 | Blind Spot Cluster Identification | B — Blind Spot Probing | Released |
+| SEREN-007 | Blind Spot Probe Article Selection | B — Blind Spot Probing | Released |
+| SEREN-008 | Probe Article Tracking in Batch Metadata | B — Blind Spot Probing | Released |
+| SEREN-009 | Probe Response Interpretation on Feedback | B — Blind Spot Probing | Released |
+| SEREN-010 | Blind Spot Cluster Promotion | B — Blind Spot Probing | Released |
+| SEREN-011 | Blind Spot Cluster Suppression | B — Blind Spot Probing | Released |
+| SEREN-012 | Probe Ignore Handling | B — Blind Spot Probing | Released |
+| SEREN-018 | Topic Diversity Score Computation | D — Receptivity Signal | Released |
+| SEREN-019 | Probe Acceptance Rate Computation | D — Receptivity Signal | Released |
+| SEREN-020 | Exploration Dwell Ratio Computation | D — Receptivity Signal | Released |
+| SEREN-021 | Receptivity Score Assembly | D — Receptivity Signal | Released |
+| SEREN-022 | Budget Modulation from Receptivity Score | D — Receptivity Signal | Released |
+
+### Implementation Order Note
+
+Group A (surprise scoring) must be implemented before Groups B, C, and D. Groups B
+and C depend on Group A and can proceed in parallel once SEREN-001 through SEREN-005
+are complete. Group D depends on Groups B and C being substantially complete before
+accurate receptivity computation is possible. See full dependency graph in
+`agents/pm/stories_engineered_serendipity_phase4.md`.
+
+### Architect Decisions Required Before Design Begins
+
+Seven decisions are flagged in the stories document that the Architect must resolve
+in the Phase 4 design document: (1) `blind_spot_state` DB schema, (2) serendipity
+score integration point in `rankFeed()`, (3) receptivity score storage strategy,
+(4) slot classification field on article records, (5) probe concept extraction
+engagement weight, (6) quality score range confirmation from `qualityGate.ts`,
+(7) exploration constants file location.
+
+### Deferred to Phase 5+
+
+| Story ID | Title | Status |
+|----------|-------|--------|
+| FUTURE-SEREN-001 | User-visible exploration mode indicator | Backlog |
+| FUTURE-SEREN-002 | "Why this is here" explanation for exploration articles | Backlog |
+| FUTURE-SEREN-003 | Vector embedding-based semantic distance | Backlog |
+| FUTURE-SEREN-004 | User-configurable exploration budget override | Backlog |
+| FUTURE-SEREN-005 | Real-time or sub-daily receptivity updates | Backlog |
+| FUTURE-SEREN-006 | Cross-device blind spot state merge on login | Backlog |
+| FUTURE-SEREN-007 | Scroll depth as a third engagement proxy for receptivity | Backlog |
+| FUTURE-SEREN-008 | Retroactive serendipity scoring of pre-Phase-4 batches | Backlog |
 
 ---
 
@@ -555,3 +627,5 @@ vision work. May be revisited as needed.
 | 2026-04-04 | Dev Agent | Phase 2 (Latent Aesthetic Space) complete. AESTH-TASK-004 through AESTH-TASK-012 implemented. All 15 AESTH stories Released. Phase 2 milestone marked Released. |
 | 2026-04-04 | PM Agent | Phase 3 (Deep User Model) scoped from BRD-009. 17 DEPTH stories written across four groups: short/long-term preference memory (A, 4 stories), concept graph (B, 6 stories), taste drift detection (C, 3 stories), implicit engagement signals (D, 4 stories). 10 P0 stories (Groups A and B), 7 P1 stories (Groups C and D). Phase 3 roadmap section updated from placeholder to full story table. 8 future items deferred to Phase 4+. Architect decisions flagged: short-term centroid migration DDL, concept graph table schema and index strategy, dwell time storage approach, drift state persistence strategy, blend weight constants location, LLM extraction call site and failure handling, concept resonance check implementation. |
 | 2026-04-04 | Dev Agent | Phase 3 (Deep User Model) fully shipped. All 17 DEPTH stories Released. All 14 DEPTH tasks Done. Phase 3 milestone marked Released. Implemented: migration 010, 12 Phase 3 constants, AestheticProfile extended, UserConcept/UserConceptEdge types, recomputeShortTermCentroid, updateDriftState, computeDriftScore, lib/db/concepts.ts, conceptBonus.ts, conceptExtractor.ts, blendCentroids + topConceptLabels in ranker, feedback route Phase 3 integration (save + dwell + concept pipeline), feed route concept nodes, ArticleInteractions UI component (dwell timer + save button). npx tsc --noEmit passes. |
+| 2026-04-04 | PM Agent | Phase 4 (Engineered Serendipity) scoped from BRD-010. 22 SEREN stories written across four groups: surprise scoring (A, 5 stories), blind spot probing (B, 7 stories), exploration budget and slot assembly (C, 5 stories), receptivity signal (D, 5 stories). 10 P0 stories (Groups A and C), 12 P1 stories (Groups B and D). Phase 4 roadmap section updated from placeholder to full story table with implementation order note. 7 Architect decisions flagged: blind_spot_state DB schema, serendipity score integration point in rankFeed(), receptivity score storage, slot classification field on articles, probe concept extraction engagement weight, quality score range from qualityGate.ts, exploration constants file location. 8 future items deferred. |
+| 2026-04-04 | Dev Agent | Phase 4 (Engineered Serendipity) fully shipped. All 22 SEREN stories Released. All 15 SEREN tasks Done. migration 011 applied. lib/config/serendipity.ts, serendipityScorer.ts, explorationAssembler.ts, blindSpotProber.ts, receptivity.ts, lib/db/blindSpots.ts all implemented. rankFeed() extended with serendipity pre-pass and two-pool exploration assembly. Feedback route extended with probe routing and receptivity update. Feed route reads stored exploration budget. npx tsc --noEmit passes clean. Phase 4 milestone marked Released. The four-phase Discovery Companion vision is now fully delivered. |

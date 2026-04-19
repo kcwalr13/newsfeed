@@ -22,13 +22,13 @@ should reference this when making design decisions.
 1. Agentic Web Discovery (Phase 1 — complete)
 2. Latent Aesthetic Space (Phase 2 — complete)
 3. Graph-Enhanced Long-Term Memory (Phase 3 — complete)
-4. Engineered Serendipity (Phase 4 — next)
+4. Engineered Serendipity (Phase 4 — complete)
 
 ---
 
 ## Current Project State
 
-**Last updated**: 2026-04-04 (Phase 3 — Deep User Model — shipped)
+**Last updated**: 2026-04-04 (Phase 4 — Engineered Serendipity — shipped; all four phases complete)
 
 ### Foundation milestones shipped (v1 infrastructure)
 
@@ -50,6 +50,7 @@ should reference this when making design decisions.
 | Phase 1 — Agentic Content Discovery | **Complete** |
 | Phase 2 — Latent Aesthetic Space | **Complete** |
 | Phase 3 — Deep User Model | **Complete** |
+| Phase 4 — Engineered Serendipity | **Complete** |
 
 Phase 1 delivered: Small Web / IndieWeb source seeding with blogroll expansion
 (OPML + HTML patterns), article body text extraction via Mozilla Readability,
@@ -70,22 +71,32 @@ graph (`user_concepts` + `user_concept_edges` tables) built from LLM-extracted
 concept labels from liked articles, used as supplementary ranking signal via
 `applyConceptBonus()`. Drift detection via cosine distance (threshold 0.25).
 Implicit engagement signals: dwell time tracking via `visibilitychange` API,
-passive beacon, and save/bookmark feedback value. All Phase 3 code is additive;
-no Phase 2 infrastructure replaced. DDL: `lib/db/migrations/010_deep_user_model.sql`
-applied in Neon (confirmed by user). All 14 DEPTH tasks Done, all 17 DEPTH stories Released.
+passive beacon, and save/bookmark feedback value. DDL: `lib/db/migrations/010_deep_user_model.sql`.
+All 14 DEPTH tasks Done, all 17 DEPTH stories Released.
+
+Phase 4 delivered: Serendipity scoring for every candidate article combining concept-graph
+hop-distance (known/adjacent/unknown classification) with LLM quality weight into a
+[0.0, 1.0] serendipity score. Structured exploration budget (baseline 4 slots, adaptive 2–6)
+allocated across three typed sub-pools: semantic stretch, blind spot probe, and wildcard.
+Active learning via blind spot probing: LLM clusters unknown concept labels into thematic
+blind spots, injects probe articles, and updates `blind_spot_clusters` DB table based on
+like/dislike/ignore feedback. Receptivity signal computed from topic diversity, probe
+acceptance rate, and exploration dwell ratio — modulates exploration budget per user.
+All changes are additive; no Phase 1–3 infrastructure replaced. DDL: `lib/db/migrations/011_serendipity.sql`
+(applied in Neon). All 15 SEREN tasks Done, all 22 SEREN stories Released.
 
 ### In progress
 
-Nothing actively in flight. Ready to begin Phase 4 (Engineered Serendipity).
+Nothing actively in flight. The four-phase Discovery Companion vision has been fully
+delivered. The system is in production operation.
 
 ### Next action
 
-Run the **BA agent** to produce BRD for Phase 4: Engineered Serendipity.
-This phase adds serendipity scoring, active learning, structured randomness weighted
-by the user's psychographic profile, and exploration/exploitation balance.
-
-The BA agent prompt should reference `agents/ba/vision_discovery_companion.md`
-Section: "Engineering Serendipity and Mapping the Unknown".
+The foundation and all four vision pillars are complete. Potential next directions:
+- Phase 5+ features from the deferred backlog (e.g., user-visible exploration indicator,
+  vector embedding semantic distance, natural language feedback, user-facing dashboards)
+- Operational improvements (cost monitoring, batch quality observability)
+- Multi-user expansion (identity parameterization is already in place)
 
 ### Key files for orientation
 
@@ -95,9 +106,12 @@ Section: "Engineering Serendipity and Mapping the Unknown".
 | Full product vision | `agents/ba/vision_discovery_companion.md` |
 | Architecture overview | `agents/architect/ARCHITECTURE.md` |
 | All milestones and roadmap | `agents/pm/roadmap.md` |
+| Phase 1 design doc | `agents/architect/design_agentic_discovery_phase1_v1.md` |
 | Phase 2 design doc | `agents/architect/design_aesthetic_space_phase2_v1.md` |
-| Phase 2 task list | `agents/architect/tasks_aesthetic_space_phase2_v1.md` |
 | Phase 3 design doc | `agents/architect/design_deep_user_model_phase3_v1.md` |
-| Phase 3 task list | `agents/architect/tasks_deep_user_model_phase3_v1.md` |
+| Phase 4 design doc | `agents/architect/design_engineered_serendipity_phase4_v1.md` |
+| Phase 4 task list | `agents/architect/tasks_engineered_serendipity_phase4_v1.md` |
 | Small Web starter seeds (43 URLs) | `lib/discovery/smallWeb/seeds.ts` |
+| Starter seeds back-fill migration (applied in Neon) | `lib/db/migrations/008_seed_starter_sources.sql` |
 | Phase 3 DB migration (applied in Neon) | `lib/db/migrations/010_deep_user_model.sql` |
+| Phase 4 DB migration (applied in Neon) | `lib/db/migrations/011_serendipity.sql` |

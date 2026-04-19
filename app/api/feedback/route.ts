@@ -7,10 +7,19 @@ import {
   upsertAestheticProfile,
   recomputeShortTermCentroid,
   updateDriftState,
+  updateReceptivity,
 } from '@/lib/db/aesthetics';
 import { upsertConceptGraph } from '@/lib/db/concepts';
 import { extractConcepts } from '@/lib/discovery/conceptExtractor';
 import { computeDriftScore } from '@/lib/utils/driftScore';
+import { recordProbeClusterPromotion, recordProbeClusterSuppression } from '@/lib/db/blindSpots';
+import {
+  computeDiversityScore,
+  computeProbeAcceptanceRate,
+  computeDwellRatio,
+  computeReceptivity,
+  receptivityToBudget,
+} from '@/lib/pipeline/receptivity';
 import type { AestheticScoreVector } from '@/lib/types/aesthetic';
 import {
   AESTHETIC_ALPHA,
@@ -174,7 +183,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // null value = dwell beacon only; do not write a feedback record
     let row: { article_id: string; value: string; updated_at: string } | null = null;
     if (value !== null) {
-      row = await upsertFeedback(deviceId, articleId, value, userId);
+      row = await upsertFeedback(deviceId, articleId, value, userId, parsedDwell > 0 ? parsedDwell : null);
+    }
+
+    // Phase 4: probe response routing
+    // Read batch to check for probeInfo on the article
+    const probeInfo = await (async () => {
+      try {
+        const { readBatch: rb, readLatestBatch: rlb } = await import('@/lib/pipeline/storage');
+        const today = new Date().toISOString().slice(0, 10);
+        const batch = rb(today) ?? rlb();
+        const article = batch?.articles.find(a => a.id === articleId);
+        return article?.probeInfo ?? null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (probeInfo?.probeType === 'blind_spot') {
+      try {
+        if (value === 'like') {
+          await recordProbeClusterPromotion(userId, deviceId, probeInfo.clusterLabel);
+        } else if (value === 'dislike') {
+          await recordProbeClusterSuppression(userId, deviceId, probeInfo.clusterLabel);
+        }
+        // ignore ('value: null' dwell beacon): no cluster state change here;
+        // handled at next pipeline run by processPriorDayProbeIgnores()
+      } catch (err) {
+        console.error('[feedback] probe cluster state update failed:', err);
+        // swallow — must not fail the feedback POST
+      }
     }
 
     // Update aesthetic profile via EMA — only for like/dislike (not save or null)
@@ -193,6 +231,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } catch (err) {
       console.error('[Phase3] short-term recompute/drift update failed:', err);
       // swallow — never fail the feedback POST
+    }
+
+    // Phase 4: receptivity update (failure swallowed)
+    try {
+      const [diversity, probeAcceptance, dwellRatio] = await Promise.all([
+        computeDiversityScore(userId, deviceId),
+        computeProbeAcceptanceRate(userId, deviceId),
+        computeDwellRatio(userId, deviceId),
+      ]);
+      const rScore  = computeReceptivity(diversity, probeAcceptance, dwellRatio);
+      const rBudget = receptivityToBudget(rScore);
+      await updateReceptivity(userId, deviceId, rScore, rBudget);
+    } catch (err) {
+      console.error('[feedback] receptivity update failed:', err);
+      // swallow — must not fail the feedback POST
     }
 
     // Phase 3: concept extraction + graph upsert (only on like and save)

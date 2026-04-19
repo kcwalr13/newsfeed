@@ -31,6 +31,42 @@ export interface Article {
    * @internal
    */
   discoveryTopic?: string | null;
+
+  /**
+   * LLM composite quality score (1.0–5.0, arithmetic mean of five 1–5 dimensions).
+   * Set by llmEvaluator.ts at pipeline time. Absent for fixed-source articles.
+   * Never sent to the client. @internal
+   */
+  llmScore?: number;
+
+  /**
+   * Concepts extracted from this article at pipeline time.
+   * Populated for all candidates that pass the quality gate.
+   * Absent for fixed-source articles that bypass LLM extraction.
+   * Never sent to the client. @internal
+   */
+  extractedConcepts?: string[];
+
+  /**
+   * Serendipity score computed at rankFeed() time. Range [0.0, 1.0].
+   * Transient on the Article object — never written to batch JSON.
+   * @internal
+   */
+  serendipityScore?: number;
+
+  /**
+   * Slot type assigned at feed assembly time.
+   * null for exploitation articles. Written to batch JSON for analytics.
+   * Never sent to the client. @internal
+   */
+  explorationSlotType?: 'semantic_stretch' | 'blind_spot_probe' | 'wildcard' | null;
+
+  /**
+   * Set only when this article was selected as a blind spot probe.
+   * Written to batch JSON. Never sent to the client.
+   * Non-probe articles omit this field entirely (absent, not null). @internal
+   */
+  probeInfo?: { probeType: 'blind_spot'; clusterLabel: string };
 }
 
 /** The response shape returned by GET /api/feed/today. */

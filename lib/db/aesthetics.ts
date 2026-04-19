@@ -112,7 +112,9 @@ export async function getAestheticProfile(
              short_term_feedback_count,
              short_term_window_start::text AS short_term_window_start,
              is_drifting,
-             drift_detected_at::text AS drift_detected_at
+             drift_detected_at::text AS drift_detected_at,
+             CAST(receptivity_score AS FLOAT) AS receptivity_score,
+             exploration_budget
       FROM user_aesthetic_profiles
       WHERE user_id = ${userId} AND device_id = ${deviceId}
       LIMIT 1
@@ -125,7 +127,9 @@ export async function getAestheticProfile(
              short_term_feedback_count,
              short_term_window_start::text AS short_term_window_start,
              is_drifting,
-             drift_detected_at::text AS drift_detected_at
+             drift_detected_at::text AS drift_detected_at,
+             CAST(receptivity_score AS FLOAT) AS receptivity_score,
+             exploration_budget
       FROM user_aesthetic_profiles
       WHERE user_id IS NULL AND device_id = ${deviceId}
       LIMIT 1
@@ -144,6 +148,8 @@ export async function getAestheticProfile(
     short_term_window_start:     string | null;
     is_drifting:                 boolean;
     drift_detected_at:           string | null;
+    receptivity_score:           number | null;
+    exploration_budget:          number;
   };
 
   if (!row.centroid) return null; // centroid column is null (should not happen after init, but be safe)
@@ -161,6 +167,8 @@ export async function getAestheticProfile(
     short_term_window_start:     row.short_term_window_start,
     is_drifting:                 row.is_drifting,
     drift_detected_at:           row.drift_detected_at,
+    receptivity_score:           row.receptivity_score,
+    exploration_budget:          row.exploration_budget ?? 4,
   };
 }
 
@@ -263,6 +271,26 @@ export async function recomputeShortTermCentroid(
         short_term_window_start   = ${oldestTs}
     WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
       AND device_id = ${deviceId}
+  `;
+}
+
+/**
+ * Persists the computed receptivity score and exploration budget to the user's aesthetic profile.
+ * No-op if no profile row exists yet (UPDATE affects 0 rows silently).
+ * Throws on DB error.
+ */
+export async function updateReceptivity(
+  userId: string | null,
+  deviceId: string,
+  receptivityScore: number,
+  explorationBudget: number
+): Promise<void> {
+  await sql`
+    UPDATE user_aesthetic_profiles
+    SET receptivity_score  = ${receptivityScore},
+        exploration_budget = ${explorationBudget}
+    WHERE device_id = ${deviceId}
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
   `;
 }
 

@@ -141,6 +141,44 @@ export async function deleteConceptNodesByIds(
   `;
 }
 
+// ── Phase 4: Full graph reads for serendipity scoring ────────────────────────
+
+/**
+ * Returns all concept node labels for the given identity as a Set<string>.
+ * Returns an empty Set if the user has no concept nodes.
+ */
+export async function getAllConceptLabels(
+  userId: string | null,
+  deviceId: string
+): Promise<Set<string>> {
+  const rows = await sql`
+    SELECT label
+    FROM user_concepts
+    WHERE device_id = ${deviceId}
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+  `;
+  return new Set((rows as Array<{ label: string }>).map(r => r.label));
+}
+
+/**
+ * Returns all concept edge pairs [concept_a, concept_b] for the given identity.
+ * Returns an empty array if the user has no edges.
+ */
+export async function getAllConceptEdges(
+  userId: string | null,
+  deviceId: string
+): Promise<Array<[string, string]>> {
+  const rows = await sql`
+    SELECT concept_a, concept_b
+    FROM user_concept_edges
+    WHERE device_id = ${deviceId}
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+  `;
+  return (rows as Array<{ concept_a: string; concept_b: string }>).map(
+    r => [r.concept_a, r.concept_b]
+  );
+}
+
 // ── Composite operations ──────────────────────────────────────────────────────
 
 const CONCEPT_GRAPH_MAX_NODES = 300;

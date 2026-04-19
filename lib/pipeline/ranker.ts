@@ -1,3 +1,5 @@
+// Feed ranking: Phase 3 exploitation formula + Phase 4 serendipity exploration.
+
 import type { Article } from '@/lib/types/article';
 import type { DbFeedbackRow } from '@/lib/db/feedback';
 import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthetic';
@@ -11,13 +13,31 @@ import {
   DRIFT_LONG_TERM_WEIGHT,
   SHORT_TERM_MIN_EVENTS,
 } from '@/lib/config/aesthetic';
+import { ARTICLES_PER_DAY } from '@/lib/config/feed';
+import {
+  EXPLORATION_BASELINE,
+  EXPLORATION_FLOOR,
+  EXPLORATION_CEILING,
+} from '@/lib/config/serendipity';
 import { cosineSimilarity } from '@/lib/utils/cosineSimilarity';
 import { applyConceptBonus } from '@/lib/pipeline/conceptBonus';
+import {
+  classifyConceptDistance,
+  computeRawSurprise,
+  normalizeQualityWeight,
+  computeSerendipityScore,
+} from '@/lib/pipeline/serendipityScorer';
+import type { ConceptClassification } from '@/lib/pipeline/serendipityScorer';
+import {
+  buildSlotPools,
+  assembleExplorationSlots,
+  deduplicateExploitPool,
+  tagExplorationSlotTypes,
+  computeExplorationPositions,
+} from '@/lib/pipeline/explorationAssembler';
 
 export const SUPPRESSION_MIN_EVENTS    = 5;
 export const SUPPRESSION_DISLIKE_RATIO = 0.80;
-export const EXPLORATION_SLOTS         = 3;
-export const EXPLORATION_POSITIONS     = [2, 9, 16]; // 0-indexed
 export const SOURCE_CONSECUTIVE_CAP    = 3;
 export const MIN_FEED_ARTICLES         = 5;
 
@@ -123,7 +143,11 @@ export function rankFeed(
   feedbackRows: DbFeedbackRow[],
   aestheticProfile?: AestheticProfile | null,
   aestheticScoreMap?: Map<string, AestheticScoreVector>,
-  topConceptLabels?: string[]
+  topConceptLabels?: string[],
+  // Phase 4 additions (all optional for graceful degradation):
+  allConceptLabels?: Set<string>,
+  allConceptEdges?: Array<[string, string]>,
+  explorationBudget?: number
 ): Article[] {
   // Step 1: Build articleId → sourceSlug map from batch
   const sourceSlugMap = new Map<string, string>();
@@ -193,51 +217,36 @@ export function rankFeed(
     ? applyConceptBonus(allScores, topConceptLabels)
     : allScores;
 
-  const rankedCandidates = withBonus
+  // Phase 4: serendipity scoring pre-pass
+  const serendipityScores = new Map<string, number>();
+  const conceptClassMap   = new Map<string, ConceptClassification[]>();
+
+  if (allConceptLabels || allConceptEdges) {
+    const labels = allConceptLabels ?? new Set<string>();
+    const edges  = allConceptEdges  ?? [];
+
+    for (const article of articles) {
+      const concepts = article.extractedConcepts ?? [];
+      const classifications = classifyConceptDistance(concepts, labels, edges);
+      conceptClassMap.set(article.id, classifications);
+      const rawSurprise  = computeRawSurprise(classifications);
+      const qualityWt    = normalizeQualityWeight(article.llmScore);
+      const sScore       = computeSerendipityScore(rawSurprise, qualityWt);
+      serendipityScores.set(article.id, sScore);
+      article.serendipityScore = sScore;  // transient; not in batch JSON
+    }
+  }
+
+  // Step 5 (Phase 3 suppressed-source fallback): append least-disliked suppressed articles
+  // if ranked candidates fall below minimum.
+  const rankedNonSuppressed = withBonus
     .sort((a, b) => {
       if (b.rawScore !== a.rawScore) return b.rawScore - a.rawScore;
       return b.article.publishedAt.localeCompare(a.article.publishedAt);
     })
     .map(s => s.article);
 
-  // Step 5: Identify exploration candidates: sources with zero feedback AND not suppressed.
-  // Exploration only applies when the user has at least some feedback for today's batch;
-  // with zero feedback there are no established preferences to diversify against.
-  const explorationPool: Article[] = [];
-
-  if (sourceStatsRaw.size > 0) {
-    const explorationSlugs = new Set<string>();
-    for (const slug of allSlugs) {
-      const stats = sourceScores.get(slug)!;
-      if (stats.total === 0 && !stats.suppressed) {
-        explorationSlugs.add(slug);
-      }
-    }
-
-    // Pick the first (highest-ranked) article per unseen source
-    const explorationBySrc = new Map<string, Article>();
-    for (const article of rankedCandidates) {
-      const slug = slugify(article.sourceName);
-      if (explorationSlugs.has(slug) && !explorationBySrc.has(slug)) {
-        explorationBySrc.set(slug, article);
-      }
-    }
-
-    // Randomly shuffle unseen source slugs and pick up to EXPLORATION_SLOTS
-    const explorationSourceList = Array.from(explorationBySrc.keys());
-    for (let i = explorationSourceList.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [explorationSourceList[i], explorationSourceList[j]] =
-        [explorationSourceList[j], explorationSourceList[i]];
-    }
-
-    for (let i = 0; i < Math.min(EXPLORATION_SLOTS, explorationSourceList.length); i++) {
-      explorationPool.push(explorationBySrc.get(explorationSourceList[i])!);
-    }
-  }
-
-  // Step 6: All-sources-suppressed fallback: append least-disliked suppressed articles
-  let ranked = [...rankedCandidates];
+  let ranked = [...rankedNonSuppressed];
   if (ranked.length < MIN_FEED_ARTICLES) {
     const suppressedArticles = articles
       .filter(a => sourceScores.get(slugify(a.sourceName))!.suppressed)
@@ -249,16 +258,37 @@ export function rankFeed(
     ranked = [...ranked, ...suppressedArticles.slice(0, needed)];
   }
 
-  // Step 7: Remove exploration articles from the ranked list (they are placed separately)
-  const explorationIds = new Set(explorationPool.map(a => a.id));
-  ranked = ranked.filter(a => !explorationIds.has(a.id));
+  // Phase 4: two-pool exploration assembly
+  const probeArticle = articles.find(a => a.probeInfo?.probeType === 'blind_spot') ?? null;
 
-  // Step 8: Insert exploration articles at EXPLORATION_POSITIONS (0-indexed, ascending)
-  const output = [...ranked];
-  const sortedPositions = [...EXPLORATION_POSITIONS].sort((a, b) => a - b);
-  for (let i = 0; i < sortedPositions.length && i < explorationPool.length; i++) {
-    const insertAt = Math.min(sortedPositions[i], output.length);
-    output.splice(insertAt, 0, explorationPool[i]);
+  const budget = Math.min(
+    Math.max(explorationBudget ?? EXPLORATION_BASELINE, EXPLORATION_FLOOR),
+    EXPLORATION_CEILING
+  );
+
+  const nonSuppressedCandidates = articles.filter(
+    a => !sourceScores.get(slugify(a.sourceName))!.suppressed
+  );
+
+  const pools = buildSlotPools(
+    nonSuppressedCandidates,
+    serendipityScores,
+    conceptClassMap,
+    probeArticle
+  );
+  const explorationSlots = assembleExplorationSlots(pools, budget);
+  tagExplorationSlotTypes(explorationSlots, pools);
+
+  // Exploitation pool: Phase 3 ranked candidates minus exploration articles
+  const exploitCandidates = deduplicateExploitPool(explorationSlots, ranked);
+  const exploitTop = exploitCandidates.slice(0, ARTICLES_PER_DAY - explorationSlots.length);
+
+  // Interleave at computed positions
+  const positions = computeExplorationPositions(explorationSlots.length);
+  const output = [...exploitTop];
+  for (let i = 0; i < positions.length && i < explorationSlots.length; i++) {
+    const insertAt = Math.min(positions[i], output.length);
+    output.splice(insertAt, 0, explorationSlots[i]);
   }
 
   // Step 9: Apply source diversity cap

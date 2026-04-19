@@ -35,4 +35,9 @@ export interface AestheticProfile {
   is_drifting:               boolean;
   /** ISO-8601 timestamp when the current drift period began. Null when not drifting. */
   drift_detected_at:         string | null;
+  // Phase 4 additions:
+  /** Computed receptivity score in [0.0, 1.0]. Null until first feedback event. */
+  receptivity_score:         number | null;
+  /** Exploration budget derived from receptivity_score. Defaults to 4 (EXPLORATION_BASELINE). */
+  exploration_budget:        number;
 }

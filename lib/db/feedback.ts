@@ -32,16 +32,19 @@ export async function upsertFeedback(
   deviceId: string,
   articleId: string,
   value: 'like' | 'dislike' | 'save',
-  userId?: string | null
+  userId?: string | null,
+  dwellSeconds?: number | null
 ): Promise<DbFeedbackRow> {
+  const dwell = dwellSeconds ?? null;
   const rows = await sql`
-    INSERT INTO feedback (device_id, article_id, value, updated_at, user_id)
-    VALUES (${deviceId}, ${articleId}, ${value}, NOW(), ${userId ?? null})
+    INSERT INTO feedback (device_id, article_id, value, updated_at, user_id, dwell_seconds)
+    VALUES (${deviceId}, ${articleId}, ${value}, NOW(), ${userId ?? null}, ${dwell})
     ON CONFLICT (device_id, article_id)
     DO UPDATE SET
-      value      = EXCLUDED.value,
-      updated_at = NOW(),
-      user_id    = COALESCE(EXCLUDED.user_id, feedback.user_id)
+      value         = EXCLUDED.value,
+      updated_at    = NOW(),
+      user_id       = COALESCE(EXCLUDED.user_id, feedback.user_id),
+      dwell_seconds = COALESCE(EXCLUDED.dwell_seconds, feedback.dwell_seconds)
     RETURNING article_id, value, updated_at::text AS updated_at
   `;
   return rows[0] as DbFeedbackRow;

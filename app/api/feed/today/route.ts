@@ -6,8 +6,9 @@ import type { DbFeedbackRow } from '@/lib/db/feedback';
 import { rankFeed } from '@/lib/pipeline/ranker';
 import { getAestheticProfile, getArticleAestheticScores } from '@/lib/db/aesthetics';
 import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthetic';
-import { getTopConceptNodes } from '@/lib/db/concepts';
+import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
 import type { UserConcept } from '@/lib/types/concepts';
+import { EXPLORATION_BASELINE } from '@/lib/config/serendipity';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest) {
   let aestheticProfile: AestheticProfile | null = null;
   let aestheticScoreMap: Map<string, AestheticScoreVector> = new Map();
   let topConceptNodes: UserConcept[] = [];
+  let allConceptLabels: Set<string> = new Set();
+  let allConceptEdgesResult: Array<[string, string]> = [];
   let setCookieHeader: string | null = null;
 
   try {
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
     const articleIds = batch.articles.map(a => a.id);
 
     // Resolve identity-dependent reads in parallel
-    const [fbRows, profile, scoreMap, topConceptResult] = await Promise.all([
+    const [fbRows, profile, scoreMap, topConceptResult, conceptLabels, conceptEdges] = await Promise.all([
       userId
         ? getFeedbackForUser(userId)
         : deviceId ? getFeedbackForDevice(deviceId) : Promise.resolve([]),
@@ -56,18 +59,34 @@ export async function GET(req: NextRequest) {
             return [] as UserConcept[];
           })
         : Promise.resolve([] as UserConcept[]),
+      deviceId
+        ? getAllConceptLabels(userId, deviceId).catch((err: unknown) => {
+            console.error('[feed] concept labels fetch failed:', err);
+            return new Set<string>();
+          })
+        : Promise.resolve(new Set<string>()),
+      deviceId
+        ? getAllConceptEdges(userId, deviceId).catch((err: unknown) => {
+            console.error('[feed] concept edges fetch failed:', err);
+            return [] as Array<[string, string]>;
+          })
+        : Promise.resolve([] as Array<[string, string]>),
     ]);
 
-    feedbackRows      = fbRows;
-    aestheticProfile  = profile;
-    aestheticScoreMap = scoreMap;
-    topConceptNodes   = topConceptResult;
+    feedbackRows            = fbRows;
+    aestheticProfile        = profile;
+    aestheticScoreMap       = scoreMap;
+    topConceptNodes         = topConceptResult;
+    allConceptLabels        = conceptLabels;
+    allConceptEdgesResult   = conceptEdges;
   } catch (err) {
     console.error('[feed/today] identity/feedback/aesthetic fetch failed, returning unranked:', err);
-    const publicBatchArticles = batch.articles.map(
+    const publicBatchArticles = batch.articles.map(article => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ({ discoveryTopic: _dt, ...rest }) => rest
-    );
+      const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec,
+              serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
+      return rest;
+    });
     return NextResponse.json(
       { batchDate: batch.batchDate, articles: publicBatchArticles, generatedAt: batch.generatedAt },
       { headers: { 'Cache-Control': 'no-store' } }
@@ -75,12 +94,28 @@ export async function GET(req: NextRequest) {
   }
 
   const topConceptLabels = topConceptNodes.map(n => n.label);
-  const rankedArticles = rankFeed(batch.articles, feedbackRows, aestheticProfile, aestheticScoreMap, topConceptLabels);
 
-  const publicArticles = rankedArticles.map(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    ({ discoveryTopic: _dt, ...rest }) => rest
+  // Use stored exploration_budget from aesthetic profile; fall back to EXPLORATION_BASELINE
+  const explorationBudget = aestheticProfile?.exploration_budget ?? EXPLORATION_BASELINE;
+
+  const rankedArticles = rankFeed(
+    batch.articles,
+    feedbackRows,
+    aestheticProfile,
+    aestheticScoreMap,
+    topConceptLabels,
+    allConceptLabels,
+    allConceptEdgesResult,
+    explorationBudget
   );
+
+  // Strip all internal fields before sending to client
+  const publicArticles = rankedArticles.map(article => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec,
+            serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
+    return rest;
+  });
 
   const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
   if (setCookieHeader) headers['Set-Cookie'] = setCookieHeader;

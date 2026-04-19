@@ -338,7 +338,7 @@ export async function runDiscovery(
 
   // Map to Article objects
   const now = new Date().toISOString();
-  const discoveryArticles: Article[] = top.map(({ result, topic, bodyText }) => ({
+  const discoveryArticles: Article[] = top.map(({ result, topic, bodyText, llmScores }) => ({
     id: makeId(result.sourceName, result.url),
     title: result.title,
     description: result.description,
@@ -352,6 +352,7 @@ export async function runDiscovery(
     bodyText: bodyText,
     feedbackSlot: null,
     discoveryTopic: topic.id,            // internal metadata
+    llmScore: llmScores.composite,       // Phase 4: composite quality score @internal
   }));
 
   appendLog(
