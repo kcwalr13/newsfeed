@@ -59,6 +59,9 @@ The full product vision is at `agents/ba/vision_discovery_companion.md`. All age
 should reference this document when making design decisions to ensure alignment
 with the long-term direction.
 
+## Environment Variables
+- `CRON_SECRET` — must be set in Vercel environment variables to authenticate the daily cron trigger at `/api/pipeline/run`. Generate with `openssl rand -hex 32`.
+
 ## Ground Rules
 - Make incremental progress. Never try to complete large features in one pass.
 - Leave clear artifacts at the end of every session so the next session can orient quickly.

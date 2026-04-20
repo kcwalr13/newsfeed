@@ -3,14 +3,13 @@ import { runPipeline } from '@/lib/pipeline/run';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest) {
+function authorize(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
+  return !!cronSecret && authHeader === `Bearer ${cronSecret}`;
+}
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+async function handleRun() {
   try {
     const result = await runPipeline();
 
@@ -26,4 +25,18 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
+}
+
+export async function GET(req: NextRequest) {
+  if (!authorize(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  return handleRun();
+}
+
+export async function POST(req: NextRequest) {
+  if (!authorize(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  return handleRun();
 }
