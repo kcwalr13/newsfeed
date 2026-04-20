@@ -4,7 +4,7 @@
 **Last Updated**: 2026-04-04
 
 This file is the index of all Business Requirements Documents produced for the
-Daily Digest project. Update it whenever a new BRD is created or an existing
+Tangent project. Update it whenever a new BRD is created or an existing
 BRD's status changes.
 
 ---
@@ -13,7 +13,7 @@ BRD's status changes.
 
 | ID | File | Title | Status | Milestone |
 |----|------|-------|--------|-----------|
-| BRD-001 | `requirements_article_feed_v1.md` | Article Feed — Core Feed View | Resolved | Milestone 1 — Core Daily Digest |
+| BRD-001 | `requirements_article_feed_v1.md` | Article Feed — Core Feed View | Resolved | Milestone 1 — Core Feed |
 | BRD-002 | `requirements_feedback_capture_v1.md` | Feedback Capture and Storage | Resolved | Milestone 2 — Feedback System |
 | BRD-003 | `requirements_server_feedback_v1.md` | Server-Side Feedback Storage with Anonymous Device Identity | Resolved | Milestone 2.5 — Feedback Durability |
 | BRD-004 | `brd_feed_personalization_v1.md` | Feed Personalization via Feedback-Driven Article Ranking | Draft | Milestone 3 — Personalized Feed |

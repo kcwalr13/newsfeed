@@ -56,8 +56,7 @@ export interface Article {
 
   /**
    * Slot type assigned at feed assembly time.
-   * null for exploitation articles. Written to batch JSON for analytics.
-   * Never sent to the client. @internal
+   * null for exploitation articles. Sent to the client for display as exploration badges.
    */
   explorationSlotType?: 'semantic_stretch' | 'blind_spot_probe' | 'wildcard' | null;
 

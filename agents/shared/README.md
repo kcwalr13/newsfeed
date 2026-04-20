@@ -34,7 +34,7 @@ should reference this when making design decisions.
 
 | Milestone | Status |
 |-----------|--------|
-| 1 — Core Daily Digest | **Complete** |
+| 1 — Core Feed | **Complete** |
 | 2 — Feedback Capture (localStorage) | **Complete** |
 | 2.5 — Server-Side Feedback Durability | **Complete** |
 | 3 — User Authentication | **Complete** |

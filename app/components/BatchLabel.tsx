@@ -9,7 +9,7 @@ export default function BatchLabel({ batchDate }: Props) {
 
   if (batchDate === today) {
     return (
-      <p className="text-sm font-medium text-gray-500 mb-4">Today's Digest</p>
+      <p className="text-sm font-medium text-gray-500 mb-4">Today&apos;s Digest</p>
     );
   }
 

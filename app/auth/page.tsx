@@ -1,6 +1,8 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../components/AuthContext';
 
@@ -25,23 +27,16 @@ function AuthPageContent() {
   const searchParams = useSearchParams();
   const { setUser } = useAuth();
 
-  const [view, setView] = useState<AuthView>('login');
-  const [banner, setBanner] = useState<string | null>(null);
-  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [view, setView] = useState<AuthView>(() => {
+    if (searchParams.get('reset_token')) return 'reset-password';
+    if (searchParams.get('mode') === 'register') return 'register';
+    return 'login';
+  });
+  const [banner, setBanner] = useState<string | null>(() =>
+    searchParams.get('verified') === '1' ? 'Your email has been verified. You can now log in.' : null
+  );
+  const resetToken = searchParams.get('reset_token');
   const [registeredEmail, setRegisteredEmail] = useState('');
-
-  // Read query params on mount
-  useEffect(() => {
-    if (searchParams.get('verified') === '1') {
-      setView('login');
-      setBanner('Your email has been verified. You can now log in.');
-    } else if (searchParams.get('reset_token')) {
-      setResetToken(searchParams.get('reset_token'));
-      setView('reset-password');
-    } else if (searchParams.get('mode') === 'register') {
-      setView('register');
-    }
-  }, [searchParams]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">

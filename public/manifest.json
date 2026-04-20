@@ -1,6 +1,6 @@
 {
-  "name": "Daily Digest",
-  "short_name": "Digest",
+  "name": "Tangent",
+  "short_name": "Tangent",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

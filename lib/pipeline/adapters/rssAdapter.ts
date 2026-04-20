@@ -9,6 +9,23 @@ const parser = new Parser({
   },
 });
 
+/** Decodes numeric and named HTML entities (e.g. &#8217; → ', &amp; → &). */
+function decodeEntities(str: string): string {
+  return str
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
+/** Strips HTML tags and decodes entities, collapsing whitespace. */
+function htmlToPlainText(html: string): string {
+  return decodeEntities(html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
 /**
  * Fetches and parses a single RSS source.
  * Returns an array of partial Article objects ready for the validator.
@@ -28,20 +45,19 @@ export async function fetchRssArticles(source: Source): Promise<PartialArticle[]
       const anyItem = item as unknown as Record<string, unknown>;
       const contentEncoded = anyItem['contentEncoded'] as string | undefined;
       const bodyCandidate = contentEncoded || item.content;
-      const bodyText =
-        bodyCandidate && bodyCandidate.length > 200 ? bodyCandidate : undefined;
+      const rawBody = bodyCandidate && bodyCandidate.length > 200 ? bodyCandidate : undefined;
+      const bodyText = rawBody ? htmlToPlainText(rawBody) : undefined;
       const summary = anyItem['summary'] as string | undefined;
+      const rawDescription = item.contentSnippet || summary;
 
       return {
-        title: (item.title ?? '').trim(),
+        title: decodeEntities((item.title ?? '').trim()),
         articleUrl: item.link ?? '',
         publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : now,
         fetchedAt: now,
         sourceName: source.name,
         sourceUrl: source.url,
-        ...(item.contentSnippet || summary
-          ? { description: item.contentSnippet || summary }
-          : {}),
+        ...(rawDescription ? { description: decodeEntities(rawDescription) } : {}),
         ...(item.enclosure?.url ? { imageUrl: item.enclosure.url } : {}),
         ...(bodyText ? { bodyText } : {}),
       };

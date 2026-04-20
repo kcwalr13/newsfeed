@@ -1,6 +1,6 @@
 # Product Roadmap
 
-**Last Updated**: 2026-04-04 (Phase 4 Released — all four phases complete)
+**Last Updated**: 2026-04-19 (QA pass complete — all four phases fully operational)
 **Maintained by**: PM Agent
 
 > **Vision shift (2026-04-07):** The project has been refined from a news aggregator
@@ -24,7 +24,7 @@ status "Planned" and breaks them into technical tasks.
 
 ---
 
-## Milestone 1 — Core Daily Digest (v1)
+## Milestone 1 — Core Feed (v1)
 
 **Goal**: A user can open the app, see 20 articles curated from the web, read each
 article inside the app, and tap through to the original source. The feed refreshes
@@ -585,6 +585,40 @@ engagement weight, (6) quality score range confirmation from `qualityGate.ts`,
 
 ---
 
+## QA Pass — Post-Phase-4 Bug Fixes
+
+**Goal**: Resolve four browser-verified bugs found after Phase 4 shipped. No new
+features — correctness and completeness only.
+
+**Status**: Released
+**Shipped**: 2026-04-19
+**Prerequisite**: Phase 4 (Engineered Serendipity) shipped.
+
+### Bugs Fixed
+
+| ID | Description | Severity |
+|----|-------------|----------|
+| QA-001 | Migration 011 typo (`user_feedback` → `feedback`) caused every feedback upsert to fail with HTTP 500. Fixed in SQL; migration 012 added as safe corrective. | Critical |
+| QA-002 | RSS adapter stored raw HTML tags as article body text. Added `htmlToPlainText()` in `rssAdapter.ts`. | Critical |
+| QA-003 | Numeric HTML entities (e.g. `&#8217;`) not decoded in titles/descriptions. Added `decodeEntities()` in `rssAdapter.ts`. | Medium |
+| QA-004 | `explorationSlotType` was stripped from the feed API response, so no exploration badges reached the UI. Field now passes through; `ArticleCard` renders Stretch/Blind spot/Wildcard violet badges. | Low |
+
+### Also Fixed (ESLint / Build)
+
+- Unused imports removed across multiple files
+- Unescaped JSX apostrophe in `BatchLabel.tsx`
+- `setState` inside `useEffect` without proper dependency arrays
+- `eslint-disable` comments tightened to correct scope
+- `auth/page.tsx` — added `export const dynamic = 'force-dynamic'`
+
+### Environment Note
+
+`ANTHROPIC_API_KEY` must be set in `.env.local` for aesthetic scoring and concept
+extraction to function. With the key in place, the full Phase 2–4 pipeline is
+operational (verified: 20/20 articles scored in a live pipeline run).
+
+---
+
 ## Milestone 6 — Extended Features (Deferred)
 
 **Goal**: Quality-of-life features. Deprioritized in favor of the four-phase
@@ -629,3 +663,4 @@ vision work. May be revisited as needed.
 | 2026-04-04 | Dev Agent | Phase 3 (Deep User Model) fully shipped. All 17 DEPTH stories Released. All 14 DEPTH tasks Done. Phase 3 milestone marked Released. Implemented: migration 010, 12 Phase 3 constants, AestheticProfile extended, UserConcept/UserConceptEdge types, recomputeShortTermCentroid, updateDriftState, computeDriftScore, lib/db/concepts.ts, conceptBonus.ts, conceptExtractor.ts, blendCentroids + topConceptLabels in ranker, feedback route Phase 3 integration (save + dwell + concept pipeline), feed route concept nodes, ArticleInteractions UI component (dwell timer + save button). npx tsc --noEmit passes. |
 | 2026-04-04 | PM Agent | Phase 4 (Engineered Serendipity) scoped from BRD-010. 22 SEREN stories written across four groups: surprise scoring (A, 5 stories), blind spot probing (B, 7 stories), exploration budget and slot assembly (C, 5 stories), receptivity signal (D, 5 stories). 10 P0 stories (Groups A and C), 12 P1 stories (Groups B and D). Phase 4 roadmap section updated from placeholder to full story table with implementation order note. 7 Architect decisions flagged: blind_spot_state DB schema, serendipity score integration point in rankFeed(), receptivity score storage, slot classification field on articles, probe concept extraction engagement weight, quality score range from qualityGate.ts, exploration constants file location. 8 future items deferred. |
 | 2026-04-04 | Dev Agent | Phase 4 (Engineered Serendipity) fully shipped. All 22 SEREN stories Released. All 15 SEREN tasks Done. migration 011 applied. lib/config/serendipity.ts, serendipityScorer.ts, explorationAssembler.ts, blindSpotProber.ts, receptivity.ts, lib/db/blindSpots.ts all implemented. rankFeed() extended with serendipity pre-pass and two-pool exploration assembly. Feedback route extended with probe routing and receptivity update. Feed route reads stored exploration budget. npx tsc --noEmit passes clean. Phase 4 milestone marked Released. The four-phase Discovery Companion vision is now fully delivered. |
+| 2026-04-19 | Dev Agent | QA pass complete. Four browser-verified bugs fixed: (1) migration 011 `user_feedback` typo → HTTP 500 on all feedback writes — fixed in SQL + migration 012 added as corrective; (2) raw HTML body text in RSS articles — `htmlToPlainText()` added to rssAdapter; (3) numeric HTML entities not decoded in titles — `decodeEntities()` added to rssAdapter; (4) `explorationSlotType` stripped from API response, no badges shown — field now passes through, ArticleCard renders Stretch/Blind spot/Wildcard violet badges. ESLint errors cleaned. `ANTHROPIC_API_KEY` confirmed required in `.env.local`; with it set the full Phase 2–4 scoring pipeline is operational (20/20 articles scored). CLAUDE.md updated with env var requirements and implementation notes. |

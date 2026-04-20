@@ -46,13 +46,11 @@ function useDwellTimer(): () => number {
 }
 
 export default function ArticleInteractions({ articleId }: Props) {
-  const [feedback, setFeedbackState] = useState<'like' | 'dislike' | 'save' | null>(null);
+  const [feedback, setFeedbackState] = useState<'like' | 'dislike' | 'save' | null>(
+    () => getFeedback(articleId) ?? null
+  );
   const feedbackGivenRef = useRef(false);
   const getDwellSeconds = useDwellTimer();
-
-  useEffect(() => {
-    setFeedbackState(getFeedback(articleId) ?? null);
-  }, [articleId]);
 
   // Passive beacon: send dwell time when user leaves without explicit feedback
   useEffect(() => {

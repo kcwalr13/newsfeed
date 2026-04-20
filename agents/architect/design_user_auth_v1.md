@@ -706,14 +706,14 @@ export async function sendVerificationEmail(
   to: string,
   token: string
 ): Promise<void>
-// Subject: "Verify your Daily Digest email address"
+// Subject: "Verify your Tangent email address"
 // Body: link to ${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}
 
 export async function sendPasswordResetEmail(
   to: string,
   token: string
 ): Promise<void>
-// Subject: "Reset your Daily Digest password"
+// Subject: "Reset your Tangent password"
 // Body: link to ${process.env.NEXTAUTH_URL}/auth?reset_token=${token}
 // The /auth page reads ?reset_token on mount and displays the new-password form
 ```
@@ -970,7 +970,7 @@ No ORM. No JWT library. No OAuth library. The `crypto` module is Node.js built-i
 | `SMTP_PORT` | Email sending | `587` for TLS/STARTTLS (default); `465` for SSL |
 | `SMTP_USER` | Email sending | SMTP username / API token |
 | `SMTP_PASS` | Email sending | SMTP password / API token secret |
-| `EMAIL_FROM` | Email sending | From address: `"Daily Digest <noreply@yourdomain.com>"` |
+| `EMAIL_FROM` | Email sending | From address: `"Tangent <noreply@yourdomain.com>"` |
 | `NEXTAUTH_URL` | Email link generation | Base URL of the app: `http://localhost:3000` (dev), `https://yourdomain.com` (prod) |
 
 `.env.example` after update:

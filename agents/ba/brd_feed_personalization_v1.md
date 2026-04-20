@@ -13,7 +13,7 @@
 
 ## Problem Statement
 
-Daily Digest fetches and stores a daily batch of articles, but every user sees the
+Tangent fetches and stores a daily batch of articles, but every user sees the
 exact same 20 articles in the same order. The app has been collecting explicit
 like/dislike feedback from users since Milestone 2, and that data is now durably
 stored server-side in Postgres keyed by device ID. None of it has any effect on

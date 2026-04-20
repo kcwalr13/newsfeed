@@ -60,7 +60,7 @@ schema changes before launch the Dev agent will add a migration step at that tim
 FEEDBACK_STORE_KEY = 'dd_feedback'
 ```
 
-Short, prefixed with the app namespace (`dd_` for Daily Digest), unlikely to
+Short, prefixed with the app namespace (`dd_` for the original "Daily Digest" brand), unlikely to
 collide with other libraries. Defined once in `lib/feedback/store.ts` and never
 hardcoded elsewhere.
 
