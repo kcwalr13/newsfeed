@@ -3,6 +3,9 @@
 /** Total articles in every daily batch. */
 export const ARTICLES_PER_DAY = 20;
 
+/** Number of articles returned to the client per feed request. */
+export const FEED_CLIENT_SIZE = 7;
+
 /** Fixed-source pipeline (RSS + NewsAPI) nominal contribution per day. */
 export const PIPELINE_ARTICLES_PER_DAY = 14;
 

@@ -9,6 +9,7 @@ import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthet
 import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
 import type { UserConcept } from '@/lib/types/concepts';
 import { EXPLORATION_BASELINE } from '@/lib/config/serendipity';
+import { FEED_CLIENT_SIZE } from '@/lib/config/feed';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
     allConceptEdgesResult   = conceptEdges;
   } catch (err) {
     console.error('[feed/today] identity/feedback/aesthetic fetch failed, returning unranked:', err);
-    const publicBatchArticles = batch.articles.map(article => {
+    const publicBatchArticles = batch.articles.slice(0, FEED_CLIENT_SIZE).map(article => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec,
               serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest) {
   );
 
   // Strip all internal fields before sending to client
-  const publicArticles = rankedArticles.map(article => {
+  const publicArticles = rankedArticles.slice(0, FEED_CLIENT_SIZE).map(article => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec,
             serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
