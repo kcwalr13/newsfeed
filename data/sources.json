@@ -1,34 +1,66 @@
 [
   {
-    "slug": "bbc-news",
-    "name": "BBC News",
-    "url": "https://www.bbc.com",
+    "slug": "quanta-magazine",
+    "name": "Quanta Magazine",
+    "url": "https://www.quantamagazine.org",
     "type": "rss",
-    "feedUrl": "https://feeds.bbci.co.uk/news/rss.xml",
+    "feedUrl": "https://api.quantamagazine.org/feed/",
     "active": true
   },
   {
-    "slug": "ars-technica",
-    "name": "Ars Technica",
-    "url": "https://arstechnica.com",
+    "slug": "aeon",
+    "name": "Aeon",
+    "url": "https://aeon.co",
     "type": "rss",
-    "feedUrl": "https://feeds.arstechnica.com/arstechnica/index",
+    "feedUrl": "https://aeon.co/feed.rss",
     "active": true
   },
   {
-    "slug": "the-verge",
-    "name": "The Verge",
-    "url": "https://www.theverge.com",
+    "slug": "nautilus",
+    "name": "Nautilus",
+    "url": "https://nautil.us",
     "type": "rss",
-    "feedUrl": "https://www.theverge.com/rss/index.xml",
+    "feedUrl": "https://nautil.us/feed/",
     "active": true
   },
   {
-    "slug": "newsapi-top",
-    "name": "NewsAPI Top Headlines",
-    "url": "https://newsapi.org",
-    "type": "newsapi",
-    "query": "top-headlines",
+    "slug": "astral-codex-ten",
+    "name": "Astral Codex Ten",
+    "url": "https://www.astralcodexten.com",
+    "type": "rss",
+    "feedUrl": "https://www.astralcodexten.com/feed",
+    "active": true
+  },
+  {
+    "slug": "ribbonfarm",
+    "name": "Ribbonfarm",
+    "url": "https://www.ribbonfarm.com",
+    "type": "rss",
+    "feedUrl": "https://www.ribbonfarm.com/feed/",
+    "active": true
+  },
+  {
+    "slug": "lesswrong",
+    "name": "LessWrong",
+    "url": "https://www.lesswrong.com",
+    "type": "rss",
+    "feedUrl": "https://www.lesswrong.com/feed.xml",
+    "active": true
+  },
+  {
+    "slug": "marginal-revolution",
+    "name": "Marginal Revolution",
+    "url": "https://marginalrevolution.com",
+    "type": "rss",
+    "feedUrl": "https://marginalrevolution.com/feed",
+    "active": true
+  },
+  {
+    "slug": "the-marginalian",
+    "name": "The Marginalian",
+    "url": "https://www.themarginalian.org",
+    "type": "rss",
+    "feedUrl": "https://www.themarginalian.org/feed/",
     "active": true
   }
 ]
