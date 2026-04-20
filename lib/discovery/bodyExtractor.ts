@@ -1,7 +1,6 @@
 // SERVER-SIDE ONLY — never import in browser bundles.
 
-import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+import { parse } from 'node-html-parser';
 
 export type ExtractionFailureReason =
   | 'fetch_timeout'
@@ -23,7 +22,7 @@ export interface ExtractionFailure {
 export type ExtractionResult = ExtractionSuccess | ExtractionFailure;
 
 /**
- * Fetches the given URL and extracts its main body text using Mozilla Readability.
+ * Fetches the given URL and extracts its main body text.
  * Returns ExtractionSuccess with plain text, or ExtractionFailure with a reason code.
  * No retry logic. Callers should handle failures by skipping the candidate.
  */
@@ -49,31 +48,65 @@ export async function extractBodyText(url: string): Promise<ExtractionResult> {
 }
 
 /**
- * Extracts body text from raw HTML using Mozilla Readability.
+ * Extracts body text from raw HTML using node-html-parser.
  * Exported for testing — allows injecting pre-fetched HTML without HTTP.
  */
-export function extractBodyTextFromHtml(html: string, url: string): ExtractionResult {
-  let dom: JSDOM;
+export function extractBodyTextFromHtml(html: string, _url: string): ExtractionResult {
+  let root;
   try {
-    dom = new JSDOM(html, { url });
+    root = parse(html);
   } catch {
     return { success: false, reason: 'extraction_failed' };
   }
 
-  const reader = new Readability(dom.window.document);
-  const article = reader.parse();
-
-  if (!article || !article.textContent) {
-    return { success: false, reason: 'extraction_failed' };
+  // Remove noise elements
+  const noiseSelectors = [
+    'script', 'style', 'noscript', 'iframe', 'nav', 'header', 'footer',
+    'aside', 'form', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
+    '.sidebar', '.nav', '.menu', '.advertisement', '.ad', '.social-share',
+    '.comments', '#comments',
+  ];
+  for (const sel of noiseSelectors) {
+    try {
+      root.querySelectorAll(sel).forEach(el => el.remove());
+    } catch {
+      // ignore unsupported selectors
+    }
   }
 
-  // Strip any remaining HTML tags and normalize whitespace
-  const plainText = article.textContent
-    .replace(/<[^>]*>/g, ' ')
+  // Try to find main content container, falling back to body then root
+  const contentSelectors = [
+    'article',
+    '[role="main"]',
+    'main',
+    '.post-content',
+    '.entry-content',
+    '.article-body',
+    '.post-body',
+    '.story-body',
+    '.content-body',
+    '#article-body',
+    '#main-content',
+    '.prose',
+  ];
+
+  let contentEl = null;
+  for (const sel of contentSelectors) {
+    try {
+      const found = root.querySelector(sel);
+      if (found) { contentEl = found; break; }
+    } catch {
+      // ignore unsupported selectors
+    }
+  }
+
+  const source = contentEl ?? root.querySelector('body') ?? root;
+
+  const rawText = source.textContent ?? '';
+  const plainText = rawText
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Word count by whitespace-separated tokens
   const wordCount = plainText.split(/\s+/).filter(Boolean).length;
   if (wordCount < 300) {
     return { success: false, reason: 'below_minimum_length' };
