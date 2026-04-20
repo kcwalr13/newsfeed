@@ -1,12 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useAuth } from './AuthContext';
 
 export default function AccountIcon() {
   const { user, loading, setUser } = useAuth();
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
   async function handleLogout() {
@@ -46,15 +44,7 @@ export default function AccountIcon() {
   }
 
   if (!user) {
-    return (
-      <button
-        onClick={() => router.push('/auth')}
-        className="p-3 text-gray-500 hover:text-gray-900 transition-colors"
-        aria-label="Sign in"
-      >
-        {outlineIcon}
-      </button>
-    );
+    return null;
   }
 
   return (

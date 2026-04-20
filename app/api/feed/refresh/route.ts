@@ -6,16 +6,16 @@ import { appendLog } from '@/lib/pipeline/storage';
 
 export const dynamic = 'force-dynamic';
 
+// Auth is disabled — use session userId if somehow present, otherwise fall back to solo user.
+const SOLO_USER_ID = 'solo';
+
 export async function POST(req: NextRequest) {
-  // Auth check — must have a valid session
   const tempRes = new NextResponse();
   const session = await resolveSession(req, tempRes);
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const userId = session?.userId ?? SOLO_USER_ID;
 
   // Cooldown check — enforce per-user window
-  const cooldown = checkCooldown(session.userId);
+  const cooldown = checkCooldown(userId);
   if (!cooldown.allowed) {
     return NextResponse.json(
       {
@@ -29,18 +29,16 @@ export async function POST(req: NextRequest) {
   // Read device ID for correct topic weight upsert keying
   const deviceId = req.cookies.get('dd_device_id')?.value ?? null;
 
-  // Log the manual refresh attempt
-  appendLog(`[refresh] Manual refresh triggered. userId=${session.userId}`);
+  appendLog(`[refresh] Manual refresh triggered. userId=${userId}`);
 
-  // Run the full pipeline with overwrite enabled
   try {
-    const result = await runPipeline({ forceOverwrite: true, userId: session.userId, deviceId });
+    const result = await runPipeline({ forceOverwrite: true, userId, deviceId });
 
     // Record cooldown ONLY after success — failed refresh does not consume cooldown
-    recordRefresh(session.userId);
+    recordRefresh(userId);
 
     appendLog(
-      `[refresh] Manual refresh complete. userId=${session.userId} ` +
+      `[refresh] Manual refresh complete. userId=${userId} ` +
         `batchDate=${result.batchDate} count=${result.count}`
     );
 
@@ -51,9 +49,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    appendLog(
-      `[refresh] Manual refresh failed. userId=${session.userId} error=${message}`
-    );
+    appendLog(`[refresh] Manual refresh failed. userId=${userId} error=${message}`);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

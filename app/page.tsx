@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import type { Article, FeedResponse } from '@/lib/types/article';
 import { initDeviceId } from '@/lib/identity/device';
 import { runMigrationIfNeeded, loadFromServer, drainQueue } from '@/lib/feedback/store';
-import { useAuth } from './components/AuthContext';
 import AccountIcon from './components/AccountIcon';
 import ArticleCard from './components/ArticleCard';
 import FeedSkeleton from './components/FeedSkeleton';
@@ -18,7 +17,6 @@ type Status = 'loading' | 'success' | 'error';
 
 export default function FeedPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
   const [status, setStatus] = useState<Status>('loading');
   const [data, setData] = useState<FeedResponse | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | undefined>(undefined);
@@ -91,12 +89,10 @@ export default function FeedPage() {
         <div className="max-w-2xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Tangent</h1>
           <div className="flex items-center gap-2">
-            {!authLoading && user && (
-              <RefreshButton
-                onRefreshSuccess={handleRefreshSuccess}
-                onRefreshError={handleRefreshError}
-              />
-            )}
+            <RefreshButton
+              onRefreshSuccess={handleRefreshSuccess}
+              onRefreshError={handleRefreshError}
+            />
             <AccountIcon />
           </div>
         </div>

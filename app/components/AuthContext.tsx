@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 export interface AuthUser {
   userId: string;
@@ -13,9 +13,12 @@ interface AuthContextValue {
   setUser: (user: AuthUser | null) => void;
 }
 
+// Auth is disabled — single-user mode. All pages are accessible without login.
+const SOLO_USER: AuthUser = { userId: 'solo', email: 'kcwalr13@gmail.com' };
+
 export const AuthContext = createContext<AuthContextValue>({
-  user: null,
-  loading: true,
+  user: SOLO_USER,
+  loading: false,
   setUser: () => {},
 });
 
@@ -24,21 +27,10 @@ export function useAuth(): AuthContextValue {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { userId: string; email: string } | null) => {
-        if (data?.userId) setUser({ userId: data.userId, email: data.email });
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const [user] = useState<AuthUser>(SOLO_USER);
 
   return (
-    <AuthContext.Provider value={{ user, loading, setUser }}>
+    <AuthContext.Provider value={{ user, loading: false, setUser: () => {} }}>
       {children}
     </AuthContext.Provider>
   );
