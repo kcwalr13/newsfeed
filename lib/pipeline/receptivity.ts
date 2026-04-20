@@ -2,6 +2,7 @@
 
 import { sql } from '@/lib/db/client';
 import { readBatch } from '@/lib/pipeline/storage';
+import type { ArticleBatch } from '@/lib/types/article';
 import {
   RECEPTIVITY_WEIGHT_DIVERSITY,
   RECEPTIVITY_WEIGHT_PROBE_ACCEPTANCE,
@@ -41,16 +42,16 @@ export async function computeDiversityScore(
     return 0.5;
   }
 
-  // Load batch JSON files to find extractedConcepts for each liked article.
+  // Load batches from DB to find extractedConcepts for each liked article.
   // Group by batchDate for efficient batch loading.
-  const batchCache = new Map<string, ReturnType<typeof readBatch>>();
+  const batchCache = new Map<string, ArticleBatch | null>();
   const distinctConcepts = new Set<string>();
 
   for (const row of likedRows) {
     // Derive batchDate from updated_at (YYYY-MM-DD prefix)
     const batchDate = row.updated_at.slice(0, 10);
     if (!batchCache.has(batchDate)) {
-      batchCache.set(batchDate, readBatch(batchDate));
+      batchCache.set(batchDate, await readBatch(batchDate));
     }
     const batch = batchCache.get(batchDate);
     const article = batch?.articles.find(a => a.id === row.article_id);
@@ -84,14 +85,14 @@ export async function computeProbeAcceptanceRate(
   const feedbackRows = rows as Array<{ article_id: string; value: string; updated_at: string }>;
 
   // Group by batchDate for efficient batch loading
-  const batchCache = new Map<string, ReturnType<typeof readBatch>>();
+  const batchCache = new Map<string, ArticleBatch | null>();
   let probesShown = 0;
   let probeLikes  = 0;
 
   for (const row of feedbackRows) {
     const batchDate = row.updated_at.slice(0, 10);
     if (!batchCache.has(batchDate)) {
-      batchCache.set(batchDate, readBatch(batchDate));
+      batchCache.set(batchDate, await readBatch(batchDate));
     }
     const batch = batchCache.get(batchDate);
     const article = batch?.articles.find(a => a.id === row.article_id);
@@ -138,14 +139,14 @@ export async function computeDwellRatio(
   }>;
 
   // Group by batchDate for efficient batch loading
-  const batchCache = new Map<string, ReturnType<typeof readBatch>>();
+  const batchCache = new Map<string, ArticleBatch | null>();
   const explorationDwells: number[] = [];
   const exploitationDwells: number[] = [];
 
   for (const row of dwellRows) {
     const batchDate = row.updated_at.slice(0, 10);
     if (!batchCache.has(batchDate)) {
-      batchCache.set(batchDate, readBatch(batchDate));
+      batchCache.set(batchDate, await readBatch(batchDate));
     }
     const batch = batchCache.get(batchDate);
     const article = batch?.articles.find(a => a.id === row.article_id);

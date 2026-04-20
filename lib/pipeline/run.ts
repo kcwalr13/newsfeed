@@ -113,7 +113,7 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
 
   try {
     // Guard: skip if batch already exists (unless explicitly overwriting)
-    if (!options.forceOverwrite && readBatch(today) !== null) {
+    if (!options.forceOverwrite && (await readBatch(today)) !== null) {
       return { batchDate: today, count: 0, alreadyExists: true };
     }
 
@@ -229,7 +229,7 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       articles,
     };
 
-    writeBatch(batch, options.forceOverwrite ?? false);
+    await writeBatch(batch, options.forceOverwrite ?? false);
     appendLog(`[pipeline] Run complete. batchDate=${today} count=${articles.length}`);
 
     return { batchDate: today, count: articles.length, alreadyExists: false };

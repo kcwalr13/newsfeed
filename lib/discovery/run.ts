@@ -144,7 +144,7 @@ export async function runDiscovery(
         ? allFeedbackRows
         : allFeedbackRows.filter((r) => r.updated_at > cutoffIso);
 
-      const latestBatch = readLatestBatch();
+      const latestBatch = await readLatestBatch();
       if (latestBatch) {
         const articleTopicMap = new Map<string, string>();  // article_id -> topic_id
         for (const article of latestBatch.articles) {

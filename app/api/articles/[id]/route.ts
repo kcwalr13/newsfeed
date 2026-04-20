@@ -9,7 +9,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const today = new Date().toISOString().slice(0, 10);
-  const batch = readBatch(today) ?? readLatestBatch();
+  const batch = (await readBatch(today)) ?? (await readLatestBatch());
 
   if (!batch) {
     return NextResponse.json({ error: 'Article not found' }, { status: 404 });

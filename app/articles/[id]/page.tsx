@@ -12,7 +12,7 @@ interface Props {
 export default async function ArticlePage({ params }: Props) {
   const { id } = await params;
   const today = new Date().toISOString().slice(0, 10);
-  const batch = readBatch(today) ?? readLatestBatch();
+  const batch = (await readBatch(today)) ?? (await readLatestBatch());
 
   if (!batch) notFound();
 

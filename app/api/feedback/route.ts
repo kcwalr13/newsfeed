@@ -192,7 +192,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       try {
         const { readBatch: rb, readLatestBatch: rlb } = await import('@/lib/pipeline/storage');
         const today = new Date().toISOString().slice(0, 10);
-        const batch = rb(today) ?? rlb();
+        const batch = (await rb(today)) ?? (await rlb());
         const article = batch?.articles.find(a => a.id === articleId);
         return article?.probeInfo ?? null;
       } catch {
@@ -255,7 +255,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         try {
           const { readBatch, readLatestBatch } = await import('@/lib/pipeline/storage');
           const today = new Date().toISOString().slice(0, 10);
-          const batch = readBatch(today) ?? readLatestBatch();
+          const batch = (await readBatch(today)) ?? (await readLatestBatch());
           const article = batch?.articles.find(a => a.id === articleId);
           if (!article?.bodyText) return;
 

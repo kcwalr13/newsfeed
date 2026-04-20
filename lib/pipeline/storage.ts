@@ -1,64 +1,70 @@
-import fs from 'fs';
-import path from 'path';
-import { BATCH_DIR, LOG_PATH } from './config';
+import { sql } from '@/lib/db/client';
 import type { ArticleBatch } from '../types/article';
 
 /**
- * Writes a batch to data/batches/<batchDate>.json.
- * Creates the batches directory if it does not exist.
- * When force is false (default), does NOT overwrite an existing file.
- * Returns true if the file was written successfully.
+ * Writes a batch to the article_batches table.
+ * When force is false (default), does NOT overwrite an existing row.
+ * Returns true if the batch was written.
  */
-export function writeBatch(batch: ArticleBatch, force = false): boolean {
-  if (!fs.existsSync(BATCH_DIR)) {
-    fs.mkdirSync(BATCH_DIR, { recursive: true });
+export async function writeBatch(batch: ArticleBatch, force = false): Promise<boolean> {
+  if (!force) {
+    const existing = await readBatch(batch.batchDate);
+    if (existing) return false;
   }
-  const filePath = path.join(BATCH_DIR, `${batch.batchDate}.json`);
-  if (!force && fs.existsSync(filePath)) {
-    return false;
-  }
-  fs.writeFileSync(filePath, JSON.stringify(batch, null, 2), 'utf-8');
+  await sql`
+    INSERT INTO article_batches (batch_date, generated_at, articles)
+    VALUES (
+      ${batch.batchDate},
+      ${batch.generatedAt}::timestamptz,
+      ${JSON.stringify(batch.articles)}::jsonb
+    )
+    ON CONFLICT (batch_date) DO UPDATE
+      SET generated_at = EXCLUDED.generated_at,
+          articles     = EXCLUDED.articles
+  `;
   return true;
 }
 
 /**
- * Reads and parses data/batches/<date>.json.
- * Returns null if the file does not exist.
+ * Reads and returns the batch for the given date.
+ * Returns null if no batch exists for that date.
  */
-export function readBatch(date: string): ArticleBatch | null {
-  const filePath = path.join(BATCH_DIR, `${date}.json`);
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  return JSON.parse(raw) as ArticleBatch;
+export async function readBatch(date: string): Promise<ArticleBatch | null> {
+  const rows = await sql`
+    SELECT batch_date, generated_at::text AS generated_at, articles
+    FROM article_batches
+    WHERE batch_date = ${date}
+  `;
+  if (rows.length === 0) return null;
+  const row = rows[0] as { batch_date: string; generated_at: string; articles: unknown };
+  return {
+    batchDate: row.batch_date,
+    generatedAt: row.generated_at,
+    articles: row.articles as ArticleBatch['articles'],
+  };
 }
 
 /**
- * Reads the most recent batch file from data/batches/ by sorting filenames descending.
- * Returns null if the directory is empty or missing.
+ * Returns the most recent batch across all dates.
+ * Returns null if the table is empty.
  */
-export function readLatestBatch(): ArticleBatch | null {
-  if (!fs.existsSync(BATCH_DIR)) {
-    return null;
-  }
-  const files = fs
-    .readdirSync(BATCH_DIR)
-    .filter((f) => f.endsWith('.json'))
-    .sort()
-    .reverse();
-  if (files.length === 0) {
-    return null;
-  }
-  const raw = fs.readFileSync(path.join(BATCH_DIR, files[0]), 'utf-8');
-  return JSON.parse(raw) as ArticleBatch;
+export async function readLatestBatch(): Promise<ArticleBatch | null> {
+  const rows = await sql`
+    SELECT batch_date, generated_at::text AS generated_at, articles
+    FROM article_batches
+    ORDER BY batch_date DESC
+    LIMIT 1
+  `;
+  if (rows.length === 0) return null;
+  const row = rows[0] as { batch_date: string; generated_at: string; articles: unknown };
+  return {
+    batchDate: row.batch_date,
+    generatedAt: row.generated_at,
+    articles: row.articles as ArticleBatch['articles'],
+  };
 }
 
-/**
- * Appends a timestamped line to data/pipeline.log.
- * Creates the file if it does not exist.
- */
+/** Logs a pipeline message to the console (visible in Vercel function logs). */
 export function appendLog(message: string): void {
-  const line = `[${new Date().toISOString()}] ${message}\n`;
-  fs.appendFileSync(LOG_PATH, line, 'utf-8');
+  console.log(`[${new Date().toISOString()}] ${message}`);
 }
