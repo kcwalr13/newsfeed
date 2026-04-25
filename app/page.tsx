@@ -8,8 +8,12 @@ import { initDeviceId } from '@/lib/identity/device';
 import { runMigrationIfNeeded, loadFromServer, drainQueue, getFeedback } from '@/lib/feedback/store';
 import ArticleCard from './components/ArticleCard';
 import EditorLetterModal from './components/EditorLetterModal';
+import IssueCover from './components/IssueCover';
+import Colophon from './components/Colophon';
+import type { DailyIssue } from '@/lib/types/article';
 
 type Status = 'loading' | 'success' | 'error';
+type IssueMetaStatus = 'idle' | 'loading' | 'ready';
 
 function SevenDotStrip({ total, read }: { total: number; read: number }) {
   return (
@@ -60,6 +64,9 @@ export default function FeedPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Track feedback state locally so the seven-dot strip updates live
   const [feedbackSnapshot, setFeedbackSnapshot] = useState<Record<string, string>>({});
+  // Issue metadata for cover + colophon
+  const [issueMeta, setIssueMeta] = useState<DailyIssue | null>(null);
+  const [issueMetaStatus, setIssueMetaStatus] = useState<IssueMetaStatus>('idle');
 
   const fetchFeed = useCallback(async () => {
     setStatus('loading');
@@ -126,6 +133,23 @@ export default function FeedPage() {
     }
   }, [data]);
 
+  // Fetch issue metadata once feed data is ready
+  useEffect(() => {
+    if (status !== 'success' || issueMetaStatus !== 'idle') return;
+    setIssueMetaStatus('loading');
+    void (async () => {
+      try {
+        const res = await fetch('/api/issue/meta');
+        if (res.ok) {
+          const meta = (await res.json()) as DailyIssue;
+          setIssueMeta(meta);
+        }
+      } catch { /* non-blocking */ } finally {
+        setIssueMetaStatus('ready');
+      }
+    })();
+  }, [status, issueMetaStatus]);
+
   // Show at most 7 articles ("seven a day" ritual) — the pipeline may return more candidates
   const ISSUE_SIZE = 7;
   const displayArticles = data ? data.articles.slice(0, ISSUE_SIZE) : [];
@@ -153,6 +177,7 @@ export default function FeedPage() {
   return (
     <>
       <EditorLetterModal />
+      {issueMeta && <IssueCover issue={issueMeta} />}
 
       <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
         {/* Masthead */}
@@ -259,12 +284,12 @@ export default function FeedPage() {
                       key={article.id}
                       article={article}
                       folio={index + 1}
-                      onClick={() => router.push(`/articles/${article.id}`)}
+                      onClick={() => router.push(`/articles/${article.id}?pos=${index + 1}&total=${displayArticles.length}`)}
                       onFeedbackChange={handleFeedbackChange}
                     />
                   ))}
 
-                  {/* End-of-feed rule + footer */}
+                  {/* End-of-feed summary */}
                   <hr className="ql-rule mt-0" />
                   <div className="py-8 text-center space-y-4">
                     <p
@@ -289,6 +314,9 @@ export default function FeedPage() {
                       Past issues &amp; shelf →
                     </Link>
                   </div>
+
+                  {/* Colophon — shown when issue metadata is available */}
+                  {issueMeta && <Colophon issue={issueMeta} />}
                 </div>
               )}
             </>

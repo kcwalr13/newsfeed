@@ -2,17 +2,47 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { readBatch, readLatestBatch } from '@/lib/pipeline/storage';
 import ArticleInteractions from '@/app/components/ArticleInteractions';
+import ArticleBodyClient from '@/app/components/ArticleBodyClient';
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ pos?: string; total?: string }>;
 }
 
 function folioStr(n: number): string {
   return `№\u00A0${String(n).padStart(2, '0')}`;
 }
 
-export default async function ArticlePage({ params }: Props) {
+/** Decode common named HTML entities left over in stored body text. */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&ldquo;/g, '\u201C')
+    .replace(/&rdquo;/g, '\u201D')
+    .replace(/&lsquo;/g, '\u2018')
+    .replace(/&rsquo;/g, '\u2019')
+    .replace(/&mdash;/g, '\u2014')
+    .replace(/&ndash;/g, '\u2013')
+    .replace(/&hellip;/g, '\u2026')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+/** Strip trailing RSS boilerplate from body text paragraphs. */
+function cleanBodyText(text: string): string {
+  return text
+    .replace(/\s*The post .+? (?:first )?appeared on .+?\.\s*$/im, '')
+    .replace(/\s*first appeared on .+?\.\s*$/im, '')
+    .trim();
+}
+
+export default async function ArticlePage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
   const batch = (await readBatch(today)) ?? (await readLatestBatch());
 
@@ -21,14 +51,25 @@ export default async function ArticlePage({ params }: Props) {
   const articleIndex = batch.articles.findIndex((a) => a.id === id);
   if (articleIndex === -1) notFound();
   const article = batch.articles[articleIndex];
-  const folio = articleIndex + 1;
-  const total = batch.articles.length;
+
+  // Use pos/total from feed URL params (reflect displayed issue order),
+  // falling back to full batch position
+  const folio = sp.pos ? parseInt(sp.pos, 10) : articleIndex + 1;
+  const total = sp.total ? parseInt(sp.total, 10) : batch.articles.length;
 
   const publishedDate = new Intl.DateTimeFormat('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   }).format(new Date(article.publishedAt));
+
+  const bodyText = article.bodyText
+    ? decodeHtmlEntities(cleanBodyText(article.bodyText))
+    : null;
+
+  const paragraphs = bodyText
+    ? bodyText.split('\n').filter(Boolean)
+    : [];
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -121,27 +162,30 @@ export default async function ArticlePage({ params }: Props) {
                 paddingLeft: '16px',
               }}
             >
-              {article.description}
+              {decodeHtmlEntities(article.description)}
             </p>
           )}
 
           <hr className="ql-rule mb-6" />
 
-          {/* Feedback row inline */}
+          {/* Feedback row */}
           <div className="mb-8">
             <ArticleInteractions articleId={article.id} />
           </div>
 
-          {/* Body */}
-          {article.bodyText ? (
+          {/* Body — client component handles position tracking */}
+          {paragraphs.length > 0 ? (
+            <ArticleBodyClient
+              articleId={article.id}
+              paragraphs={paragraphs}
+            />
+          ) : bodyText ? (
             <div
               className="ql-serif"
               style={{ fontSize: '18px', lineHeight: 1.7, color: 'var(--fg)' }}
             >
-              {article.bodyText.split('\n').filter(Boolean).map((para, i) => (
-                <p key={i} style={{ marginBottom: '1.2em' }}>
-                  {para}
-                </p>
+              {bodyText.split('\n').filter(Boolean).map((para, i) => (
+                <p key={i} style={{ marginBottom: '1.2em' }}>{para}</p>
               ))}
             </div>
           ) : (

@@ -64,6 +64,39 @@ export async function readLatestBatch(): Promise<ArticleBatch | null> {
   };
 }
 
+/**
+ * Patches a subset of article fields (rationale, explorationSlotType) back into a
+ * stored batch without touching generatedAt or any other metadata.
+ *
+ * Takes a Map of articleId → partial Article fields to merge.
+ * No-op if the batch doesn't exist.
+ */
+export async function patchBatchArticleFields(
+  batchDate: string,
+  patches: Map<string, Partial<import('../types/article').Article>>
+): Promise<void> {
+  if (patches.size === 0) return;
+
+  const existing = await readBatch(batchDate);
+  if (!existing) return;
+
+  let changed = false;
+  const updated = existing.articles.map((a) => {
+    const patch = patches.get(a.id);
+    if (!patch) return a;
+    changed = true;
+    return { ...a, ...patch };
+  });
+
+  if (!changed) return;
+
+  await sql`
+    UPDATE article_batches
+    SET articles = ${JSON.stringify(updated)}::jsonb
+    WHERE batch_date = ${batchDate}
+  `;
+}
+
 /** Logs a pipeline message to the console (visible in Vercel function logs). */
 export function appendLog(message: string): void {
   console.log(`[${new Date().toISOString()}] ${message}`);

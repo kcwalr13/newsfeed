@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readBatch, readLatestBatch } from '@/lib/pipeline/storage';
+import { readBatch, readLatestBatch, patchBatchArticleFields } from '@/lib/pipeline/storage';
 import { resolveSession } from '@/lib/auth/session';
 import { getFeedbackForUser, getFeedbackForDevice } from '@/lib/db/feedback';
 import type { DbFeedbackRow } from '@/lib/db/feedback';
@@ -9,6 +9,7 @@ import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthet
 import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
 import type { UserConcept } from '@/lib/types/concepts';
 import { EXPLORATION_BASELINE } from '@/lib/config/serendipity';
+import { generateMissingRationales } from '@/lib/pipeline/rationaleGenerator';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,7 +109,24 @@ export async function GET(req: NextRequest) {
     explorationBudget
   );
 
-  // Strip internal fields before sending to client; keep explorationSlotType for badges
+  // Generate rationales for newly-slotted exploration articles (no-op if all already set).
+  // Fire-and-forget the DB patch so the response is not delayed on subsequent requests.
+  const rationalesGenerated = await generateMissingRationales(rankedArticles);
+  if (rationalesGenerated > 0) {
+    // Persist rationale + explorationSlotType back to the batch non-blockingly
+    const batchDate = batch.batchDate;
+    const patches = new Map(
+      rankedArticles
+        .filter((a) => a.explorationSlotType != null && a.rationale)
+        .map((a) => [a.id, { rationale: a.rationale, explorationSlotType: a.explorationSlotType }])
+    );
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    patchBatchArticleFields(batchDate, patches).catch((err: unknown) => {
+      console.error('[feed/today] rationale patch failed:', err);
+    });
+  }
+
+  // Strip internal fields before sending to client; keep explorationSlotType + rationale for display
   const publicArticles = rankedArticles.map(article => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, ...rest } = article;

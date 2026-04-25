@@ -195,3 +195,10 @@ body {
   color: var(--muted);
   text-align: center;
 }
+
+/* ─── Animations ───────────────────────────────────────────────── */
+
+@keyframes ql-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
