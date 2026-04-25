@@ -66,6 +66,25 @@ export interface Article {
    * Non-probe articles omit this field entirely (absent, not null). @internal
    */
   probeInfo?: { probeType: 'blind_spot'; clusterLabel: string };
+
+  /**
+   * Issue folio position: "01"–"07" within the daily issue.
+   * Assigned at feed-assembly time. Sent to the client.
+   */
+  folio?: string;
+
+  /**
+   * Per-piece curator rationale (why this piece was selected).
+   * Only present for slotted (exploration) pieces.
+   * Requires back-end LLM emission; optional UI can be hidden until available.
+   */
+  rationale?: string;
+
+  /**
+   * Approximate reading time in minutes, if known.
+   * Derived from bodyText word count at pipeline time.
+   */
+  readTime?: number;
 }
 
 /** The response shape returned by GET /api/feed/today. */
@@ -123,3 +142,50 @@ export interface FeedbackRecord {
  * Keys are article IDs.
  */
 export type FeedbackStore = Record<string, FeedbackRecord>;
+
+/** Source credit entry used in the issue colophon. */
+export interface SourceCredit {
+  /** Matches Article.folio (e.g. "01"). */
+  number: string;
+  source: string;
+  author: string;
+  /** Bare domain, no protocol (e.g. "aeon.co"). */
+  domain: string;
+  /** Full URL to the article. */
+  url: string;
+}
+
+/**
+ * Metadata about a daily issue.
+ * Extended to support the Quiet Library cover + colophon design.
+ */
+export interface DailyIssue {
+  number: number;
+  date: string;           // long form, e.g. "Saturday, April twenty-fourth"
+  dateShort: string;      // e.g. "Apr 19, 2026"
+  volume: string;         // e.g. "Vol. I"
+  theme: string;          // e.g. "quiet systems"
+  themeNote?: string;     // one-sentence editor's note for the cover
+  count: number;          // always 7 for v1
+  arrivedAt?: string;     // ISO time of delivery, used on cover
+  sources?: SourceCredit[];
+  tomorrowTheme?: string;
+  tomorrowArrivesAt?: string;
+}
+
+/** Reading position bookmark for "I stopped here" feature. */
+export interface ReadingPosition {
+  userId: string;
+  articleId: string;
+  paragraphIndex: number;
+  dwellSeconds: number;
+  pausedAt: string;       // ISO
+  finishedAt?: string;    // set when user finishes after pausing → triggers "small victory" UI
+}
+
+/** Slot type labels and glyphs for exploration badges. */
+export const SLOT_LABELS = {
+  semantic_stretch: { glyph: '✦', label: 'A stretch', caption: 'why this' },
+  blind_spot_probe: { glyph: '◐', label: 'Blind spot', caption: 'outside your usual' },
+  wildcard:         { glyph: '∅', label: 'Wildcard',   caption: 'pure surprise' },
+} as const;

@@ -1,26 +1,197 @@
 @import "tailwindcss";
 
+/* ─── Quiet Library Design Tokens ─────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light theme (default) */
+  --bg:          #F6F2EA;
+  --fg:          #1A1814;
+  --muted:       #6B645A;
+  --dim:         #A49B88;
+  --rule:        #D9D1C1;
+  --card:        #FBF8F1;
+  --accent-soft: #EFE8D5;
+  --accent:      #B8471F;
+
+  /* Typography */
+  --font-serif:  "EB Garamond", Georgia, serif;
+  --font-mono:   "JetBrains Mono", "Courier New", monospace;
+  --font-sans:   "Inter Tight", system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Dark theme */
+[data-theme="dark"] {
+  --bg:          #14130F;
+  --fg:          #E9E3D4;
+  --muted:       #9B9480;
+  --dim:         #6A6456;
+  --rule:        #2E2B23;
+  --card:        #1B1A15;
+  --accent-soft: #22201A;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Sepia theme */
+[data-theme="sepia"] {
+  --bg:          #EFE4CF;
+  --fg:          #2A1F12;
+  --muted:       #7A6A53;
+  --dim:         #A89274;
+  --rule:        #CFBE9E;
+  --card:        #F5ECD9;
+  --accent-soft: #E2D3B4;
+}
+
+/* Paper theme */
+[data-theme="paper"] {
+  --bg:          #FFFFFF;
+  --fg:          #111111;
+  --muted:       #6B6B6B;
+  --dim:         #B3B3B3;
+  --rule:        #E4E4E4;
+  --card:        #FAFAFA;
+  --accent-soft: #F2F2F2;
+}
+
+/* ─── Base ─────────────────────────────────────────────────────── */
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+/* ─── Quiet Library Typography Utilities ───────────────────────── */
+
+.ql-serif {
+  font-family: var(--font-serif);
+}
+
+.ql-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Hairline rule */
+.ql-rule {
+  border: none;
+  border-top: 1px solid var(--rule);
+}
+
+/* Seven-dot progress strip */
+.ql-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  transition: background 0.2s;
+}
+
+.ql-dot.filled {
+  background: var(--accent);
+}
+
+/* Folio number style */
+.ql-folio {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* Duotone image treatment */
+.ql-duotone-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.ql-duotone-wrapper img {
+  filter: grayscale(100%);
+  display: block;
+  width: 100%;
+}
+
+.ql-duotone-shadow {
+  position: absolute;
+  inset: 0;
+  background: #2A1F12;
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.ql-duotone-highlight {
+  position: absolute;
+  inset: 0;
+  background: #F6F2EA;
+  mix-blend-mode: screen;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Drop-cap folio fallback (when no image) */
+.ql-drop-cap {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--accent-soft);
+  line-height: 1;
+  user-select: none;
+}
+
+/* Exploration slot badge caption */
+.ql-slot-caption {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Feedback verb buttons */
+.ql-verb-btn {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  transition: color 0.15s;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.ql-verb-btn:hover {
+  color: var(--fg);
+}
+
+.ql-verb-btn.active {
+  color: var(--accent);
+}
+
+.ql-verb-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  display: block;
+  margin-top: 2px;
+}
+
+/* Confirmation copy */
+.ql-confirmation {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
 }
