@@ -3,6 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+
+function cleanDesc(text: string): string {
+  return text
+    .replace(/\s*The post .+? (?:first )?appeared (?:first )?on .+?\.\s*$/im, '')
+    .replace(/\s*first appeared on .+?\.\s*$/im, '')
+    .replace(/\s*(Continue reading|Read more)[^.]*[\.\u2026]?\s*$/i, '')
+    .trim();
+}
 import { getAllFeedback } from '@/lib/feedback/store';
 import type { BatchSummary } from '@/app/api/archive/route';
 
@@ -315,7 +323,7 @@ export default function ArchivePage() {
                               overflow: 'hidden',
                             }}
                           >
-                            {item.description}
+                            {cleanDesc(item.description)}
                           </p>
                         )}
                       </button>

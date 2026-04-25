@@ -28,7 +28,7 @@ should reference this when making design decisions.
 
 ## Current Project State
 
-**Last updated**: 2026-04-04 (Phase 4 — Engineered Serendipity — shipped; all four phases complete)
+**Last updated**: 2026-04-20 (post-Phase-4 ops: Vercel deployment, solo mode, DB batch storage, source list swap, Tangent rebrand)
 
 ### Foundation milestones shipped (v1 infrastructure)
 
@@ -115,3 +115,7 @@ The foundation and all four vision pillars are complete. Potential next directio
 | Starter seeds back-fill migration (applied in Neon) | `lib/db/migrations/008_seed_starter_sources.sql` |
 | Phase 3 DB migration (applied in Neon) | `lib/db/migrations/010_deep_user_model.sql` |
 | Phase 4 DB migration (applied in Neon) | `lib/db/migrations/011_serendipity.sql` |
+| QA corrective migration (applied in Neon) | `lib/db/migrations/012_fix_feedback_dwell.sql` |
+| Batch storage DB migration (applied in Neon) | `lib/db/migrations/013_article_batches.sql` |
+| Vercel deployment config | `vercel.json` |
+| Fixed-pipeline RSS sources | `data/sources.json` |

@@ -14,6 +14,16 @@ interface Props {
 
 type Verb = 'like' | 'dislike' | 'save' | null;
 
+/** Strip RSS boilerplate from descriptions before display. */
+function cleanDesc(text: string): string {
+  return text
+    .replace(/\s*The post .+? (?:first )?appeared (?:first )?on .+?\.\s*$/im, '')
+    .replace(/\s*first appeared on .+?\.\s*$/im, '')
+    .replace(/\s*(Continue reading|Read more|Read the rest)[^.]*[\.\u2026]?\s*$/i, '')
+    .replace(/\s*\[[\u2026\.]+\]\s*$/, '')
+    .trim();
+}
+
 // Map feedback store values to design verbs
 const VERB_META = {
   dislike: { verb: 'Pass',       desc: 'Not for me',      confirm: 'Noted. The next issue will reflect this.' },
@@ -178,7 +188,7 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
                 overflow: 'hidden',
               }}
             >
-              {article.description}
+              {cleanDesc(article.description)}
             </p>
           )}
         </button>

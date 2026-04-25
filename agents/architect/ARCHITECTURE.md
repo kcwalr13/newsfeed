@@ -1,8 +1,8 @@
 # System Architecture
 
-**Last Updated**: 2026-04-04
+**Last Updated**: 2026-04-20
 **Maintained by**: Architect Agent
-**Status**: Active — Milestones 1–8, Phase 1, Phase 2, Phase 3, and Phase 4 shipped
+**Status**: Active — Milestones 1–8, Phases 1–4, QA pass, and post-Phase-4 operational fixes shipped
 
 > **Vision (2026-04-07):** The project is a personalized content discovery companion,
 > not a news aggregator. Single-user scope (Kyle), starter sources provided, identity
@@ -61,11 +61,12 @@ tangent/
 │   ├── auth/                 ← /auth page (register/login/forgot/reset)
 │   ├── components/           ← Shared React components
 │   └── page.tsx              ← Feed homepage (/)
-├── data/                     ← Runtime data (mostly git-ignored)
-│   ├── batches/              ← Daily article JSON files (git-ignored)
-│   ├── pipeline.log          ← Append-only pipeline run log (git-ignored)
-│   ├── refresh_cooldowns.json ← Per-user manual refresh timestamps (git-ignored)
-│   └── sources.json          ← Source configuration (checked into git)
+├── data/                     ← Runtime data
+│   └── sources.json          ← Fixed-pipeline RSS source configuration (checked into git)
+│       (8 esoteric sources: Quanta, Aeon, Nautilus, Astral Codex Ten,
+│        Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian)
+│   NOTE: Batch storage and pipeline logs moved to Neon DB (migration 013).
+│         Refresh cooldown moved to in-memory Map in lib/pipeline/cooldown.ts.
 ├── lib/                      ← Server-side business logic
 │   ├── auth/                 ← Session middleware
 │   │   └── session.ts        ← resolveSession(), buildSessionCookie(), clearSessionCookie()
@@ -73,16 +74,21 @@ tangent/
 │   │   ├── feed.ts           ← Quota + discovery constants (ARTICLES_PER_DAY, DISCOVERY_*, etc.)
 │   │   └── aesthetic.ts      ← Aesthetic constants, DIMENSION_KEYS, vectorToArray, arrayToVector (Phase 2+)
 │   ├── db/                   ← Database query helpers
-│   │   ├── aesthetics.ts     ← Aesthetic score + profile DB helpers (Phase 2+)
+│   │   ├── aesthetics.ts     ← Aesthetic score + profile DB helpers (Phase 2+; extended Phase 3)
 │   │   ├── auth.ts           ← Users, sessions, tokens query helpers
+│   │   ├── blindSpots.ts     ← Blind spot cluster DB helpers (Phase 4+)
 │   │   ├── client.ts         ← Neon DB connection singleton
+│   │   ├── concepts.ts       ← Concept graph DB helpers (Phase 3+)
 │   │   ├── discovery.ts      ← Topic weight DB helpers
 │   │   └── feedback.ts       ← Feedback query helpers
 │   ├── discovery/            ← Proactive content discovery subsystem
 │   │   ├── aestheticScorer.ts ← scoreAesthetic(), AestheticScoringError (Phase 2+)
+│   │   ├── bodyExtractor.ts  ← Article body text extraction (node-html-parser; CJS-compatible)
 │   │   ├── braveSearch.ts    ← Brave Search API HTTP adapter
+│   │   ├── conceptExtractor.ts ← extractConcepts() — LLM concept label extraction (Phase 3+)
 │   │   ├── qualityGate.ts    ← evaluateCandidate() pure function module
 │   │   ├── run.ts            ← runDiscovery() orchestrator
+│   │   ├── serendipityScorer.ts ← Serendipity score computation (Phase 4+)
 │   │   └── topics.ts         ← DISCOVERY_TOPICS array + DiscoveryTopic type
 │   ├── email/                ← Email dispatch
 │   │   └── send.ts           ← Nodemailer SMTP wrapper
@@ -92,11 +98,15 @@ tangent/
 │   │   └── store.ts          ← localStorage + server write logic
 │   ├── pipeline/             ← Content pipeline modules
 │   │   ├── adapters/         ← Per-source-type fetch adapters
+│   │   ├── conceptBonus.ts   ← applyConceptBonus() — concept resonance ranking signal (Phase 3+)
 │   │   ├── config.ts         ← Infrastructure constants and source loader (ARTICLES_PER_DAY re-exported from lib/config/feed.ts)
-│   │   ├── cooldown.ts       ← Per-user refresh cooldown tracker (filesystem-backed)
+│   │   ├── cooldown.ts       ← Per-user refresh cooldown tracker (in-memory Map; resets on cold start)
+│   │   ├── explorationAssembler.ts ← Serendipity exploration slot assembly (Phase 4+)
+│   │   ├── blindSpotProber.ts ← Blind spot cluster identification and probe injection (Phase 4+)
+│   │   ├── receptivity.ts    ← Receptivity score computation and budget modulation (Phase 4+)
 │   │   ├── ranker.ts         ← Feed personalization ranker (pure function)
 │   │   ├── run.ts            ← Pipeline orchestrator (calls runDiscovery, assembles combined batch)
-│   │   ├── storage.ts        ← Batch file read/write
+│   │   ├── storage.ts        ← Batch DB read/write (article_batches table; Neon-backed)
 │   │   └── validator.ts      ← Article validation and deduplication
 │   ├── types/                ← Shared TypeScript types
 │   │   ├── aesthetic.ts      ← AestheticScoreVector, AestheticProfile (Phase 2+)
@@ -104,11 +114,13 @@ tangent/
 │   │   ├── auth.ts           ← DbUser, DbSession, DbToken
 │   │   └── feedback.ts       ← QueuedWrite, ServerFeedbackMap
 │   └── utils/                ← Pure utility functions (no I/O)
-│       └── cosineSimilarity.ts ← cosineSimilarity(a, b): number (Phase 2+)
+│       ├── cosineSimilarity.ts ← cosineSimilarity(a, b): number (Phase 2+)
+│       └── driftScore.ts     ← computeDriftScore() (Phase 3+)
 ├── public/                   ← Static assets
 │   ├── icons/                ← PWA icons (192x192, 512x512)
 │   ├── manifest.json         ← Web App Manifest
 │   └── sw.js                 ← Minimal service worker
+├── vercel.json               ← Vercel deployment config (cron trigger for daily pipeline)
 ├── .env.example              ← Env var names with no values (checked in)
 ├── .env.local                ← Real env vars (never committed)
 └── CLAUDE.md                 ← Project constitution (read by all agents)
@@ -137,8 +149,10 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 **`FeedResponse`** — envelope returned by `GET /api/feed/today`
 - `batchDate: string` (YYYY-MM-DD) + `articles: Article[]`
 
-**`ArticleBatch`** — shape of a stored `data/batches/YYYY-MM-DD.json` file
+**`ArticleBatch`** — in-memory shape and DB storage shape for a daily article batch.
 - `batchDate`, `generatedAt` (ISO-8601), `articles: Article[]`
+- Persisted to `article_batches` Neon table (DDL: `lib/db/migrations/013_article_batches.sql`).
+  Previously stored as `data/batches/YYYY-MM-DD.json` files; moved to DB for Vercel compatibility.
 
 **`Source`** — entry in `data/sources.json`
 - `slug`, `name`, `url`, `type: 'rss' | 'newsapi'`, `active: boolean`
@@ -263,9 +277,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Storage | JSON files on filesystem | Zero infrastructure; trivially migrated; fine for n=20/day |
-| Primary content source | RSS feeds | Free, no API key, broad coverage, often includes full text |
-| Secondary content source | NewsAPI.org | Satisfies "web search discovery" requirement; free tier covers 1 run/day |
+| Batch storage | Neon `article_batches` table (migration 013) | Vercel's serverless filesystem is read-only; DB-backed storage is required for deployment. Previous filesystem approach (JSON files) worked only in local dev. |
+| Primary content source | RSS feeds (8 esoteric sources) | Free, broad coverage, full text. Sources: Quanta, Aeon, Nautilus, Astral Codex Ten, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian. Swapped from mainstream outlets (BBC, Ars, The Verge) to match discovery companion vision. |
+| Secondary content source | Small Web crawler (Phase 1+) | Replaced NewsAPI. IndieWeb sources surfaced via blogroll expansion. |
 | Body text strategy | Best-effort from RSS `content` field | Avoids scraping complexity in v1; graceful fallback UX |
 | Pipeline trigger | HTTP endpoint guarded by `CRON_SECRET` | Works with any external cron service; no vendor lock-in |
 | PWA service worker | Hand-written minimal SW (not `next-pwa`) | Avoids `next-pwa` compatibility issues with App Router |
@@ -273,7 +287,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Client routing | Next.js App Router `Link` | Already the framework |
 | Dedup strategy | By `articleUrl` | Same article from two sources yields one record |
 | Feed personalization | API-time ranking in `rankFeed()` | Avoids per-identity batch file proliferation; ranking is O(20 articles) in memory; single shared batch on disk unchanged; graceful DB failure degrades to unranked feed |
-| Manual refresh cooldown storage | JSON file at `data/refresh_cooldowns.json` | Survives server restarts; consistent with filesystem-first architecture; no new DB table needed |
+| Manual refresh cooldown storage | In-memory `Map<userId, timestamp>` in `cooldown.ts` | Vercel filesystem is read-only so JSON file approach crashed. In-memory resets on cold start (acceptable for single-user), but never crashes and the refresh path returns 200 on success. |
 | Same-day batch overwrite | `writeBatch` with force flag | Manual refresh overwrites same-day file; `GET /api/feed/today` reads the latest state naturally |
 | Password hashing | bcryptjs, cost=12 | No native bindings needed; works on serverless; industry standard |
 | Search provider for discovery | Brave Search API | Independent index (no Google dependency), strong long-tail coverage, free tier covers our cadence (~180 calls/month), structured JSON response with outlet name and age fields |
@@ -299,7 +313,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Aesthetic scoring execution | Sequential per-article (not parallel) (Phase 2+) | Anthropic API is rate-limited. Parallel calls at 20 articles would risk concurrency limit. Sequential adds ~20s to pipeline — acceptable for a once-daily scheduled run. |
 | Aesthetic scoring failure behavior | Log per-article, continue, no null row written (Phase 2+) | Absent row = no score; ranker treats both absent row and null as 0.0 aesthetic proximity. Absent row is cleaner than a sentinel null column. |
 | Aesthetic migration number | `009_aesthetic_scores.sql` (Phase 2+) | 007 and 008 already exist; next sequential number is 009. |
-| Body text extraction library | `@mozilla/readability` + `jsdom`, server-side only (Phase 1+) | Battle-tested on editorial/blog layouts (Firefox Reader Mode); no headless browser needed |
+| Body text extraction library | `node-html-parser`, server-side only (Phase 1+) | Originally used `@mozilla/readability` + `jsdom` but jsdom pulls in ESM-only code (`@exodus/bytes`) that crashes Vercel's CJS serverless runtime with ERR_REQUIRE_ESM. Replaced with `node-html-parser` (CJS-compatible) with a custom content extractor targeting `article`/`main`/`role=main` containers. jsdom and @mozilla/readability removed from dependencies. |
+| Solo mode (auth bypass) | `AuthContext` always resolves to hardcoded `solo` user; `/api/auth/me` returns it without DB lookup | Single-user deployment doesn't need an auth gate. Auth plumbing preserved for future re-enablement. `RefreshButton` is unconditionally visible. |
+| Daily pipeline trigger | Vercel cron via `vercel.json` calling `POST /api/pipeline/run` at 07:00 UTC | Zero-ops scheduling; no external cron service needed. `CRON_SECRET` bearer token guards the endpoint. |
 | Query bank storage | `data/query_banks.json` (runtime, gitignored) + `data/query_banks.default.json` (committed seed) (Phase 1+) | Inspectable/editable by operator without redeploy; default seed prevents cold-start failure |
 | Query rotation cursor storage | `data/query_rotation_state.json` (separate from bank) (Phase 1+) | Decouples query content from cursor state; bank can be refreshed without corrupting cursor |
 | Queries per topic per run | 2 (Phase 1+) | Stays within Brave free tier (~360 calls/month vs. 2,000 limit); meaningful rotation |
@@ -482,6 +498,18 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `lib/db/aesthetics.ts` + feedback route — receptivity persistence; feed route — budget from stored profile | **Done** | SEREN-TASK-013 |
 | End-to-end verification (Phase 4) | **Done** | SEREN-TASK-014 |
 | ARCHITECTURE.md + roadmap update (Phase 4) | **Done** | SEREN-TASK-015 |
+| QA-001: migration 011 `user_feedback` typo → HTTP 500 on all feedback — fixed in SQL; migration 012 corrective added | **Done** | QA pass 2026-04-19 |
+| QA-002: raw HTML tags in RSS body text — `htmlToPlainText()` added to `lib/pipeline/adapters/rssAdapter.ts` | **Done** | QA pass 2026-04-19 |
+| QA-003: numeric HTML entities not decoded in titles/descriptions — `decodeEntities()` added to `lib/pipeline/adapters/rssAdapter.ts` | **Done** | QA pass 2026-04-19 |
+| QA-004: `explorationSlotType` stripped from feed API response (no badges) — field now passes through; `ArticleCard` renders Stretch/Blind spot/Wildcard violet badges | **Done** | QA pass 2026-04-19 |
+| App rebrand to **Tangent** — `manifest.json`, layout, page titles updated | **Done** | 2026-04-20 |
+| `vercel.json` — Vercel cron config; daily pipeline at 07:00 UTC via `POST /api/pipeline/run` | **Done** | 2026-04-20 |
+| Solo mode auth bypass — `AuthContext` hardcoded to solo user; `/api/auth/me` no DB lookup; `RefreshButton` always visible | **Done** | 2026-04-20 |
+| `lib/pipeline/storage.ts` — rewritten to use `article_batches` Neon table; `writeBatch`/`readBatch`/`readLatestBatch` now async DB calls; `appendLog` → `console.log` | **Done** | 2026-04-20 |
+| `lib/db/migrations/013_article_batches.sql` — `article_batches` table DDL (applied in Neon) | **Done** | 2026-04-20 |
+| `lib/pipeline/cooldown.ts` — replaced filesystem JSON with in-memory `Map`; Vercel-compatible | **Done** | 2026-04-20 |
+| `lib/discovery/bodyExtractor.ts` — replaced `@mozilla/readability` + `jsdom` with `node-html-parser`; removed jsdom and @types/jsdom from package.json | **Done** | 2026-04-20 |
+| `data/sources.json` — replaced mainstream RSS sources with 8 esoteric discovery sources (Quanta, Aeon, Nautilus, Astral Codex Ten, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian) | **Done** | 2026-04-20 |
 
 ---
 
@@ -533,3 +561,5 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-04 | Architect Agent | Phase 4 (Engineered Serendipity) design complete. Serendipity scorer (4 pure functions), blind spot cluster DB + prober, exploration assembler (3-pool), receptivity signal (4 functions), rankFeed 2-pool extension. 15 tasks. Migration 011 requires manual Neon apply before SEREN-TASK-006+. |
 | 2026-04-04 | Dev Agent | Phase 3 (Deep User Model) fully implemented. migration 010 SQL file, 12 Phase 3 constants + 2 assertions in aesthetic.ts, AestheticProfile extended with 5 fields, lib/types/concepts.ts, lib/db/aesthetics.ts extended (recomputeShortTermCentroid + updateDriftState), lib/utils/driftScore.ts, lib/db/concepts.ts (8 helpers), lib/pipeline/conceptBonus.ts, lib/discovery/conceptExtractor.ts, lib/pipeline/ranker.ts (blendCentroids + topConceptLabels), app/api/feedback/route.ts (save + dwell + concept pipeline), app/api/feed/today/route.ts (concept nodes parallel fetch), app/components/ArticleInteractions.tsx (dwell timer + save button). npx tsc --noEmit passes. All 14 DEPTH tasks Done. |
 | 2026-04-04 | Dev Agent | Phase 4 (Engineered Serendipity) fully implemented and verified. migration 011 SQL applied. lib/config/serendipity.ts (15 constants + startup assertion), Article type extended (5 new @internal fields), lib/pipeline/serendipityScorer.ts (4 pure functions), lib/db/concepts.ts (2 new graph-read helpers), lib/pipeline/run.ts (llmScore + concept extraction), lib/db/blindSpots.ts (6 cluster helpers), lib/pipeline/blindSpotProber.ts (3 functions), lib/pipeline/explorationAssembler.ts (5 functions), lib/pipeline/ranker.ts (Phase 4 two-pool assembly replaces Phase 3 source-diversity exploration), lib/pipeline/receptivity.ts (5 functions), lib/db/aesthetics.ts (updateReceptivity), app/api/feedback/route.ts (probe routing + receptivity update), app/api/feed/today/route.ts (concept graph reads + budget from profile + field stripping), app/api/articles/[id]/route.ts (5 new internal fields stripped). npx tsc --noEmit passes clean. All 15 SEREN tasks Done. |
+| 2026-04-19 | Manual | QA pass: four browser-verified bugs fixed — migration 011 user_feedback typo (HTTP 500 on all feedback), raw HTML body text in RSS articles, HTML entities not decoded in titles, explorationSlotType stripped from API (no badges). migration 012 corrective DDL added. ESLint cleaned. ANTHROPIC_API_KEY confirmed required. CLAUDE.md updated with env notes and implementation notes. |
+| 2026-04-20 | Manual | Post-Phase-4 operational fixes: (1) app rebranded to Tangent; (2) Vercel cron added (vercel.json, daily 07:00 UTC); (3) solo mode auth bypass (no login required); (4) batch storage migrated from filesystem to Neon DB (migration 013, storage.ts rewrite); (5) cooldown.ts rewritten to in-memory Map; (6) bodyExtractor.ts rewritten using node-html-parser (jsdom/readability removed — ESM incompatibility on Vercel); (7) data/sources.json replaced with 8 esoteric discovery sources (Quanta, Aeon, Nautilus, ACX, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian). ARCHITECTURE.md updated to reflect all changes. |
