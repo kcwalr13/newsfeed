@@ -35,6 +35,17 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
 
+/**
+ * Estimates reading time in minutes from plain text.
+ * Uses 238 WPM (average adult reading speed for non-fiction).
+ * Minimum of 1 minute; falls back to 2 minutes if text is absent.
+ */
+function estimateReadTime(text?: string): number {
+  if (!text || text.trim().length === 0) return 2;
+  const wordCount = text.trim().split(/\s+/).length;
+  return Math.max(1, Math.ceil(wordCount / 238));
+}
+
 function makeId(sourceName: string, articleUrl: string): string {
   const sourceSlug = slugify(sourceName);
   const hash = crypto.createHash('sha256').update(articleUrl).digest('hex').slice(0, 8);
@@ -197,8 +208,14 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
         id: makeId(a.sourceName, a.articleUrl),
         batchDate: today,
         feedbackSlot: null as null,
+        readTime: estimateReadTime(a.bodyText),
       })),
-      ...discoveryArticles.map((a) => ({ ...a, batchDate: today })),
+      ...discoveryArticles.map((a) => ({
+        ...a,
+        batchDate: today,
+        // Only set readTime if not already set by the discovery pipeline
+        readTime: a.readTime ?? estimateReadTime(a.bodyText),
+      })),
     ];
 
     appendLog(

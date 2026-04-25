@@ -215,9 +215,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Update aesthetic profile via EMA — only for like/dislike (not save or null)
-    if (value === 'like' || value === 'dislike') {
-      await updateAestheticProfile(userId, deviceId, articleId, value);
+    // Update aesthetic profile via EMA — for like/dislike/save (not null beacons).
+    // save is treated as 'like' for EMA purposes: it's the strongest positive signal.
+    if (value === 'like' || value === 'dislike' || value === 'save') {
+      await updateAestheticProfile(
+        userId,
+        deviceId,
+        articleId,
+        value === 'save' ? 'like' : value
+      );
     }
 
     // Phase 3: short-term recompute + drift update (failure swallowed)

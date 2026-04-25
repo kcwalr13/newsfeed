@@ -1,4 +1,6 @@
 // Feed ranking: Phase 3 exploitation formula + Phase 4 serendipity exploration.
+// Source scoring uses ALL historical feedback (cross-session) by extracting
+// the source slug from each article ID (<source-slug>-<8-hex-hash> format).
 
 import type { Article } from '@/lib/types/article';
 import type { DbFeedbackRow } from '@/lib/db/feedback';
@@ -40,6 +42,28 @@ export const SUPPRESSION_MIN_EVENTS    = 5;
 export const SUPPRESSION_DISLIKE_RATIO = 0.80;
 export const SOURCE_CONSECUTIVE_CAP    = 3;
 export const MIN_FEED_ARTICLES         = 5;
+
+/**
+ * Extracts the source slug from an article ID.
+ *
+ * Article IDs are constructed as `<source-slug>-<8-char-hex-hash>` by makeId()
+ * in lib/pipeline/run.ts. Both fixed-source and discovery articles follow this
+ * convention, so the slug is always the string before the final 9 characters
+ * (`-` + 8 hex chars).
+ *
+ * Examples:
+ *   "quanta-magazine-a1b2c3d4" → "quanta-magazine"
+ *   "astral-codex-ten-deadbeef" → "astral-codex-ten"
+ *   "mit-technology-review-cafebabe" → "mit-technology-review"
+ *
+ * This lets us compute cross-session source scores from ALL historical feedback
+ * rows without needing an in-batch article lookup.
+ */
+function extractSourceSlugFromId(articleId: string): string {
+  // Guard: ID must be longer than the 9-char suffix to be valid
+  if (articleId.length <= 9) return articleId;
+  return articleId.slice(0, -9);
+}
 
 interface SourceStats {
   slug: string;
@@ -149,30 +173,28 @@ export function rankFeed(
   allConceptEdges?: Array<[string, string]>,
   explorationBudget?: number
 ): Article[] {
-  // Step 1: Build articleId → sourceSlug map from batch
-  const sourceSlugMap = new Map<string, string>();
-  for (const article of articles) {
-    sourceSlugMap.set(article.id, slugify(article.sourceName));
-  }
-
-  // Step 2: Aggregate feedback rows into per-source stats
+  // Step 1: Aggregate ALL historical feedback rows into per-source stats.
+  // Source slug is extracted directly from the article ID (format: <slug>-<8hex>),
+  // so every feedback event across all batches — not just today's — contributes
+  // to the Wilson score. This is the cross-session taste signal.
+  // Both 'like' and 'save' count as positive signals; 'dislike' as negative.
   const sourceStatsRaw = new Map<string, { likes: number; dislikes: number; total: number }>();
   for (const row of feedbackRows) {
-    const slug = sourceSlugMap.get(row.article_id);
-    if (slug === undefined) continue; // feedback for article not in today's batch — skip
+    const slug = extractSourceSlugFromId(row.article_id);
     if (!sourceStatsRaw.has(slug)) {
       sourceStatsRaw.set(slug, { likes: 0, dislikes: 0, total: 0 });
     }
     const stats = sourceStatsRaw.get(slug)!;
-    if (row.value === 'like') {
+    if (row.value === 'like' || row.value === 'save') {
+      // 'save' is a strong positive signal: the user wants to read it later
       stats.likes += 1;
-    } else {
+    } else if (row.value === 'dislike') {
       stats.dislikes += 1;
     }
     stats.total += 1;
   }
 
-  // Step 3: Compute sourceScores for every unique source slug in the batch
+  // Step 2: Compute sourceScores for every unique source slug in the batch
   const allSlugs = new Set<string>();
   for (const article of articles) {
     allSlugs.add(slugify(article.sourceName));
@@ -207,7 +229,7 @@ export function rankFeed(
     return SOURCE_SCORE_WEIGHT * ss + AESTHETIC_WEIGHT * aestheticProximity;
   }
 
-  // Step 4: Sort non-suppressed articles by (blendedScore DESC, publishedAt DESC)
+  // Step 3: Sort non-suppressed articles by (blendedScore DESC, publishedAt DESC)
   // Apply concept resonance bonus to mid-ranked articles before final sort.
   const allScores = articles
     .filter(a => !sourceScores.get(slugify(a.sourceName))!.suppressed)
@@ -237,7 +259,7 @@ export function rankFeed(
     }
   }
 
-  // Step 5 (Phase 3 suppressed-source fallback): append least-disliked suppressed articles
+  // Step 4 (Phase 3 suppressed-source fallback): append least-disliked suppressed articles
   // if ranked candidates fall below minimum.
   const rankedNonSuppressed = withBonus
     .sort((a, b) => {

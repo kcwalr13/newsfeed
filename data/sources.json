@@ -62,5 +62,37 @@
     "type": "rss",
     "feedUrl": "https://www.themarginalian.org/feed/",
     "active": true
+  },
+  {
+    "slug": "psyche",
+    "name": "Psyche",
+    "url": "https://psyche.co",
+    "type": "rss",
+    "feedUrl": "https://psyche.co/feed.rss",
+    "active": true
+  },
+  {
+    "slug": "the-baffler",
+    "name": "The Baffler",
+    "url": "https://thebaffler.com",
+    "type": "rss",
+    "feedUrl": "https://thebaffler.com/feed",
+    "active": true
+  },
+  {
+    "slug": "noema",
+    "name": "Noema",
+    "url": "https://www.noemamag.com",
+    "type": "rss",
+    "feedUrl": "https://www.noemamag.com/?feed=noemarss",
+    "active": true
+  },
+  {
+    "slug": "works-in-progress",
+    "name": "Works in Progress",
+    "url": "https://www.worksinprogress.news",
+    "type": "rss",
+    "feedUrl": "https://www.worksinprogress.news/feed",
+    "active": true
   }
 ]

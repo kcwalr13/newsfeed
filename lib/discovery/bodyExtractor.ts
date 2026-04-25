@@ -68,7 +68,7 @@ export function extractBodyTextFromHtml(html: string, _url: string): ExtractionR
   ];
   for (const sel of noiseSelectors) {
     try {
-      root.querySelectorAll(sel).forEach(el => el.remove());
+      root.querySelectorAll(sel).forEach((el: import('node-html-parser').HTMLElement) => el.remove());
     } catch {
       // ignore unsupported selectors
     }
