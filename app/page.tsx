@@ -58,6 +58,8 @@ export default function FeedPage() {
   const [data, setData] = useState<FeedResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Track feedback state locally so the seven-dot strip updates live
+  const [feedbackSnapshot, setFeedbackSnapshot] = useState<Record<string, string>>({});
 
   const fetchFeed = useCallback(async () => {
     setStatus('loading');
@@ -112,9 +114,36 @@ export default function FeedPage() {
     }
   }, [fetchFeed]);
 
-  const total = data?.articles.length ?? 7;
-  const read = data ? countRead(data.articles) : 0;
+  // Seed feedback snapshot when data loads
+  useEffect(() => {
+    if (data) {
+      const fb: Record<string, string> = {};
+      for (const a of data.articles) {
+        const v = getFeedback(a.id);
+        if (v) fb[a.id] = v;
+      }
+      setFeedbackSnapshot(fb);
+    }
+  }, [data]);
+
+  // Show at most 7 articles ("seven a day" ritual) — the pipeline may return more candidates
+  const ISSUE_SIZE = 7;
+  const displayArticles = data ? data.articles.slice(0, ISSUE_SIZE) : [];
+  const total = displayArticles.length || ISSUE_SIZE;
+  const read = displayArticles.filter(a => feedbackSnapshot[a.id] === 'like' || feedbackSnapshot[a.id] === 'save').length;
   const remaining = total - read;
+
+  const handleFeedbackChange = useCallback((articleId: string, value: string | null) => {
+    setFeedbackSnapshot(prev => {
+      const next = { ...prev };
+      if (value === null) {
+        delete next[articleId];
+      } else {
+        next[articleId] = value;
+      }
+      return next;
+    });
+  }, []);
 
   // Format today's date in editorial style
   const today = new Date();
@@ -206,7 +235,7 @@ export default function FeedPage() {
               </div>
 
               {/* Articles */}
-              {data.articles.length === 0 ? (
+              {displayArticles.length === 0 ? (
                 <div className="py-16 text-center">
                   <p
                     className="ql-serif"
@@ -225,12 +254,13 @@ export default function FeedPage() {
                 </div>
               ) : (
                 <div>
-                  {data.articles.map((article, index) => (
+                  {displayArticles.map((article, index) => (
                     <ArticleCard
                       key={article.id}
                       article={article}
                       folio={index + 1}
                       onClick={() => router.push(`/articles/${article.id}`)}
+                      onFeedbackChange={handleFeedbackChange}
                     />
                   ))}
 

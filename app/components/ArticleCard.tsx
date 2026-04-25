@@ -9,6 +9,7 @@ interface Props {
   article: Article;
   folio: number; // 1-based position in the issue
   onClick?: () => void;
+  onFeedbackChange?: (articleId: string, value: string | null) => void;
 }
 
 type Verb = 'like' | 'dislike' | 'save' | null;
@@ -24,7 +25,7 @@ function folioStr(n: number): string {
   return `№\u00A0${String(n).padStart(2, '0')}`;
 }
 
-export default function ArticleCard({ article, folio, onClick }: Props) {
+export default function ArticleCard({ article, folio, onClick, onFeedbackChange }: Props) {
   const [feedback, setFeedbackState] = useState<Verb>(
     () => getFeedback(article.id) ?? null
   );
@@ -35,10 +36,12 @@ export default function ArticleCard({ article, folio, onClick }: Props) {
       clearFeedback(article.id);
       setFeedbackState(null);
       setConfirmed(null);
+      onFeedbackChange?.(article.id, null);
     } else {
       setFeedback(article.id, verb);
       setFeedbackState(verb);
       setConfirmed(verb);
+      onFeedbackChange?.(article.id, verb);
     }
   }
 
