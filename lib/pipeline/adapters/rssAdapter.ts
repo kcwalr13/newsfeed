@@ -21,9 +21,28 @@ function decodeEntities(str: string): string {
     .replace(/&apos;/g, "'");
 }
 
-/** Strips HTML tags and decodes entities, collapsing whitespace. */
+/**
+ * Converts RSS HTML body text (content:encoded) to plain text, preserving
+ * paragraph structure. Block-level closing tags become newlines so the article
+ * reader can split on '\n' to render individual paragraphs.
+ */
 function htmlToPlainText(html: string): string {
-  return decodeEntities(html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+  return decodeEntities(
+    html
+      // Block-level closing tags → paragraph break
+      .replace(/<\/(?:p|li|blockquote|pre|div|section|article|h[1-6]|td|th)>/gi, '\n')
+      // Self-closing br → paragraph break
+      .replace(/<br\s*\/?>/gi, '\n')
+      // Strip all remaining tags
+      .replace(/<[^>]*>/g, '')
+      // Collapse horizontal whitespace within each line
+      .split('\n')
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      // Drop lines that are too short to be real content (nav fragments, etc.)
+      .filter((line) => line.split(/\s+/).filter(Boolean).length >= 2)
+      .join('\n')
+      .trim()
+  );
 }
 
 /**

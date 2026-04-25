@@ -7,6 +7,10 @@
  */
 declare module 'node-html-parser' {
   export class HTMLElement {
+    /** Lower-cased tag name (e.g. "div", "p"). Undefined on text nodes. */
+    tagName: string | undefined;
+    /** Child nodes — may be text nodes (no tagName) or element nodes. */
+    childNodes: HTMLElement[];
     querySelectorAll(selector: string): HTMLElement[];
     querySelector(selector: string): HTMLElement | null;
     remove(): void;

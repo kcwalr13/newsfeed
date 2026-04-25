@@ -10,6 +10,7 @@ import { scoreAesthetic, AestheticScoringError } from '@/lib/discovery/aesthetic
 import { upsertArticleAestheticScore } from '@/lib/db/aesthetics';
 import { AESTHETIC_BODY_MIN_CHARS, AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
 import { extractConcepts } from '@/lib/discovery/conceptExtractor';
+import { extractBodyText } from '@/lib/discovery/bodyExtractor';
 import type { Article, ArticleBatch, Source } from '../types/article';
 
 export interface RunOptions {
@@ -44,6 +45,58 @@ function estimateReadTime(text?: string): number {
   if (!text || text.trim().length === 0) return 2;
   const wordCount = text.trim().split(/\s+/).length;
   return Math.max(1, Math.ceil(wordCount / 238));
+}
+
+/**
+ * Fetches full body text for articles that don't already have it (or only have a short
+ * excerpt below AESTHETIC_BODY_MIN_CHARS). Runs after article assembly so we only fetch
+ * for articles that made the final batch, and before aesthetic scoring so the scorer
+ * gets full text rather than falling back to title+description.
+ *
+ * Uses a concurrency of 3 to avoid hammering multiple sources simultaneously.
+ * Failures are isolated per-article — a fetch failure never drops the article.
+ * readTime is recalculated after a successful fetch.
+ */
+const BODY_FETCH_CONCURRENCY = 3;
+
+async function fetchMissingBodyText(articles: Article[]): Promise<void> {
+  const missing = articles.filter(
+    (a) => !a.bodyText || a.bodyText.trim().length < AESTHETIC_BODY_MIN_CHARS
+  );
+  if (missing.length === 0) return;
+
+  appendLog(`[pipeline] Fetching body text for ${missing.length}/${articles.length} articles...`);
+  let fetched = 0;
+  let failed = 0;
+
+  for (let i = 0; i < missing.length; i += BODY_FETCH_CONCURRENCY) {
+    const chunk = missing.slice(i, i + BODY_FETCH_CONCURRENCY);
+    await Promise.allSettled(
+      chunk.map(async (article) => {
+        try {
+          const result = await extractBodyText(article.articleUrl);
+          if (result.success) {
+            article.bodyText = result.bodyText;
+            article.readTime = estimateReadTime(result.bodyText);
+            fetched++;
+          } else {
+            appendLog(
+              `[pipeline] [body] SKIP id=${article.id} reason=${result.reason}`
+            );
+            failed++;
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          appendLog(`[pipeline] [body] ERROR id=${article.id} error=${msg}`);
+          failed++;
+        }
+      })
+    );
+  }
+
+  appendLog(
+    `[pipeline] Body text fetch complete: fetched=${fetched} failed=${failed} total=${missing.length}`
+  );
 }
 
 function makeId(sourceName: string, articleUrl: string): string {
@@ -222,7 +275,11 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       `[pipeline] Batch: ${finalFixedCandidates.length} fixed-source, ${discoveryCount} discovery`
     );
 
-    // NEW: Score all articles aesthetically before writing the batch
+    // Fetch full body text for articles that only have a short excerpt (or none).
+    // Must run before aesthetic scoring so the scorer gets the full text.
+    await fetchMissingBodyText(articles);
+
+    // Score all articles aesthetically before writing the batch
     await scoreArticlesAesthetic(articles);
 
     // Phase 4: Extract concepts for all articles before writing the batch.

@@ -102,11 +102,52 @@ export function extractBodyTextFromHtml(html: string, _url: string): ExtractionR
 
   const source = contentEl ?? root.querySelector('body') ?? root;
 
-  const rawText = source.textContent ?? '';
-  const plainText = rawText
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Extract text paragraph-by-paragraph rather than as one collapsed blob.
+  // Block-level elements (p, li, blockquote, h1–h6, div, br) produce paragraph breaks.
+  // This preserves the reading structure so the article page can split on '\n'.
+  const BLOCK_TAGS = new Set([
+    'p', 'li', 'blockquote', 'pre',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'div', 'section', 'figure', 'figcaption', 'br', 'hr',
+    'td', 'th',
+  ]);
 
+  function extractText(el: import('node-html-parser').HTMLElement): string {
+    const tag = el.tagName?.toLowerCase() ?? '';
+    if (!el.childNodes || el.childNodes.length === 0) {
+      // Leaf node — return its text content
+      return (el.textContent ?? '').replace(/\s+/g, ' ');
+    }
+    const parts: string[] = [];
+    for (const child of el.childNodes) {
+      // node-html-parser child nodes may be text nodes or element nodes
+      const childEl = child as import('node-html-parser').HTMLElement;
+      if (typeof childEl.tagName === 'undefined') {
+        // Text node
+        parts.push((childEl.textContent ?? '').replace(/\s+/g, ' '));
+      } else {
+        const childTag = childEl.tagName?.toLowerCase() ?? '';
+        if (BLOCK_TAGS.has(childTag)) {
+          parts.push('\n' + extractText(childEl) + '\n');
+        } else {
+          parts.push(extractText(childEl));
+        }
+      }
+    }
+    const joined = parts.join('');
+    return BLOCK_TAGS.has(tag) ? '\n' + joined + '\n' : joined;
+  }
+
+  const rawText = extractText(source);
+
+  // Normalise: collapse runs of spaces within a line, then collapse 3+ newlines to 2,
+  // then trim each line and drop blank lines under 2 words (navigation fragments).
+  const paragraphs = rawText
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line.split(/\s+/).filter(Boolean).length >= 2);
+
+  const plainText = paragraphs.join('\n');
   const wordCount = plainText.split(/\s+/).filter(Boolean).length;
   if (wordCount < 300) {
     return { success: false, reason: 'below_minimum_length' };
