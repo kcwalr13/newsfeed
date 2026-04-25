@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { Article, FeedResponse } from '@/lib/types/article';
 import { initDeviceId } from '@/lib/identity/device';
 import { runMigrationIfNeeded, loadFromServer, drainQueue, getFeedback } from '@/lib/feedback/store';
@@ -235,7 +236,7 @@ export default function FeedPage() {
 
                   {/* End-of-feed rule + footer */}
                   <hr className="ql-rule mt-0" />
-                  <div className="py-8 text-center space-y-3">
+                  <div className="py-8 text-center space-y-4">
                     <p
                       className="ql-serif"
                       style={{ fontSize: '18px', fontStyle: 'italic', color: 'var(--muted)' }}
@@ -250,6 +251,13 @@ export default function FeedPage() {
                     >
                       Tomorrow&rsquo;s issue arrives in the morning.
                     </p>
+                    <Link
+                      href="/archive"
+                      className="ql-mono inline-block focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm"
+                      style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
+                    >
+                      Past issues &amp; shelf →
+                    </Link>
                   </div>
                 </div>
               )}

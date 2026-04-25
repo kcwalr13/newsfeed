@@ -108,10 +108,10 @@ export async function GET(req: NextRequest) {
     explorationBudget
   );
 
-  // Strip all internal fields before sending to client
+  // Strip internal fields before sending to client; keep explorationSlotType for badges
   const publicArticles = rankedArticles.map(article => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, explorationSlotType: _est, probeInfo: _pi, ...rest } = article;
+    const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, ...rest } = article;
     return rest;
   });
 
