@@ -173,10 +173,6 @@ body {
   color: var(--fg);
 }
 
-.ql-verb-btn.active {
-  color: var(--accent);
-}
-
 .ql-verb-label {
   font-family: var(--font-mono);
   font-size: 8px;

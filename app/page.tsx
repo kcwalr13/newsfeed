@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import type { Article, FeedResponse } from '@/lib/types/article';
+import type { FeedResponse } from '@/lib/types/article';
 import { initDeviceId } from '@/lib/identity/device';
 import { runMigrationIfNeeded, loadFromServer, drainQueue, getFeedback } from '@/lib/feedback/store';
 import ArticleCard from './components/ArticleCard';
@@ -46,13 +46,6 @@ function FeedSkeleton() {
       ))}
     </div>
   );
-}
-
-function countRead(articles: Article[]): number {
-  return articles.filter((a) => {
-    const fb = getFeedback(a.id);
-    return fb === 'like' || fb === 'save';
-  }).length;
 }
 
 export default function FeedPage() {
