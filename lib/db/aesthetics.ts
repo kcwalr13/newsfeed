@@ -174,27 +174,41 @@ export async function getAestheticProfile(
 }
 
 /**
- * Upserts the aesthetic profile for the given identity.
- * Creates a new row on first call; updates centroid, feedback_count, and
- * updated_at on subsequent calls.
+ * Atomically applies one EMA feedback step to the profile centroid in a single
+ * statement (DAT-L3). The blend reads the row's centroid AT UPDATE TIME inside
+ * the upsert, so two concurrent feedback POSTs can no longer both blend
+ * against the same stale read and silently drop one update (the previous flow
+ * was select → JS EMA → overwrite).
+ *
+ * `target` is the article's score vector, pre-mirrored by the caller for
+ * dislikes. On first feedback (no row, or a NULL centroid created by another
+ * writer) the centroid initializes to the target directly.
  * Throws on DB error.
  */
-export async function upsertAestheticProfile(
+export async function applyAestheticEmaUpdate(
   userId: string | null,
   deviceId: string,
-  centroid: AestheticScoreVector,
-  feedbackCount: number
+  target: AestheticScoreVector,
+  alpha: number
 ): Promise<void> {
-  const vecStr = formatVectorString(vectorToArray(centroid));
+  const targetStr = formatVectorString(vectorToArray(target));
+  // pgvector (0.7+) has element-wise vector * vector but no scalar multiply,
+  // so the scalars become constant vectors.
+  const alphaStr = formatVectorString(Array(6).fill(alpha));
+  const keepStr = formatVectorString(Array(6).fill(1 - alpha));
   await sql`
     INSERT INTO user_aesthetic_profiles
       (user_id, device_id, centroid, feedback_count, updated_at)
     VALUES
-      (${userId ?? null}, ${deviceId}, ${vecStr}::vector, ${feedbackCount}, NOW())
+      (${userId ?? null}, ${deviceId}, ${targetStr}::vector, 1, NOW())
     ON CONFLICT (user_id, device_id)
     DO UPDATE SET
-      centroid       = EXCLUDED.centroid,
-      feedback_count = EXCLUDED.feedback_count,
+      centroid = CASE
+        WHEN user_aesthetic_profiles.centroid IS NULL THEN EXCLUDED.centroid
+        ELSE user_aesthetic_profiles.centroid * ${keepStr}::vector
+           + EXCLUDED.centroid * ${alphaStr}::vector
+      END,
+      feedback_count = COALESCE(user_aesthetic_profiles.feedback_count, 0) + 1,
       updated_at     = NOW()
   `;
 }

@@ -4,7 +4,7 @@ import { resolveSession, extractDeviceId } from '@/lib/auth/session';
 import {
   getArticleAestheticScore,
   getAestheticProfile,
-  upsertAestheticProfile,
+  applyAestheticEmaUpdate,
   recomputeShortTermCentroid,
   updateDriftState,
   updateReceptivity,
@@ -39,6 +39,10 @@ export const dynamic = 'force-dynamic';
  * Attempts to update the user's aesthetic profile via EMA after a feedback event.
  * If the article has no aesthetic score, silently skips (expected for pre-Phase-2 articles).
  * If the update fails for any reason, logs and swallows — never throws.
+ *
+ * The EMA blend itself runs atomically inside one SQL upsert (DAT-L3); only
+ * the target vector is computed here. Dislikes mirror the score across the
+ * 1–5 scale to move away from that aesthetic position.
  */
 async function updateAestheticProfile(
   userId: string | null,
@@ -54,18 +58,9 @@ async function updateAestheticProfile(
       return;
     }
 
-    const profile = await getAestheticProfile(userId, deviceId);
-
-    let newCentroid: AestheticScoreVector;
-    let feedbackCount: number;
-
-    if (!profile) {
-      // First qualifying feedback event — initialize centroid directly from article score.
-      if (value === 'like') {
-        newCentroid = { ...articleScore };
-      } else {
-        // Mirror the score across the 1–5 scale to move away from this aesthetic position.
-        newCentroid = {
+    const target: AestheticScoreVector = value === 'like'
+      ? { ...articleScore }
+      : {
           contemplative: 6.0 - articleScore.contemplative,
           concrete:      6.0 - articleScore.concrete,
           personal:      6.0 - articleScore.personal,
@@ -73,37 +68,8 @@ async function updateAestheticProfile(
           specialist:    6.0 - articleScore.specialist,
           emotional:     6.0 - articleScore.emotional,
         };
-      }
-      feedbackCount = 1;
-    } else {
-      // Apply EMA update.
-      const alpha = AESTHETIC_ALPHA;
-      const c = profile.centroid;
-      const v = articleScore;
 
-      if (value === 'like') {
-        newCentroid = {
-          contemplative: (1 - alpha) * c.contemplative + alpha * v.contemplative,
-          concrete:      (1 - alpha) * c.concrete      + alpha * v.concrete,
-          personal:      (1 - alpha) * c.personal      + alpha * v.personal,
-          playful:       (1 - alpha) * c.playful       + alpha * v.playful,
-          specialist:    (1 - alpha) * c.specialist    + alpha * v.specialist,
-          emotional:     (1 - alpha) * c.emotional     + alpha * v.emotional,
-        };
-      } else {
-        newCentroid = {
-          contemplative: (1 - alpha) * c.contemplative + alpha * (6.0 - v.contemplative),
-          concrete:      (1 - alpha) * c.concrete      + alpha * (6.0 - v.concrete),
-          personal:      (1 - alpha) * c.personal      + alpha * (6.0 - v.personal),
-          playful:       (1 - alpha) * c.playful       + alpha * (6.0 - v.playful),
-          specialist:    (1 - alpha) * c.specialist    + alpha * (6.0 - v.specialist),
-          emotional:     (1 - alpha) * c.emotional     + alpha * (6.0 - v.emotional),
-        };
-      }
-      feedbackCount = profile.feedback_count + 1;
-    }
-
-    await upsertAestheticProfile(userId, deviceId, newCentroid, feedbackCount);
+    await applyAestheticEmaUpdate(userId, deviceId, target, AESTHETIC_ALPHA);
   } catch (err) {
     console.error(
       `[aesthetic] Profile update failed for deviceId=${deviceId} articleId=${articleId}:`,

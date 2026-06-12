@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 43 · DEFERRED (multi-user): 4 · TODO: 31 · BLOCKED: 0
+- DONE/VERIFIED: 44 · DEFERRED (multi-user): 4 · TODO: 30 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-L3**
+- Current branch: `main` · Last resume point: **FE-M1**
 
 ---
 
@@ -527,7 +527,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 ### Data / API — lows (may be grouped into one `chore(DAT-L): cleanup` commit if trivial)
 - [x] **DAT-L1** · 🟢 · `updateDriftState` compares two untyped params as text → cast `::float8`. (`aesthetics.ts:308-323`) — DONE: already resolved — verified by reading `lib/db/aesthetics.ts` (driftScore is passed as a typed number; the CASE comparisons are numeric; the `::text` casts added by PIPE-H3 cover the null-identity checks). No change needed.
 - [x] **DAT-L2** · 🟢 · N+1 upserts in `upsertConceptGraph`; batch with `unnest`. (`concepts.ts:237-248`) — DONE: nodes and edges now each upsert in ONE `unnest`-driven statement (was N + N·(N−1)/2 round trips); labels deduped first (ON CONFLICT can't touch a row twice per statement). Live-tested on scratch rows: insert→increment semantics identical, cleaned up. Commit: fix(DAT-L2).
-- [ ] **DAT-L3** · 🟢 · EMA read-modify-write race in feedback; single SQL statement. (`feedback/route.ts:48-105`) (moot after DAT-C2)
+- [x] **DAT-L3** · 🟢 · EMA read-modify-write race in feedback; single SQL statement. (`feedback/route.ts:48-105`) (moot after DAT-C2) — DONE (not actually moot: DAT-C2 fixed upsert identity, not the stale-read blend): new `applyAestheticEmaUpdate` in `lib/db/aesthetics.ts` computes the EMA inside ON CONFLICT DO UPDATE using pgvector element-wise ops (Neon has pgvector 0.8.0; scalars become constant vectors). Route now only mirrors the target for dislikes. Replaced the now-dead `upsertAestheticProfile`. Live-tested on a scratch identity: sequential blend exact (5→4.2→3.768) and two CONCURRENT updates both land (count 4) where the old flow lost one. Commit: fix(DAT-L3).
 - [x] **DAT-L4** · 🟢 · `GET /api/feedback` swallows DB errors as `{}` 200 → return 500. (`feedback/route.ts:144-147`) — DONE: catch now returns JSON 500 (matches POST handler), so clients can't mistake a DB failure for "no feedback". Commit: chore(DAT-L).
 - [x] **DAT-L5** · 🟢 · Delete is device-scoped only; `getFeedbackForUser` resurrects other-device rows. (`feedback.ts:69-74`) — DONE: `deleteFeedback` takes optional `userId` and deletes `(device_id = X OR user_id = Y)` for the article; DELETE route passes the session userId. Null userId keeps the old device-only scope. Commit: chore(DAT-L).
 - [x] **DAT-L6** · 🟢 · Non-constant-time secret compare + raw `err.message` leak. (`pipeline/run/route.ts:9,26`) (≈SEC-H3) — DONE via SEC-H3 (commit pending in that finding's commit).
@@ -762,5 +762,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-L group** → chore(DAT-L) commit 38beed8: L1 + L8 already-fixed (notes); L4 GET 500; L5
   user-scoped delete; L7 legacy artifacts + dead consts removed; L9 drainQueue fresh-read removal.
 - **DAT-L2** → DONE: unnest-batched node/edge upserts (2 statements per extraction); live-tested
-  on scratch rows. Commit: pending.
-- RESUME AT: **DAT-L3**
+  on scratch rows. Commit: e0f5c67.
+- **DAT-L3** → DONE: EMA blend moved into a single atomic upsert (pgvector element-wise math);
+  concurrent-update loss verified fixed on scratch rows. Commit: pending.
+- RESUME AT: **FE-M1**
