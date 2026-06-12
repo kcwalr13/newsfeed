@@ -124,7 +124,7 @@ export default function ArchivePage() {
           <Link
             href="/"
             className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
-            style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
+            style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: '44px', margin: '-12px 0' }}
           >
             ← Issue
           </Link>
@@ -150,7 +150,8 @@ export default function ArchivePage() {
               style={{
                 fontSize: '9px',
                 letterSpacing: '0.18em',
-                padding: '10px 20px 10px 0',
+                padding: '14px 20px 14px 0',
+                minHeight: '44px',
                 color: tab === t ? 'var(--fg)' : 'var(--dim)',
                 background: 'none',
                 border: 'none',
@@ -272,7 +273,7 @@ export default function ArchivePage() {
                             <Link
                               href="/"
                               className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
-                              style={{ fontSize: '8px', color: 'var(--accent)', letterSpacing: '0.14em', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                              style={{ fontSize: '8px', color: 'var(--accent)', letterSpacing: '0.14em', textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', minHeight: '44px', margin: '-12px 0' }}
                             >
                               Open →
                             </Link>

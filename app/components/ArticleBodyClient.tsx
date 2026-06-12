@@ -197,6 +197,10 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
                   background: 'var(--accent)',
                   textDecoration: 'none',
                   textAlign: 'center',
+                  minHeight: '44px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 ← BACK TO THE ISSUE
@@ -212,6 +216,7 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
+                  minHeight: '44px',
                 }}
               >
                 STAY AND RE-READ

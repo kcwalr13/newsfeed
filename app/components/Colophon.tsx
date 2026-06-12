@@ -66,6 +66,8 @@ export default function Colophon({ issue }: Props) {
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
+                  padding: '4px 0',
+                  margin: '-4px 0',
                 }}
               >
                 {src.source}

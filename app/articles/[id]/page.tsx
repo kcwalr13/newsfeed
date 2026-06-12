@@ -79,7 +79,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
           <Link
             href="/"
             className="ql-mono flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
-            style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
+            style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none', minHeight: '44px', margin: '-12px 0' }}
           >
             ← Back
           </Link>
@@ -96,7 +96,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             target="_blank"
             rel="noopener noreferrer"
             className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
-            style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
+            style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: '44px', margin: '-12px 0' }}
           >
             Source ↗
           </a>
@@ -214,7 +214,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             <Link
               href="/"
               className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
-              style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
+              style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: '44px', margin: '-12px 0' }}
             >
               ← Back to issue
             </Link>
@@ -222,8 +222,8 @@ export default async function ArticlePage({ params, searchParams }: Props) {
               href={article.articleUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="ql-mono"
-              style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.14em', textDecoration: 'none' }}
+              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+              style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.14em', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: '44px', margin: '-12px 0' }}
             >
               Full source ↗
             </a>

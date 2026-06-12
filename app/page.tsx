@@ -258,7 +258,7 @@ export default function FeedPage() {
               <button
                 onClick={fetchFeed}
                 className="ql-mono"
-                style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.14em', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.14em', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px', padding: '12px 16px' }}
               >
                 Try again
               </button>
@@ -300,7 +300,7 @@ export default function FeedPage() {
                     onClick={handleRefresh}
                     disabled={isRefreshing}
                     className="ql-mono"
-                    style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.14em', background: 'none', border: 'none', cursor: 'pointer' }}
+                    style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.14em', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px', padding: '12px 16px' }}
                   >
                     {isRefreshing ? 'Working…' : 'Run pipeline'}
                   </button>

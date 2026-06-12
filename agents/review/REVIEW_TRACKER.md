@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 51 · DEFERRED (multi-user): 4 · TODO: 23 · BLOCKED: 0
+- DONE/VERIFIED: 52 · DEFERRED (multi-user): 4 · TODO: 22 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M10**
+- Current branch: `main` · Last resume point: **FE-L1**
 
 ---
 
@@ -589,9 +589,17 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     cleanup). The tracker's savePosition POST keeps `keepalive` un-aborted by design (must
     survive unload). ArticleBodyClient's two leaked timers (scroll-into-view 400ms, victory
     800ms) now live in refs and clear on unmount. Gate green.
-- [ ] **FE-M10** · 🟡 Medium · Tap targets <44px on error/nav controls
+- [x] **FE-M10** · 🟡 Medium · Tap targets <44px on error/nav controls
   - Fix: `min-height:44px`/larger hit area on "Try again", "Run pipeline", archive tabs, header links, colophon links.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: 44px min-height applied to: feed "Try again" +
+    "Run pipeline" (real padding), archive tabs (padding 14px + minHeight), the victory
+    overlay's two controls, and all header/inline nav links ("← Issue", "Open →", "← Back",
+    "Source ↗", "← Back to issue", "Full source ↗") via inline-flex minHeight 44px with a
+    compensating negative margin so sticky-header heights don't grow. Colophon source links
+    (dense list — 44px boxes would overlap rows) get padding+negative-margin to clear the WCAG
+    2.5.8 AA 24px floor; noted as the deliberate exception. "Full source ↗" also gained the
+    missing focus ring. ErrorState.tsx is dead code — skipped (FE-L1 deletes it). The new
+    FE-M6 buttons were already built at 44px. Gate green.
 
 ### Frontend — lows
 - [ ] **FE-L1** · 🟢 · Delete 8 dead components + dead `countRead`, `.ql-verb-btn.active`, unused themes. (clash risk)
@@ -808,5 +816,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-M8** → DONE: aspect-ratio + lazy/async on card images; aspect-ratio + async (eager LCP)
   on reader hero. Commit: a5cc6b7.
 - **FE-M9** → DONE: AbortControllers on all five client fetch sites + ArticleBodyClient timer
-  cleanup. Commit: pending.
-- RESUME AT: **FE-M10**
+  cleanup. Commit: e7ad3ae.
+- **FE-M10** → DONE: 44px hit areas on error/nav controls (negative-margin trick for header
+  links); colophon at AA 24px floor. Commit: pending.
+- RESUME AT: **FE-L1**
