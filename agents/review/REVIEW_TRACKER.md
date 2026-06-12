@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 47 · DEFERRED (multi-user): 4 · TODO: 27 · BLOCKED: 0
+- DONE/VERIFIED: 48 · DEFERRED (multi-user): 4 · TODO: 26 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M5**
+- Current branch: `main` · Last resume point: **FE-M6**
 
 ---
 
@@ -556,9 +556,15 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     falls back to localStorage on error); the snapshot-seeding effect now gates on
     `data && feedbackReady` and re-runs when either changes, so a new device seeds dots from
     merged server feedback, not the empty local store. Gate green.
-- [ ] **FE-M5** · 🟡 Medium · UTC/local date confusion mislabels "TODAY"/"days ago" west of UTC
+- [x] **FE-M5** · 🟡 Medium · UTC/local date confusion mislabels "TODAY"/"days ago" west of UTC
   - Fix: derive `today` from local date parts; use the noon trick in `daysAgo`. (`app/archive/page.tsx:84,46-53`, `app/articles/[id]/page.tsx:46`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New shared `lib/utils/localDate.ts`
+    (`localTodayString()` from local date parts). Applied to archive's TODAY comparison +
+    `daysAgo` (both sides anchored at noon, `Math.round`), and to the once-per-day localStorage
+    keys in `IssueCover` (×2) and `EditorLetterModal` — those previously flipped to "tomorrow"
+    during evening hours west of UTC. The cited `articles/[id]/page.tsx:46` site no longer
+    computes a "today" (it only formats `publishedAt`) — nothing to fix there. `BatchLabel.tsx`
+    also UTC-slices but is a dead unimported component — left for FE-L1's deletion. Gate green.
 - [ ] **FE-M6** · 🟡 Medium · Archive conflates network error with empty; no global error/not-found/loading pages
   - Fix: add error state + retry to archive; differentiate offline vs 500 copy; add `app/error.tsx`, `app/not-found.tsx`, `app/articles/[id]/loading.tsx`.
   - Status: TODO · Commit: — · Notes: — (not-found overlaps DAT-H3)
@@ -779,5 +785,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-M1** → DONE: hydration-safe feedback state init (null + post-mount sync). Commit: c492d20.
 - **FE-M2** → DONE: transient-only enqueue, poison-pill drop, attempts cap (8), 7-day TTL.
   Commit: 957f6d8.
-- **FE-M3** → DONE: feedbackReady gate on dot-strip seeding. Commit: pending.
-- RESUME AT: **FE-M5**
+- **FE-M3** → DONE: feedbackReady gate on dot-strip seeding. Commit: b636403.
+- **FE-M5** → DONE: localTodayString util; archive TODAY/daysAgo + cover/letter daily keys now
+  local-timezone correct. Commit: pending.
+- RESUME AT: **FE-M6**

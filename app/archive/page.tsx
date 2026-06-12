@@ -11,6 +11,7 @@ function cleanDesc(text: string): string {
     .trim();
 }
 import { getAllFeedback } from '@/lib/feedback/store';
+import { localTodayString } from '@/lib/utils/localDate';
 import type { BatchSummary } from '@/app/api/archive/route';
 
 type Tab = 'issues' | 'shelf';
@@ -43,9 +44,11 @@ function formatDate(dateStr: string): { weekday: string; short: string } {
 }
 
 function daysAgo(dateStr: string): string {
-  const then = new Date(dateStr);
-  const now  = new Date();
-  const diff = Math.floor((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24));
+  // Anchor both sides at NOON: a bare YYYY-MM-DD parses as UTC midnight, so
+  // floor-based day math drifts by one west of UTC / across DST (FE-M5).
+  const then = new Date(`${dateStr}T12:00:00`);
+  const todayNoon = new Date(`${localTodayString()}T12:00:00`);
+  const diff = Math.round((todayNoon.getTime() - then.getTime()) / (1000 * 60 * 60 * 24));
   if (diff === 0) return 'today';
   if (diff === 1) return '1 day ago';
   return `${diff} days ago`;
@@ -81,7 +84,7 @@ export default function ArchivePage() {
       .map((a) => ({ ...a, batchDate: b.batchDate }))
   );
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localTodayString();
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>

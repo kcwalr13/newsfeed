@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DailyIssue } from '@/lib/types/article';
 import { useModalA11y } from '@/app/hooks/useModalA11y';
+import { localTodayString } from '@/lib/utils/localDate';
 
 interface Props {
   issue: DailyIssue;
@@ -28,7 +29,7 @@ export default function IssueCover({ issue }: Props) {
 
   useEffect(() => {
     // Show only once per day
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localTodayString();
     const lastShown = localStorage.getItem(COVER_STORAGE_KEY);
     if (lastShown === today) return;
     // Short delay so the feed content loads before the cover animates in
@@ -37,7 +38,7 @@ export default function IssueCover({ issue }: Props) {
   }, []);
 
   function dismiss() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localTodayString();
     localStorage.setItem(COVER_STORAGE_KEY, today);
     setVisible(false);
     // Let the editor's letter know it may show now.

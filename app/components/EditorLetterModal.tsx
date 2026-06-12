@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useModalA11y } from '@/app/hooks/useModalA11y';
+import { localTodayString } from '@/lib/utils/localDate';
 
 const STORAGE_KEY = 'tangent_onboarding_dismissed';
 const COVER_STORAGE_KEY = 'tangent_cover_last_shown';
@@ -18,7 +19,7 @@ export default function EditorLetterModal() {
     // Show the letter only after the issue cover is gone. If the cover will
     // show today (its key isn't set), wait for its dismissal event; otherwise
     // show immediately.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localTodayString();
     const coverShowingToday = localStorage.getItem(COVER_STORAGE_KEY) !== today;
 
     if (!coverShowingToday) {
