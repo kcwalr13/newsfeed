@@ -197,19 +197,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       row = await upsertFeedback(deviceId, articleId, value, userId, parsedDwell > 0 ? parsedDwell : null);
     }
 
+    // Single slim article lookup (SQL-side JSONB projection) shared by the
+    // probe-routing check (probeInfo) and the concept-extraction job below
+    // (bodyText) — previously each pulled the entire batch JSONB. Dwell-only
+    // beacons (value === null) trigger neither, so skip the read entirely.
+    const article = value !== null
+      ? await (async () => {
+          try {
+            const { findArticleInLatestBatch } = await import('@/lib/pipeline/storage');
+            return await findArticleInLatestBatch(articleId);
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+
     // Phase 4: probe response routing
-    // Read batch to check for probeInfo on the article
-    const probeInfo = await (async () => {
-      try {
-        const { readBatch: rb, readLatestBatch: rlb } = await import('@/lib/pipeline/storage');
-        const today = new Date().toISOString().slice(0, 10);
-        const batch = (await rb(today)) ?? (await rlb());
-        const article = batch?.articles.find(a => a.id === articleId);
-        return article?.probeInfo ?? null;
-      } catch {
-        return null;
-      }
-    })();
+    const probeInfo = article?.probeInfo ?? null;
 
     if (probeInfo?.probeType === 'blind_spot') {
       try {
@@ -272,10 +276,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // when the lambda suspends after responding.
       after(async () => {
         try {
-          const { readBatch, readLatestBatch } = await import('@/lib/pipeline/storage');
-          const today = new Date().toISOString().slice(0, 10);
-          const batch = (await readBatch(today)) ?? (await readLatestBatch());
-          const article = batch?.articles.find(a => a.id === articleId);
           if (!article?.bodyText) return;
 
           // Compute engagement weight

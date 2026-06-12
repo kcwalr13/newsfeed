@@ -118,6 +118,27 @@ export async function findArticleAcrossBatches(id: string): Promise<{
 }
 
 /**
+ * Fetches a single article from the most recent batch via SQL-side JSONB
+ * projection, so callers that need one article (e.g. the feedback route, on
+ * every POST) don't pull the whole batch — every article's bodyText included —
+ * over the wire. Returns null if the article isn't in the latest batch.
+ */
+export async function findArticleInLatestBatch(
+  id: string
+): Promise<ArticleBatch['articles'][number] | null> {
+  const rows = await sql`
+    SELECT elem AS article
+    FROM article_batches ab
+    CROSS JOIN LATERAL jsonb_array_elements(ab.articles) AS elem
+    WHERE ab.batch_date = (SELECT MAX(batch_date) FROM article_batches)
+      AND elem->>'id' = ${id}
+    LIMIT 1
+  `;
+  if (rows.length === 0) return null;
+  return (rows[0] as { article: ArticleBatch['articles'][number] }).article;
+}
+
+/**
  * Patches a subset of article fields (rationale, explorationSlotType) back into a
  * stored batch without touching generatedAt or any other metadata.
  *

@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 29 · DEFERRED (multi-user): 4 · TODO: 14 · BLOCKED: 0
+- DONE/VERIFIED: 30 · DEFERRED (multi-user): 4 · TODO: 13 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M5**
+- Current branch: `main` · Last resume point: **DAT-M6**
 
 ---
 
@@ -471,9 +471,15 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     `parsedDwell` gained a `Number.isFinite` guard (Infinity passed `>= 0` and survived
     `Math.floor`; beacons keep clamping garbage to 0 rather than 400 — existing semantics).
     Gate green.
-- [ ] **DAT-M5** · 🟡 Medium · Every feedback POST reads the full batch JSONB twice (w/ bodyText)
+- [x] **DAT-M5** · 🟡 Medium · Every feedback POST reads the full batch JSONB twice (w/ bodyText)
   - Fix: select just the one article via JSONB path, or persist probeInfo/concepts in a slim side table. (`app/api/feedback/route.ts:191-201,262-265`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New `findArticleInLatestBatch(id)` in
+    `lib/pipeline/storage.ts` — SQL-side `jsonb_array_elements` projection returns only the one
+    article element (semantics match the old `readBatch(today) ?? readLatestBatch()` + find:
+    MAX(batch_date) row). Feedback POST now does ONE slim read shared by probe routing
+    (probeInfo) and the after() concept-extraction job (bodyText), and skips the read entirely
+    for dwell-only beacons (value null). Verified live (read-only): projection returns the right
+    element with bodyText; missing id → empty. Gate green.
 - [ ] **DAT-M6** · 🟡 Medium · Oversized payloads: feed ships full `bodyText`; archive pulls 30 full batches
   - Fix: project fields in SQL (`jsonb_build_object` over `jsonb_array_elements`); strip `bodyText` from `/api/feed/today`. (`app/api/archive/route.ts:28-33`, `app/api/feed/today/route.ts:130-134`)
   - Status: TODO · Commit: — · Notes: —
@@ -710,5 +716,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-M3** → DONE: issue/meta GET wrapped in try/catch (JSON 500, no message leak); `date`
   param validated to YYYY-MM-DD → 400. Commit: d994e4b.
 - **DAT-M4** → DONE: numeric/timestamp validation on reading-position POST (400s) +
-  `Number.isFinite` dwell guard in feedback POST. Commit: pending.
-- RESUME AT: **DAT-M5**
+  `Number.isFinite` dwell guard in feedback POST. Commit: dd82b0e.
+- **DAT-M5** → DONE: single SQL-side JSONB projection per feedback POST (was 2 full-batch
+  reads); beacons skip the read. Live-verified projection query. Commit: pending.
+- RESUME AT: **DAT-M6**
