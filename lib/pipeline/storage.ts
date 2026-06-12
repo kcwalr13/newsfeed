@@ -65,6 +65,38 @@ export async function readLatestBatch(): Promise<ArticleBatch | null> {
 }
 
 /**
+ * Finds an article by id across all stored batches, newest batch first.
+ * Returns the article plus its position in the containing batch, or null.
+ * Uses JSONB containment (@>) so older shelf/archive links keep resolving
+ * after the article leaves the latest batch. Migration 017 adds a GIN index
+ * for this query; it works without the index at current batch volumes.
+ */
+export async function findArticleAcrossBatches(id: string): Promise<{
+  article: ArticleBatch['articles'][number];
+  batchDate: string;
+  index: number;
+  total: number;
+} | null> {
+  const rows = await sql`
+    SELECT batch_date, articles
+    FROM article_batches
+    WHERE articles @> ${JSON.stringify([{ id }])}::jsonb
+    ORDER BY batch_date DESC
+    LIMIT 1
+  `;
+  if (rows.length === 0) return null;
+  const row = rows[0] as { batch_date: string; articles: ArticleBatch['articles'] };
+  const index = row.articles.findIndex((a) => a.id === id);
+  if (index === -1) return null;
+  return {
+    article: row.articles[index],
+    batchDate: row.batch_date,
+    index,
+    total: row.articles.length,
+  };
+}
+
+/**
  * Patches a subset of article fields (rationale, explorationSlotType) back into a
  * stored batch without touching generatedAt or any other metadata.
  *

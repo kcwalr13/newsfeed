@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { readBatch, readLatestBatch } from '@/lib/pipeline/storage';
+import { findArticleAcrossBatches } from '@/lib/pipeline/storage';
 import ArticleInteractions from '@/app/components/ArticleInteractions';
 import ArticleBodyClient from '@/app/components/ArticleBodyClient';
 
@@ -43,19 +43,16 @@ function cleanBodyText(text: string): string {
 export default async function ArticlePage({ params, searchParams }: Props) {
   const { id } = await params;
   const sp = await searchParams;
-  const today = new Date().toISOString().slice(0, 10);
-  const batch = (await readBatch(today)) ?? (await readLatestBatch());
+  const found = await findArticleAcrossBatches(id);
 
-  if (!batch) notFound();
+  if (!found) notFound();
 
-  const articleIndex = batch.articles.findIndex((a) => a.id === id);
-  if (articleIndex === -1) notFound();
-  const article = batch.articles[articleIndex];
+  const { article, index: articleIndex, total: batchTotal } = found;
 
   // Use pos/total from feed URL params (reflect displayed issue order),
-  // falling back to full batch position
+  // falling back to the article's position in its own batch
   const folio = sp.pos ? parseInt(sp.pos, 10) : articleIndex + 1;
-  const total = sp.total ? parseInt(sp.total, 10) : batch.articles.length;
+  const total = sp.total ? parseInt(sp.total, 10) : batchTotal;
 
   const publishedDate = new Intl.DateTimeFormat('en-US', {
     month: 'long',

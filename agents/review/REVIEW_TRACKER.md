@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 0 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 45
-- Current branch expected: `main` · Last resume point: DAT-H3 / FE-C1
+- DONE: 1 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 44
+- Current branch expected: `main` · Last resume point: FE-H2
 
 ---
 
@@ -94,7 +94,7 @@ npm run dev           # for manual/browser spot-checks
   - Fix: new migration recreating the unique constraints as `UNIQUE NULLS NOT DISTINCT (...)` (Neon/PG≥15) **after de-duplicating existing rows**, or sentinel `user_id=''`. Also add `ORDER BY updated_at DESC` to the `LIMIT 1` profile read in `aesthetics.ts:123-136`.
   - ⚠️ DB-schema + requires de-dup → write migration file, make reads defensive, mark `BLOCKED-ON-APPLY`, give Kyle the de-dup + constraint SQL.
   - Verify: a repeated like updates one profile row (feedback_count increments) instead of inserting duplicates.
-  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Migration
+  - Status: BLOCKED-ON-APPLY · Commit: ff5ccef · Notes: Migration
     `016_nulls_not_distinct_unique.sql` written: de-dups all five identity tables
     (keep-newest for full-state tables, SUM-merge for concept/edge increments, keep-oldest +
     reconstructed probe_count for blind_spot_clusters), then drops the old unique constraints
@@ -104,11 +104,18 @@ npm run dev           # for manual/browser spot-checks
     existing `ON CONFLICT` clauses start converging the moment the constraints are replaced.
     No hard schema dependency in the deploy. Verified: tsc + lint + build green.
 
-- [ ] **DAT-H3 / FE-C1** · 🟠 High · Archive/shelf links 404 for any article not in the latest batch
+- [x] **DAT-H3 / FE-C1** · 🟠 High · Archive/shelf links 404 for any article not in the latest batch
   - Where: `app/api/articles/[id]/route.ts:11-21`, `app/articles/[id]/page.tsx:46-52`; links from `app/archive/page.tsx:302-304`
   - Fix: resolve an article ID across all stored batches (JSONB containment query on `article_batches.articles` + GIN index, or carry `?batch=YYYY-MM-DD` from the shelf and `readBatch(batchDate)`). Add a styled `app/not-found.tsx` (and `app/articles/[id]/not-found` if needed) matching the editorial theme, with a link back to the archive / source.
   - Verify: open a shelf item from an older issue → article renders (not the black default 404).
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Added `findArticleAcrossBatches(id)` to
+    `lib/pipeline/storage.ts` (JSONB `@>` containment, newest containing batch wins); both
+    `app/api/articles/[id]/route.ts` and `app/articles/[id]/page.tsx` now use it. Folio/total
+    fall back to the article's position in its own batch. Added styled editorial
+    `app/not-found.tsx` (links to today's issue + archive) — also satisfies the not-found half
+    of FE-M6. Migration `017_article_batches_gin.sql` adds the GIN index (performance-only;
+    query verified correct without it). Verified: gate green + live dev-DB test — article id
+    from the 2026-04-20 batch resolves, nonexistent id returns empty → 404 page.
 
 - [ ] **FE-H2** · 🟠 High · Tailwind v4 CSS-variable syntax broken app-wide → focus rings never render
   - Where: ~17 occurrences: `app/layout.tsx:51`, `app/page.tsx:311`, `app/archive/page.tsx`, `app/articles/[id]/page.tsx`, `app/components/ArticleCard.tsx`, `ArticleInteractions.tsx`, `ArticleBodyClient.tsx`, `EditorLetterModal.tsx`
@@ -380,6 +387,7 @@ _List each new migration file + the exact apply step. Code must NOT apply these 
 |----------------|-------------|------------|
 | `lib/db/migrations/015_query_rotation_state.sql` | DAT-C1 | Run the file's SQL against Neon (psql or console). Idempotent (`CREATE TABLE IF NOT EXISTS`). Until applied, discovery works but the query-rotation cursor resets each run (logged as a warning, non-fatal). After applying, flip DAT-C1 to DONE. |
 | `lib/db/migrations/016_nulls_not_distinct_unique.sql` | DAT-C2 | Requires PG ≥ 15 (`SHOW server_version` to confirm; Neon qualifies). Runs in one transaction: de-dups the five identity tables, then swaps the unique constraints to `UNIQUE NULLS NOT DISTINCT`. Idempotent — safe to re-run. Until applied, anonymous upserts keep duplicating (current prod behavior, no worse). After applying, verify: repeat a like → `SELECT COUNT(*) FROM user_aesthetic_profiles WHERE user_id IS NULL` stays constant and `feedback_count` increments; then flip DAT-C2 to DONE. |
+| `lib/db/migrations/017_article_batches_gin.sql` | DAT-H3 (perf only) | Optional/low-urgency: GIN index for the cross-batch article lookup. The feature works without it; apply whenever convenient. Idempotent. |
 
 ---
 
@@ -402,4 +410,9 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-C2** → BLOCKED-ON-APPLY: migration `016_nulls_not_distinct_unique.sql` (de-dup + NULLS
   NOT DISTINCT constraints on the five identity tables); defensive `ORDER BY updated_at DESC` on
   the anonymous profile read in `lib/db/aesthetics.ts`. Verified: tsc + lint + build green.
-- RESUME AT: **DAT-H3 / FE-C1**
+  Commit: ff5ccef.
+- **DAT-H3 / FE-C1** → DONE: cross-batch article resolution via JSONB containment
+  (`findArticleAcrossBatches` in storage.ts; API route + article page now use it); styled
+  editorial `app/not-found.tsx`; optional GIN index migration 017. Verified against live dev DB
+  (54 batches): old-batch id resolves, missing id 404s.
+- RESUME AT: **FE-H2**
