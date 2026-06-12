@@ -40,6 +40,13 @@ export const TOPIC_WEIGHT_CEILING = 2.0;
 /** LLM composite score threshold (0–5) for a discovery candidate to pass the quality gate. */
 export const LLM_EVAL_THRESHOLD = 3.5;
 
+/**
+ * Adaptive-threshold floor: when fewer than DISCOVERY_ARTICLES_PER_DAY
+ * candidates clear LLM_EVAL_THRESHOLD, slots are filled top-down by composite
+ * score from candidates at or above this floor (never below it).
+ */
+export const LLM_EVAL_FLOOR = 3.0;
+
 /** Maximum characters of body text sent to the LLM evaluator per call (cost control). */
 export const LLM_EVAL_BODY_CHAR_LIMIT = 3000;
 

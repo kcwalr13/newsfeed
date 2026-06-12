@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 import type { Article } from '@/lib/types/article';
-import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD } from '@/lib/config/feed';
+import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR } from '@/lib/config/feed';
 import { DISCOVERY_TOPICS } from './topics';
 import type { DiscoveryTopic } from './topics';
 import { searchBrave } from './braveSearch';
@@ -184,20 +184,28 @@ export async function runDiscovery(
   const rotationState = await loadRotationState();
   const updatedRotationState = new Map<string, number>(rotationState);
 
-  // Issue two queries per selected topic
-  const searchPromises: Promise<{ topic: DiscoveryTopic; results: BraveSearchResult[] }>[] = [];
+  // Issue two queries per selected topic, serialized ~1.1s apart so the
+  // Brave free tier (1 req/s) never sees a concurrent burst.
+  const BRAVE_QUERY_SPACING_MS = 1100;
+  const searchResults: { topic: DiscoveryTopic; results: BraveSearchResult[] }[] = [];
+  const plannedQueries: { topic: DiscoveryTopic; query: string }[] = [];
   for (const topic of topicsToProbe) {
     const queries = queryBanks.get(topic.id) ?? topic.searchQueries;
     const cursor = rotationState.get(topic.id) ?? -1;
     const { selected, newCursor } = selectNextTwoQueries(queries, cursor);
     updatedRotationState.set(topic.id, newCursor);
     for (const query of selected) {
-      searchPromises.push(
-        searchBrave(query, DISCOVERY_CANDIDATES_PER_TOPIC).then((results) => ({ topic, results }))
-      );
+      plannedQueries.push({ topic, query });
     }
   }
-  const searchResults = await Promise.allSettled(searchPromises);
+  for (let i = 0; i < plannedQueries.length; i++) {
+    const { topic, query } = plannedQueries[i];
+    const results = await searchBrave(query, DISCOVERY_CANDIDATES_PER_TOPIC);
+    searchResults.push({ topic, results });
+    if (i < plannedQueries.length - 1) {
+      await new Promise((r) => setTimeout(r, BRAVE_QUERY_SPACING_MS));
+    }
+  }
 
   // Group A: Small Web crawl
   let smallWebCandidates: BraveSearchResult[] = [];
@@ -221,13 +229,7 @@ export async function runDiscovery(
   type CandidatePair = { topic: DiscoveryTopic; result: BraveSearchResult };
   const allCandidatePairs: CandidatePair[] = [];
 
-  for (const settled of searchResults) {
-    if (settled.status === 'rejected') {
-      const reason = settled.reason instanceof Error ? settled.reason.message : String(settled.reason);
-      appendLog(`[discovery] Topic search failed: ${reason}`);
-      continue;
-    }
-    const { topic, results } = settled.value;
+  for (const { topic, results } of searchResults) {
     for (const result of results) {
       allCandidatePairs.push({ topic, result });
     }
@@ -295,7 +297,7 @@ export async function runDiscovery(
 
     if (llmResult.scores.composite < LLM_EVAL_THRESHOLD) {
       appendLog(
-        `[discovery] DISCARD [${topic.id}] ${result.url} -- llm_threshold_not_met ` +
+        `[discovery] BELOW_THRESHOLD [${topic.id}] ${result.url} ` +
         `(composite:${llmResult.scores.composite}, ` +
         `sub:${llmResult.scores.intellectual_substance} ` +
         `orig:${llmResult.scores.originality} ` +
@@ -304,17 +306,33 @@ export async function runDiscovery(
         `write:${llmResult.scores.writing_quality})`
       );
       stats.llmThresholdFailed++;
-      continue;
+    } else {
+      stats.llmPassCount++;
     }
 
-    stats.llmPassCount++;
+    // Keep every successfully scored candidate; the adaptive threshold below
+    // decides what actually ships.
     seenCanonical.add(canonical);
     qualified.push({ result, topic, llmScores: llmResult.scores, bodyText: extractResult.bodyText });
   }
 
-  // Sort by LLM composite score descending, enforce quota
+  // Adaptive threshold: prefer candidates at/above LLM_EVAL_THRESHOLD; if they
+  // don't fill the quota, top up by composite score from those at/above
+  // LLM_EVAL_FLOOR. A hard threshold previously rejected 100% of candidates on
+  // some runs, silently zeroing discovery.
   qualified.sort((a, b) => b.llmScores.composite - a.llmScores.composite);
-  const top = qualified.slice(0, DISCOVERY_ARTICLES_PER_DAY);
+  const aboveThreshold = qualified.filter((c) => c.llmScores.composite >= LLM_EVAL_THRESHOLD);
+  if (qualified.length > 0 && aboveThreshold.length === 0) {
+    const msg =
+      `[discovery] 0% LLM pass rate: 0/${qualified.length} candidates met ` +
+      `LLM_EVAL_THRESHOLD=${LLM_EVAL_THRESHOLD}. Falling back to top-N >= ${LLM_EVAL_FLOOR}.`;
+    console.error(msg);
+    appendLog(msg);
+  }
+  const pool = aboveThreshold.length >= DISCOVERY_ARTICLES_PER_DAY
+    ? aboveThreshold
+    : qualified.filter((c) => c.llmScores.composite >= LLM_EVAL_FLOOR);
+  const top = pool.slice(0, DISCOVERY_ARTICLES_PER_DAY);
 
   stats.qualified = top.length;
 

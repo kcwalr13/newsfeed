@@ -36,12 +36,25 @@ export async function searchBrave(
 
   let json: unknown;
   try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        'X-Subscription-Token': apiKey,
-        'Accept': 'application/json',
-      },
-    });
+    const doFetch = () =>
+      fetch(url.toString(), {
+        headers: {
+          'X-Subscription-Token': apiKey,
+          'Accept': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+
+    let response = await doFetch();
+    if (response.status === 429) {
+      // One retry with backoff, honoring Retry-After when present.
+      const retryAfter = Number(response.headers.get('retry-after'));
+      const backoffMs =
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1500;
+      console.warn(`[braveSearch] 429 for "${query}"; retrying in ${backoffMs}ms`);
+      await new Promise((r) => setTimeout(r, backoffMs));
+      response = await doFetch();
+    }
     if (!response.ok) {
       console.error(`[braveSearch] HTTP ${response.status} for query: "${query}"`);
       return [];

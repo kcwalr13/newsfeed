@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 8 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 37
-- Current branch expected: `main` · Last resume point: PIPE-H5
+- DONE: 9 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 36
+- Current branch expected: `main` · Last resume point: PIPE-H2
 
 ---
 
@@ -204,11 +204,17 @@ npm run dev           # for manual/browser spot-checks
     throwing inside `.map` and zeroing the source. Live-verified: Quanta feed fetches 5 articles
     with valid ISO publishedAt under the new parser config. Gate green.
 
-- [ ] **PIPE-H5** · 🟠 High · Brave: 12 concurrent queries, no timeout/429 handling; 100% eval-reject
+- [x] **PIPE-H5** · 🟠 High · Brave: 12 concurrent queries, no timeout/429 handling; 100% eval-reject
   - Where: `lib/discovery/run.ts:188-200`, `lib/discovery/braveSearch.ts:39-53`, threshold `lib/config/feed.ts:41`
   - Fix: serialize Brave queries ~1.1s apart (or p-limit 1) with `AbortSignal.timeout(10000)` and one 429 retry w/ backoff. Make `LLM_EVAL_THRESHOLD` adaptive (take top-N by composite) and log loudly when pass-rate is 0%.
   - Verify: discovery returns >0 candidates; logs show queries spaced and 429s retried.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `searchBrave` fetch now has
+    `AbortSignal.timeout(10000)` + one 429 retry honoring Retry-After (default 1.5s backoff).
+    Discovery queries serialized 1.1s apart (12 queries ≈ 13s, fits the DAT-H2 budget).
+    Adaptive threshold: all successfully-scored candidates are kept; slots fill from
+    ≥ LLM_EVAL_THRESHOLD (3.5) first, topping up by composite from ≥ new `LLM_EVAL_FLOOR`
+    (3.0); 0% pass-rate now logs at error level instead of silently zeroing discovery.
+    Live-verified: single Brave query returns 5 results in ~0.8s under new config. Gate green.
 
 - [ ] **PIPE-H2** · 🟠 High · Cosine on raw 1–5 vectors is inert; drift unreachable
   - Where: `lib/pipeline/ranker.ts:224-229`, `lib/utils/driftScore.ts:25`, `lib/config/aesthetic.ts:70`
@@ -472,4 +478,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-Q3** → DONE: `estimateReadTime` returns undefined for excerpt-length/missing bodies
   (UI hides label) instead of a fabricated 1-2 min. Commit: 2831b63.
 - **PIPE-H6** → DONE: RSS parser timeout/UA + pubDate guard; live RSS fetch verified.
-- RESUME AT: **PIPE-H5**
+  Commit: 5f195fb.
+- **PIPE-H5** → DONE: Brave timeout + 429 retry + serialized queries; adaptive LLM threshold
+  with floor 3.0 and loud 0%-pass logging.
+- RESUME AT: **PIPE-H2**
