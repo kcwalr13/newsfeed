@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 28 · DEFERRED (multi-user): 4 · TODO: 15 · BLOCKED: 0
+- DONE/VERIFIED: 29 · DEFERRED (multi-user): 4 · TODO: 14 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M4**
+- Current branch: `main` · Last resume point: **DAT-M5**
 
 ---
 
@@ -463,9 +463,14 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
   - Status: DONE · Commit: pending · Notes: GET body wrapped in try/catch → logs server-side,
     returns JSON `{error:'Internal server error'}` 500 (no err.message leak). `date` param
     validated against `^\d{4}-\d{2}-\d{2}$` → 400 `invalid_date` on mismatch. Gate green.
-- [ ] **DAT-M4** · 🟡 Medium · `/api/reading-position` accepts NaN/Infinity/float/garbage → 500
+- [x] **DAT-M4** · 🟡 Medium · `/api/reading-position` accepts NaN/Infinity/float/garbage → 500
   - Fix: `Number.isInteger`/clamp ≥0; validate ISO timestamp; type-check `dwellSeconds`. Same class in `/api/feedback` (`Infinity` survives `Math.floor`).
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: reading-position now 400s on non-integer/negative
+    `paragraphIndex`, non-finite/negative `dwellSeconds` (type-checked; floored before upsert),
+    and unparseable `finishedAt`; `articleId` type-checked as string. Feedback route's
+    `parsedDwell` gained a `Number.isFinite` guard (Infinity passed `>= 0` and survived
+    `Math.floor`; beacons keep clamping garbage to 0 rather than 400 — existing semantics).
+    Gate green.
 - [ ] **DAT-M5** · 🟡 Medium · Every feedback POST reads the full batch JSONB twice (w/ bodyText)
   - Fix: select just the one article via JSONB path, or persist probeInfo/concepts in a slim side table. (`app/api/feedback/route.ts:191-201,262-265`)
   - Status: TODO · Commit: — · Notes: —
@@ -703,5 +708,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   (optimistic concurrency; stale patch dropped if the batch was regenerated). Round-trip equality
   verified read-only on live Neon. Commit: 9613b81.
 - **DAT-M3** → DONE: issue/meta GET wrapped in try/catch (JSON 500, no message leak); `date`
-  param validated to YYYY-MM-DD → 400. Commit: pending.
-- RESUME AT: **DAT-M4**
+  param validated to YYYY-MM-DD → 400. Commit: d994e4b.
+- **DAT-M4** → DONE: numeric/timestamp validation on reading-position POST (400s) +
+  `Number.isFinite` dwell guard in feedback POST. Commit: pending.
+- RESUME AT: **DAT-M5**

@@ -182,7 +182,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const parsedDwell = typeof dwellSeconds === 'number' && dwellSeconds >= 0
+  // Number.isFinite: Infinity passes a bare `>= 0` check and survives Math.floor
+  const parsedDwell = typeof dwellSeconds === 'number' && Number.isFinite(dwellSeconds) && dwellSeconds >= 0
     ? Math.floor(dwellSeconds) : 0;
 
   const cookieRes = new NextResponse();

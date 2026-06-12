@@ -35,12 +35,31 @@ export async function POST(req: NextRequest) {
 
   const { articleId, paragraphIndex, dwellSeconds = 0, finishedAt } = body;
 
-  if (!articleId || typeof paragraphIndex !== 'number') {
+  if (!articleId || typeof articleId !== 'string' || typeof paragraphIndex !== 'number') {
     return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
+  }
+  // NaN/Infinity/floats/negatives would otherwise reach the DB cast and 500
+  if (!Number.isInteger(paragraphIndex) || paragraphIndex < 0) {
+    return NextResponse.json({ error: 'invalid_paragraph_index' }, { status: 400 });
+  }
+  if (typeof dwellSeconds !== 'number' || !Number.isFinite(dwellSeconds) || dwellSeconds < 0) {
+    return NextResponse.json({ error: 'invalid_dwell_seconds' }, { status: 400 });
+  }
+  if (
+    finishedAt != null &&
+    (typeof finishedAt !== 'string' || Number.isNaN(Date.parse(finishedAt)))
+  ) {
+    return NextResponse.json({ error: 'invalid_finished_at' }, { status: 400 });
   }
 
   try {
-    await upsertReadingPosition(deviceId, articleId, paragraphIndex, dwellSeconds, finishedAt);
+    await upsertReadingPosition(
+      deviceId,
+      articleId,
+      paragraphIndex,
+      Math.floor(dwellSeconds),
+      finishedAt
+    );
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('[reading-position] upsert failed:', err);
