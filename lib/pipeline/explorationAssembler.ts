@@ -7,6 +7,7 @@ import {
   EXPLORATION_FLOOR,
   EXPLORATION_CEILING,
 } from '@/lib/config/serendipity';
+import { ARTICLES_PER_DAY } from '@/lib/config/feed';
 
 export interface ExplorationPools {
   semanticStretch: Article[];  // sorted serendipityScore DESC
@@ -146,13 +147,13 @@ export function tagExplorationSlotTypes(
 
 /**
  * Computes interleave positions for exploration slots in the final feed.
- * Formula: Math.round(2 + i * (20 / budget)) for i in [0, budget-1].
+ * Formula: Math.round(2 + i * (ARTICLES_PER_DAY / budget)) for i in [0, budget-1].
  * The +2 offset avoids position 0.
  */
 export function computeExplorationPositions(budget: number): number[] {
   const positions: number[] = [];
   for (let i = 0; i < budget; i++) {
-    positions.push(Math.round(2 + i * (20 / budget)));
+    positions.push(Math.round(2 + i * (ARTICLES_PER_DAY / budget)));
   }
   return positions;
 }

@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 67 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 6 · BLOCKED: 0
+- DONE/VERIFIED: 68 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 5 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **PIPE-L2**
+- Current branch: `main` · Last resume point: **PIPE-L3**
 
 ---
 
@@ -670,7 +670,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 
 ### Pipeline — lows
 - [x] **PIPE-L1** · 🟢 · `cosineSimilarity` no length/NaN guard; add `if (a.length!==b.length||!a.length) return 0` + finite filter in `parseVectorString`. — DONE: exactly that — mismatched/empty vectors return 0 (no signal) instead of silently truncating; `parseVectorString` drops non-finite entries so malformed DB strings can't propagate NaN (a short vector then trips the new length guard). Commit: fix(PIPE-L1).
-- [ ] **PIPE-L2** · 🟢 · `computeExplorationPositions` hardcodes `20` instead of `ARTICLES_PER_DAY`. (`explorationAssembler.ts:155`)
+- [x] **PIPE-L2** · 🟢 · `computeExplorationPositions` hardcodes `20` instead of `ARTICLES_PER_DAY`. (`explorationAssembler.ts:155`) — DONE: imported and substituted (currently equal, so behavior is unchanged until the constant moves). Commit: fix(PIPE-L2).
 - [ ] **PIPE-L3** · 🟢 · `themeGenerator` `max_tokens:80` can truncate JSON → use a tool schema or raise to ~160. (`themeGenerator.ts:40-52`)
 - [ ] **PIPE-L4** · 🟢 · `refresh-query-banks.ts` bare `JSON.parse` w/o fence-strip → 0 queries on fenced reply.
 - [ ] **PIPE-L5** · 🟢 · `serendipityScorer` bidirectional substring over-matches short labels; require token-boundary/min length. (`:63-68`)
@@ -882,5 +882,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-M6** → DONE: shared dedup canonicalizer across all three passes; id hash untouched.
   Commit: 0cb686b.
 - **PIPE-L1** → DONE: cosine length/empty guard + finite filter in parseVectorString.
-  Commit: pending.
-- RESUME AT: **PIPE-L2**
+  Commit: dcd1f27.
+- **PIPE-L2** → DONE: ARTICLES_PER_DAY replaces hardcoded 20. Commit: pending.
+- RESUME AT: **PIPE-L3**
