@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { migrateFeedbackRecords } from '@/lib/db/feedback';
 import { extractDeviceId } from '@/lib/auth/session';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!deviceId) {
     return NextResponse.json({ error: 'Device ID required' }, { status: 400 });
   }
+
+  // No session gate is possible while auth is off; the route is device-scoped
+  // (it can only write to the caller's own device id). Rate-limit per IP+device
+  // to bound abuse (SEC-H3). The one-time localStorage→DB migration runs at most
+  // a handful of times per device.
+  const limited = await enforceRateLimit(
+    req,
+    { name: 'feedback:migrate', limit: 10, windowSeconds: 3600 },
+    deviceId
+  );
+  if (limited) return limited;
 
   let body: unknown;
   try {

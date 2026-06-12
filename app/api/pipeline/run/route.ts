@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { runPipeline } from '@/lib/pipeline/run';
 
 export const dynamic = 'force-dynamic';
@@ -9,8 +10,14 @@ export const maxDuration = 300;
 
 function authorize(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get('authorization');
-  return !!cronSecret && authHeader === `Bearer ${cronSecret}`;
+  if (!cronSecret) return false;
+  const provided = req.headers.get('authorization') ?? '';
+  const expected = `Bearer ${cronSecret}`;
+  // Constant-time comparison to avoid leaking the secret via response timing.
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 async function handleRun() {
@@ -41,8 +48,9 @@ async function handleRun() {
 
     return NextResponse.json({ ok: true, batchDate: result.batchDate, count: result.count });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    // Log the detail server-side; don't echo internal error text to callers.
+    console.error('[pipeline/run] run failed:', err);
+    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
   }
 }
 

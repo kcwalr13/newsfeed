@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 18 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 24
-- Current branch expected: `main` · Last resume point: SEC-H3
+- DONE: 19 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 23
+- Current branch expected: `main` · Last resume point: SEC-M1
 
 ---
 
@@ -368,9 +368,15 @@ npm run dev           # for manual/browser spot-checks
     namespacing key for logged-out data; session `userId` is authoritative when present. Routed the
     two reading-position routes through `extractDeviceId` (they read the cookie raw, bypassing
     validation). Per the report, no multi-user binding built (auth stays off, single-user). Gate green.
-- [ ] **SEC-H3** · 🟠 High · `feedback/migrate` unauthenticated; cron secret compared non-constant-time
+- [x] **SEC-H3** · 🟠 High · `feedback/migrate` unauthenticated; cron secret compared non-constant-time
   - Fix: require a session on `feedback/migrate` (or remove once migration done); use `crypto.timingSafeEqual` in `app/api/pipeline/run/route.ts:9`; stop echoing `err.message` to callers.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `pipeline/run` `authorize()` now compares the bearer
+    token with `crypto.timingSafeEqual` (length-guarded) instead of `===`, and the catch block logs
+    server-side + returns a generic `'Internal server error'` (no `err.message` leak). This also
+    closes **DAT-L6**. `feedback/migrate`: a session gate is impossible with auth off, and the route
+    is already device-scoped (writes only to the caller's own device id), so hardened it with a
+    per-IP+device rate limit (10/hour) instead. Verified: constant-time auth accepts the correct
+    token and rejects wrong/empty/no-secret. Gate green.
 - [ ] **SEC-M1** · 🟡 Medium · Email links built from `NEXTAUTH_URL` (open-redirect/phishing if it drifts)
   - Fix: derive base URL from an allowlisted constant or validate at startup. (`lib/email/send.ts:27,36`)
   - Status: TODO · Commit: — · Notes: —
@@ -425,7 +431,7 @@ npm run dev           # for manual/browser spot-checks
 - [ ] **DAT-L3** · 🟢 · EMA read-modify-write race in feedback; single SQL statement. (`feedback/route.ts:48-105`) (moot after DAT-C2)
 - [ ] **DAT-L4** · 🟢 · `GET /api/feedback` swallows DB errors as `{}` 200 → return 500. (`feedback/route.ts:144-147`)
 - [ ] **DAT-L5** · 🟢 · Delete is device-scoped only; `getFeedbackForUser` resurrects other-device rows. (`feedback.ts:69-74`)
-- [ ] **DAT-L6** · 🟢 · Non-constant-time secret compare + raw `err.message` leak. (`pipeline/run/route.ts:9,26`) (≈SEC-H3)
+- [x] **DAT-L6** · 🟢 · Non-constant-time secret compare + raw `err.message` leak. (`pipeline/run/route.ts:9,26`) (≈SEC-H3) — DONE via SEC-H3 (commit pending in that finding's commit).
 - [ ] **DAT-L7** · 🟢 · Delete dead legacy artifacts: `data/refresh_cooldowns.json`, `data/pipeline.log`, `data/batches/*.json`, dead `BATCH_DIR`/`LOG_PATH` consts.
 - [ ] **DAT-L8** · 🟢 · `getBatchCount()` returns 0 on empty table ("Issue № 0"). (`issueMeta.ts:11-15`)
 - [ ] **DAT-L9** · 🟢 · `drainQueue` lost-write race (client, rare). (`store.ts:163-186`)
@@ -599,5 +605,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **SEC-H2** → BLOCKED-ON-APPLY: Postgres rate limiter (`lib/rateLimit.ts` + migration 019),
   fail-open, applied to 6 auth routes + feedback + refresh. Active once 019 applied. Commit: 2004007.
 - **SEC-H1** → DONE: `extractDeviceId` validates UUID shape (rejects injected identities) + SECURITY
-  doc block; reading-position routes routed through it. No multi-user binding (single-user).
-- RESUME AT: **SEC-H3**
+  doc block; reading-position routes routed through it. No multi-user binding (single-user). Commit: ba13874.
+- **SEC-H3** (+ DAT-L6) → DONE: constant-time CRON_SECRET compare; generic 500 (no err.message
+  leak); feedback/migrate rate-limited (session gate impossible with auth off).
+- RESUME AT: **SEC-M1**
