@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { findArticleAcrossBatches } from '@/lib/pipeline/storage';
 import ArticleInteractions from '@/app/components/ArticleInteractions';
 import ArticleBodyClient from '@/app/components/ArticleBodyClient';
+import { decodeHtmlEntities } from '@/lib/utils/htmlEntities';
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -13,24 +14,7 @@ function folioStr(n: number): string {
   return `№\u00A0${String(n).padStart(2, '0')}`;
 }
 
-/** Decode common named HTML entities left over in stored body text. */
-function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&ldquo;/g, '\u201C')
-    .replace(/&rdquo;/g, '\u201D')
-    .replace(/&lsquo;/g, '\u2018')
-    .replace(/&rsquo;/g, '\u2019')
-    .replace(/&mdash;/g, '\u2014')
-    .replace(/&ndash;/g, '\u2013')
-    .replace(/&hellip;/g, '\u2026')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(parseInt(code, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
-}
+
 
 /** Strip trailing RSS boilerplate from body text paragraphs. */
 function cleanBodyText(text: string): string {

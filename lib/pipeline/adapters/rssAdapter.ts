@@ -1,6 +1,7 @@
 import Parser from 'rss-parser';
 import type { Article, Source } from '../../types/article';
 import { cleanBodyParagraphs } from '@/lib/utils/bodyClean';
+import { decodeHtmlEntities } from '@/lib/utils/htmlEntities';
 
 type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
 
@@ -13,16 +14,7 @@ const parser = new Parser({
 });
 
 /** Decodes numeric and named HTML entities (e.g. &#8217; → ', &amp; → &). */
-function decodeEntities(str: string): string {
-  return str
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(parseInt(code, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
-}
+const decodeEntities = decodeHtmlEntities;
 
 /**
  * Converts RSS HTML body text (content:encoded) to plain text, preserving

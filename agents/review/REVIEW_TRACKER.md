@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 56 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 17 · BLOCKED: 0
+- DONE/VERIFIED: 58 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 15 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-L5 (with PIPE-M7)**
+- Current branch: `main` · Last resume point: **FE-L6**
 
 ---
 
@@ -606,7 +606,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **FE-L2** · 🟢 · Manifest brand mismatch: `background_color #fff`/`theme_color #111827` vs cream; add maskable icons + description. (`public/manifest.json`) — DONE: background/theme set to the cream `#F6F2EA` (matches layout.tsx's theme-color meta), description added, and real maskable variants GENERATED (icon-{192,512}-maskable.png — original art scaled to the 80% safe zone over its own #111827 background via PIL) and registered with `purpose: maskable`; originals marked `purpose: any`. Commit: fix(FE-L2).
 - [x] **FE-L3** · 🟢 · Service worker registration-only (no offline). Add versioned cache + network-first for `/api/*` when ready. (`public/sw.js`) — SKIPPED (deliberate defer, per the finding's own "when ready"): sw.js explicitly documents offline caching as a future milestone; shipping a cache layer before the offline UX is designed risks silently serving stale issues. Revisit alongside a real offline reading feature. No code change.
 - [x] **FE-L4** · 🟢 · `export const dynamic='force-dynamic'` in a client component is ignored; remove. (`app/auth/page.tsx:3`) — DONE: removed (page is 'use client'; the route segment option only applies to server components, so this was a no-op). Commit: fix(FE-L4).
-- [ ] **FE-L5** · 🟢 · Entity decoding double-applied + astral-unsafe + wrong order. Use `fromCodePoint`, decode `&amp;` last. (`articles/[id]/page.tsx:17-33`) (≈PIPE-M7)
+- [x] **FE-L5** · 🟢 · Entity decoding double-applied + astral-unsafe + wrong order. Use `fromCodePoint`, decode `&amp;` last. (`articles/[id]/page.tsx:17-33`) (≈PIPE-M7) — DONE (one commit with PIPE-M7, as the tracker pairs them): both the display decoder and the rssAdapter ingest decoder now delegate to a single shared `lib/utils/htmlEntities.ts` — named entities first (amp excluded), numeric dec/hex via `String.fromCodePoint` (astral-safe, try/catch passthrough on invalid code points), `&amp;` strictly last (kills the `&amp;#8217;` double-decode). 8 test vectors pass (incl. double-decode guard, emoji, invalid code point). Commit: fix(PIPE-M7).
 - [ ] **FE-L6** · 🟢 · `articleUrl` scheme never validated → guard `^https?:` at ingest (blocks `javascript:`/`data:`). (`validator.ts:22-25`)
 - [ ] **FE-L7** · 🟢 · Empty-feed shows 7-dot strip + "0/7"; `?pos=abc` → "№ NaN"; dot strips lack aria-label. (`app/page.tsx:156`, `articles/[id]/page.tsx:57-58`)
 - [ ] **FE-L8** · 🟢 · Trim font families/weights (Inter Tight barely used). (`app/layout.tsx:7-27`)
@@ -628,9 +628,12 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [ ] **PIPE-M6** · 🟡 Medium · URL dedup inconsistency; no utm/tracking normalization (orphans feedback)
   - Fix: shared canonicalizer (origin+pathname, strip `utm_*`/`at_*`) used by both dedup passes and the id hash. (`run.ts:204-208`, `discovery/run.ts:55-62`)
   - Status: TODO · Commit: — · Notes: —
-- [ ] **PIPE-M7** · 🟡 Medium · HTML entity decoding: order + astral + missing named entities → garbled text
+- [x] **PIPE-M7** · 🟡 Medium · HTML entity decoding: order + astral + missing named entities → garbled text
   - Fix: decode `&amp;` last; `String.fromCodePoint`; add common named entities. (`rssAdapter.ts:13-22`) (≈FE-L5 — do together)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: See FE-L5 — shared `lib/utils/htmlEntities.ts` decoder
+    now used by `rssAdapter.decodeEntities` (ingest) and the article page (display). Adds the
+    common named entities the ingest side was missing (rsquo/ldquo/mdash/nbsp/…). Stored batches
+    keep old text until the next pipeline run. Gate green; vectors tested.
 
 ### Pipeline — lows
 - [ ] **PIPE-L1** · 🟢 · `cosineSimilarity` no length/NaN guard; add `if (a.length!==b.length||!a.length) return 0` + finite filter in `parseVectorString`.
@@ -827,5 +830,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   Commit: f677db7.
 - **FE-L3** → SKIPPED: offline caching deferred until an offline UX exists (finding itself says
   "when ready"); logged in Decisions Log. Commit: 3479100.
-- **FE-L4** → DONE: dead force-dynamic export removed from client auth page. Commit: pending.
-- RESUME AT: **FE-L5 (with PIPE-M7)**
+- **FE-L4** → DONE: dead force-dynamic export removed from client auth page. Commit: 8eb05cd.
+- **FE-L5 + PIPE-M7** → DONE: shared astral-safe, order-correct entity decoder for ingest +
+  display; 8 vectors verified. Commit: pending.
+- RESUME AT: **FE-L6**
