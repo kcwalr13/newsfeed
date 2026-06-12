@@ -19,6 +19,30 @@ function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Minimum length for fuzzy (non-exact) label matching (PIPE-L5). */
+const MIN_FUZZY_MATCH_LEN = 4;
+
+/**
+ * True when `needle` appears in `haystack` as a whole-token sequence.
+ * Very short needles never fuzzy-match (exact equality handles them).
+ */
+function tokenBoundaryIncludes(haystack: string, needle: string): boolean {
+  if (needle.length < MIN_FUZZY_MATCH_LEN) return false;
+  const hTokens = haystack.split(' ');
+  const nTokens = needle.split(' ');
+  for (let i = 0; i + nTokens.length <= hTokens.length; i++) {
+    let match = true;
+    for (let j = 0; j < nTokens.length; j++) {
+      if (hTokens[i + j] !== nTokens[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
 /**
  * Classifies each concept label against the user's concept graph.
  * All data passed in — no DB calls.
@@ -58,12 +82,16 @@ export function classifyConceptDistance(
   return articleConcepts.map((concept): ConceptClassification => {
     const norm = normalize(concept);
 
-    // Check "known": substring match in knownLabels
-    let isKnown = false;
-    for (const kn of normalizedKnown) {
-      if (norm.includes(kn) || kn.includes(norm)) {
-        isKnown = true;
-        break;
+    // Check "known": exact match, else token-boundary containment. Raw
+    // bidirectional substring matching over-matched short labels — e.g. a
+    // 2-3 char label hiding inside an unrelated word (PIPE-L5).
+    let isKnown = normalizedKnown.has(norm);
+    if (!isKnown) {
+      for (const kn of normalizedKnown) {
+        if (tokenBoundaryIncludes(norm, kn) || tokenBoundaryIncludes(kn, norm)) {
+          isKnown = true;
+          break;
+        }
       }
     }
     if (isKnown) {

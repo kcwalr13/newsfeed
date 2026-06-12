@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 70 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 3 · BLOCKED: 0
+- DONE/VERIFIED: 71 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 2 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **PIPE-L5**
+- Current branch: `main` · Last resume point: **PIPE-L7**
 
 ---
 
@@ -673,7 +673,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **PIPE-L2** · 🟢 · `computeExplorationPositions` hardcodes `20` instead of `ARTICLES_PER_DAY`. (`explorationAssembler.ts:155`) — DONE: imported and substituted (currently equal, so behavior is unchanged until the constant moves). Commit: fix(PIPE-L2).
 - [x] **PIPE-L3** · 🟢 · `themeGenerator` `max_tokens:80` can truncate JSON → use a tool schema or raise to ~160. (`themeGenerator.ts:40-52`) — DONE: raised to 160 (the smaller of the two suggested fixes; the JSON-shape + fence-strip + shape-validation parsing already in place stays). Commit: fix(PIPE-L3).
 - [x] **PIPE-L4** · 🟢 · `refresh-query-banks.ts` bare `JSON.parse` w/o fence-strip → 0 queries on fenced reply. — DONE: strips ```/```json fences before parsing (same idiom as themeGenerator). Commit: fix(PIPE-L4).
-- [ ] **PIPE-L5** · 🟢 · `serendipityScorer` bidirectional substring over-matches short labels; require token-boundary/min length. (`:63-68`)
+- [x] **PIPE-L5** · 🟢 · `serendipityScorer` bidirectional substring over-matches short labels; require token-boundary/min length. (`:63-68`) — DONE: known-check is now exact-match OR whole-token-sequence containment with a 4-char fuzzy floor ("art" no longer matches "artificial intelligence", "urban" no longer matches "suburban planning"; "machine learning" still matches "applied machine learning"). Vectors verified. Commit: fix(PIPE-L5).
 - [ ] **PIPE-L7** · 🟢 · `newsApiAdapter` puts API key in query string + no timeout; use `X-Api-Key` header. (currently moot — all RSS)
 - [ ] **PIPE-L9** · 🟢 · Centralize the hardcoded model name `claude-haiku-4-5-20251001` (7 files) into one `LLM_MODEL` constant.
 
@@ -885,5 +885,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   Commit: dcd1f27.
 - **PIPE-L2** → DONE: ARTICLES_PER_DAY replaces hardcoded 20. Commit: a4726aa.
 - **PIPE-L3** → DONE: theme max_tokens 80 → 160. Commit: 4887063.
-- **PIPE-L4** → DONE: fence-strip before JSON.parse in refresh-query-banks. Commit: pending.
-- RESUME AT: **PIPE-L5**
+- **PIPE-L4** → DONE: fence-strip before JSON.parse in refresh-query-banks. Commit: 959fd58.
+- **PIPE-L5** → DONE: token-boundary concept matching with 4-char fuzzy floor. Commit: pending.
+- RESUME AT: **PIPE-L7**
