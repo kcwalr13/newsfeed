@@ -1,8 +1,7 @@
 // Phase 4: Receptivity signal computation — diversity, probe acceptance, dwell ratio, and budget.
 
 import { sql } from '@/lib/db/client';
-import { readBatch } from '@/lib/pipeline/storage';
-import type { ArticleBatch } from '@/lib/types/article';
+import { findArticlesByIds } from '@/lib/pipeline/storage';
 import {
   RECEPTIVITY_WEIGHT_DIVERSITY,
   RECEPTIVITY_WEIGHT_PROBE_ACCEPTANCE,
@@ -43,20 +42,14 @@ export async function computeDiversityScore(
     return 0.5;
   }
 
-  // Load batches from DB to find extractedConcepts for each liked article.
-  // Group by batchDate for efficient batch loading.
-  const batchCache = new Map<string, ArticleBatch | null>();
+  // Resolve liked articles by id across batches in one query — feedback date
+  // is NOT the batch date (PIPE-M2).
+  const articleMap = await findArticlesByIds(likedRows.map(r => r.article_id));
   const distinctConcepts = new Set<string>();
   let totalConceptOccurrences = 0;
 
   for (const row of likedRows) {
-    // Derive batchDate from updated_at (YYYY-MM-DD prefix)
-    const batchDate = row.updated_at.slice(0, 10);
-    if (!batchCache.has(batchDate)) {
-      batchCache.set(batchDate, await readBatch(batchDate));
-    }
-    const batch = batchCache.get(batchDate);
-    const article = batch?.articles.find(a => a.id === row.article_id);
+    const article = articleMap.get(row.article_id);
     for (const concept of article?.extractedConcepts ?? []) {
       distinctConcepts.add(concept);
       totalConceptOccurrences++;
@@ -94,18 +87,12 @@ export async function computeProbeAcceptanceRate(
 
   const feedbackRows = rows as Array<{ article_id: string; value: string; updated_at: string }>;
 
-  // Group by batchDate for efficient batch loading
-  const batchCache = new Map<string, ArticleBatch | null>();
+  const articleMap = await findArticlesByIds(feedbackRows.map(r => r.article_id));
   let probesShown = 0;
   let probeLikes  = 0;
 
   for (const row of feedbackRows) {
-    const batchDate = row.updated_at.slice(0, 10);
-    if (!batchCache.has(batchDate)) {
-      batchCache.set(batchDate, await readBatch(batchDate));
-    }
-    const batch = batchCache.get(batchDate);
-    const article = batch?.articles.find(a => a.id === row.article_id);
+    const article = articleMap.get(row.article_id);
     if (article?.probeInfo?.probeType === 'blind_spot') {
       probesShown++;
       if (row.value === 'like') probeLikes++;
@@ -148,18 +135,12 @@ export async function computeDwellRatio(
     updated_at:    string;
   }>;
 
-  // Group by batchDate for efficient batch loading
-  const batchCache = new Map<string, ArticleBatch | null>();
+  const articleMap = await findArticlesByIds(dwellRows.map(r => r.article_id));
   const explorationDwells: number[] = [];
   const exploitationDwells: number[] = [];
 
   for (const row of dwellRows) {
-    const batchDate = row.updated_at.slice(0, 10);
-    if (!batchCache.has(batchDate)) {
-      batchCache.set(batchDate, await readBatch(batchDate));
-    }
-    const batch = batchCache.get(batchDate);
-    const article = batch?.articles.find(a => a.id === row.article_id);
+    const article = articleMap.get(row.article_id);
     const slotType = article?.explorationSlotType;
 
     if (slotType != null) {

@@ -118,6 +118,34 @@ export async function findArticleAcrossBatches(id: string): Promise<{
 }
 
 /**
+ * Resolves many article ids to their article objects in ONE query; for each
+ * id the newest containing batch wins. Used by the receptivity computations,
+ * whose feedback rows carry no batch reference — deriving a batch date from
+ * the feedback timestamp breaks whenever feedback lands on a different
+ * calendar day than the article's batch (PIPE-M2). The containment (@>)
+ * predicate lets the migration-017 GIN index prefilter batch rows.
+ */
+export async function findArticlesByIds(
+  ids: string[]
+): Promise<Map<string, ArticleBatch['articles'][number]>> {
+  const result = new Map<string, ArticleBatch['articles'][number]>();
+  if (ids.length === 0) return result;
+  const containment = ids.map((id) => JSON.stringify([{ id }]));
+  const rows = await sql`
+    SELECT DISTINCT ON (elem->>'id') elem->>'id' AS id, elem AS article
+    FROM article_batches ab
+    CROSS JOIN LATERAL jsonb_array_elements(ab.articles) AS elem
+    WHERE ab.articles @> ANY(${containment}::jsonb[])
+      AND elem->>'id' = ANY(${ids}::text[])
+    ORDER BY elem->>'id', ab.batch_date DESC
+  `;
+  for (const r of rows as Array<{ id: string; article: ArticleBatch['articles'][number] }>) {
+    result.set(r.id, r.article);
+  }
+  return result;
+}
+
+/**
  * Fetches a single article from the most recent batch via SQL-side JSONB
  * projection, so callers that need one article (e.g. the feedback route, on
  * every POST) don't pull the whole batch — every article's bodyText included —
