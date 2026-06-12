@@ -12,7 +12,9 @@ so this tracker is self-contained.
 
 ## Campaign policy (decided by Kyle)
 
-- **Scope:** the entire report — all findings — in the report's fix-order (Now → Next → Later).
+- **Scope:** the entire report — all findings — in fix-order (Now → Next → Later), **except** items
+  marked `DEFERRED` (single-user scope; see *Future state — multi-user rollout*), which are out of
+  scope until/unless Tangent is opened to more users.
 - **Git:** **one atomic commit per finding**, and **push after each commit**. Commit message
   format: `fix(<ID>): <short summary>`. Each push triggers a Vercel deploy used for live
   re-validation — so the verification gate below **must be green before every push**.
@@ -54,7 +56,8 @@ half-applied fix uncommitted.
 
 ### Status legend
 `TODO` · `IN-PROGRESS` · `DONE` · `BLOCKED-ON-APPLY` (migration awaiting Kyle) ·
-`BLOCKED` (needs Kyle decision/info) · `SKIPPED` (with reason) · `VERIFIED` (Kyle + reviewer signed off)
+`BLOCKED` (needs Kyle decision/info) · `DEFERRED` (out of scope for now — see *Future state*) ·
+`SKIPPED` (with reason) · `VERIFIED` (Kyle + reviewer signed off)
 
 ### Verification commands
 ```
@@ -69,8 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 20 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 22
-- Current branch expected: `main` · Last resume point: SEC-M2
+- DONE/VERIFIED: 25 · DEFERRED (multi-user): 4 · TODO: 18 · BLOCKED: 0
+- Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
+- Current branch: `main` · Last resume point: **DAT-M1**
 
 ---
 
@@ -80,7 +84,7 @@ npm run dev           # for manual/browser spot-checks
   - Where: `lib/discovery/queryBank.ts:18-21` (the un-try/caught `fs.copyFileSync`), `lib/discovery/run.ts:183-184`, fallback at `lib/pipeline/run.ts:248-252`
   - Fix: never write in the load path. If `query_banks.json` is absent, read `query_banks.default.json` straight into memory. Move the rotation cursor out of `query_rotation_state.json` into Postgres (small table) so it persists and never writes to disk in prod.
   - Verify: after deploy, the feed contains discovered / Small-Web sources (not only Nautilus/ACX/Quanta/Aeon); rotation cursor advances across runs.
-  - Status: BLOCKED-ON-APPLY · Commit: 651c62f (+ lint baseline 05dac66) · Notes: Code fix complete and deploy-safe.
+  - Status: VERIFIED (migration 015 applied 2026-06-12; discovery runs live — logs show Small-Web fetch + candidate scoring) · Commit: 651c62f (+ lint baseline 05dac66) · Notes: Code fix complete and deploy-safe.
     `loadQueryBanks()` is now read-only (tries `query_banks.json` → `query_banks.default.json` →
     built-in `DISCOVERY_TOPICS` queries; never copies/writes). Rotation cursor moved to Postgres
     table `query_rotation_state` (migration `015_query_rotation_state.sql`); `loadRotationState`/
@@ -94,7 +98,7 @@ npm run dev           # for manual/browser spot-checks
   - Fix: new migration recreating the unique constraints as `UNIQUE NULLS NOT DISTINCT (...)` (Neon/PG≥15) **after de-duplicating existing rows**, or sentinel `user_id=''`. Also add `ORDER BY updated_at DESC` to the `LIMIT 1` profile read in `aesthetics.ts:123-136`.
   - ⚠️ DB-schema + requires de-dup → write migration file, make reads defensive, mark `BLOCKED-ON-APPLY`, give Kyle the de-dup + constraint SQL.
   - Verify: a repeated like updates one profile row (feedback_count increments) instead of inserting duplicates.
-  - Status: BLOCKED-ON-APPLY · Commit: ff5ccef · Notes: Migration
+  - Status: VERIFIED (migration 016 applied 2026-06-12; NULLS NOT DISTINCT live) · Commit: ff5ccef · Notes: Migration
     `016_nulls_not_distinct_unique.sql` written: de-dups all five identity tables
     (keep-newest for full-state tables, SUM-merge for concept/edge increments, keep-oldest +
     reconstructed probe_count for blind_spot_clusters), then drops the old unique constraints
@@ -309,7 +313,7 @@ npm run dev           # for manual/browser spot-checks
   - Where: `lib/db/migrations/` (starts at 007); DDL only in `agents/architect/*` docs
   - Fix: backfill `001`–`006` `.sql` from the architecture docs (DDL for `users`, `sessions`, `verification_tokens`, `feedback`, `discovery_topic_weights`, etc.); add `scripts/migrate.ts` applying files in order and recording in a `schema_migrations` table; add an npm script. ⚠️ Don't run against prod — mark `BLOCKED-ON-APPLY` for Kyle to run.
   - Verify: runner applies cleanly to a fresh local DB; idempotent on re-run.
-  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Backfilled 001–006 (feedback,
+  - Status: VERIFIED (`npm run db:migrate` run 2026-06-12: 19 migrations applied) · Commit: ecabc49 · Notes: Backfilled 001–006 (feedback,
     discovery_topic_weights, users, sessions, verification_tokens, reading_positions) from the
     architect docs + `lib/db/readingPositions.ts`; all `CREATE TABLE IF NOT EXISTS` (idempotent,
     no-ops on the live DB). Added `scripts/migrate.mjs` (Node ESM, zero new deps — neon `Pool` +
@@ -324,7 +328,7 @@ npm run dev           # for manual/browser spot-checks
   - Where: `app/api/feedback/route.ts:168`, `app/api/feedback/migrate/route.ts:31`, `lib/feedback/store.ts:233-237`
   - Fix: migration to drop/recreate the `feedback` CHECK to include `'save'`; accept `'save'` in the migrate route validation. ⚠️ DB-schema → migration file + `BLOCKED-ON-APPLY`.
   - Verify: a server-side save persists (200, row written); the localStorage migration stops 400-looping.
-  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Confirmed live (read-only): the prod
+  - Status: VERIFIED (migration 018 applied 2026-06-12; save returns 200 live) · Commit: c2e3036 · Notes: Confirmed live (read-only): the prod
     CHECK is `value IN ('like','dislike')`, so every `save` write currently 500s at the DB.
     Migration `018_feedback_value_save.sql` drops/recreates the constraint to include `'save'`
     (idempotent). Migrate route now accepts `'save'` (validation + cast) — previously rejected it
@@ -347,9 +351,13 @@ npm run dev           # for manual/browser spot-checks
     client bundle — verified by a clean `rm -rf .next` rebuild + grep (`removed from client
     bundle ✓`). Added `OWNER_EMAIL` to `.env.example` with a note that the deployment should sit
     behind Vercel password protection while auth is off. Auth left off but coherent. Gate green.
+    **Email-in-bundle half: DONE + verified** (`OWNER_EMAIL` set in Vercel + redeploy 2026-06-12;
+    `/api/auth/me` serves it; nothing in source/bundle). **Password-protection half: DEFERRED to
+    multi-user** (see *Future state*) — it's a ~$150/mo Vercel Pro feature and unnecessary for a
+    private single-user project; not enabling it now (Kyle, 2026-06-12).
 - [x] **SEC-H2** · 🟠 High · No rate limiting on auth / feedback / refresh (cost + email-bomb)
   - Fix: add IP+account rate limiting (e.g. Upstash) on auth routes, `POST /api/feedback` (LLM-triggering), and `/api/feed/refresh`. Adds a dependency — log in Decisions Log.
-  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Built a Postgres-backed fixed-window
+  - Status: VERIFIED (migration 019 applied 2026-06-12; limiter active) · Commit: 2004007 · Notes: Built a Postgres-backed fixed-window
     limiter (`lib/rateLimit.ts`, migration `019_rate_limits.sql`) instead of adding Upstash — no
     new external dependency/credentials for a single-user app. `enforceRateLimit(req, rule,
     extraIdentity?)` keys on client IP (+ device for feedback) via an atomic `ON CONFLICT`
@@ -388,16 +396,49 @@ npm run dev           # for manual/browser spot-checks
     on scheme; off-allowlist origin rejected. Gate green.
 - [ ] **SEC-M2** · 🟡 Medium · No CSRF protection on cookie-authenticated writes
   - Fix: verify Origin/Referer against an allowlist (or double-submit token) on state-changing routes.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DEFERRED (multi-user) · Notes: CSRF only bites with real cookie-auth across origins and
+    multiple users. Auth is off and Tangent is single-user/private. Revisit at multi-user rollout.
 - [ ] **SEC-M3** · 🟡 Medium · Token lookups not constant-time; verify→delete non-atomic
   - Fix: low priority — optionally collapse verify+consume into one transactional statement (`lib/db/auth.ts:99-109`, `verify-email`). Tokens are 256-bit so practical risk is low.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DEFERRED (multi-user) · Notes: Only relevant once the auth/email-verification flow is
+    actually in use. Tokens are 256-bit; negligible single-user risk.
 - [ ] **SEC-L1** · 🟢 Low · Login user-enumeration (403 unverified vs 401 unknown; timing)
   - Fix: return a generic 401 for bad-password and unverified; run a dummy bcrypt compare when user not found. (`app/api/auth/login/route.ts:26-40`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DEFERRED (multi-user) · Notes: Login is unused (auth off) and the owner email is public
+    by Kyle's choice. Revisit if/when login ships.
 - [ ] **SEC-L2** · 🟢 Low · SMTP TLS only auto-enabled on port 465
   - Fix: make TLS explicit / `requireTLS:true` for 587. (`lib/email/send.ts:3-11`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DEFERRED (multi-user) · Notes: Only matters when sending auth/transactional email. Tiny
+    fix to revisit if/when email is enabled.
+
+## Future state — multi-user rollout (deferred security & hardening)
+
+Tangent is currently a **private, single-user project** (Kyle only; not shared with anyone). The
+items below are deferred until/unless Tangent is opened to additional users. They are **out of scope
+for the active campaign** and Code sessions should skip them (Status: `DEFERRED`). Treat this section
+as the security checklist for any future multi-user rollout.
+
+**Deferred now — do before going multi-user:**
+- **Production access gating** (SEC-C1, password-protection half). Put the deployment behind real
+  access control. Vercel Password Protection / "All Deployments" auth is a Pro feature (~$150/mo);
+  cheaper paths: enable the app's own already-built single-user login behind a `middleware.ts` gate,
+  or Cloudflare Access (free tier). Not needed while private.
+- **SEC-M2 — CSRF** on cookie-authenticated writes (needs real auth + cross-origin surface).
+- **SEC-M3 — token constant-time / atomic verify** (only once the auth/email-verification flow is live).
+- **SEC-L1 — login user-enumeration** (login is unused; owner email is public by Kyle's choice).
+- **SEC-L2 — SMTP TLS on non-465** (only when sending auth/transactional email).
+- **Real identity binding** (SEC-H1 follow-through): the device id is a namespacing key, **not** an
+  auth boundary — bind device→user server-side and enforce a session in `middleware.ts` before any
+  multi-tenant data exists.
+
+**Already implemented — keep; these matter more at scale:** rate limiting (SEC-H2), UUID device-id
+validation (SEC-H1), constant-time cron secret + no error leak (SEC-H3), validated email base URL
+(SEC-M1), owner email out of the client bundle (SEC-C1, email half).
+
+_Rationale (Kyle, 2026-06-12): single-user / private scope — these defend multi-user and abuse
+threat models that don't apply yet. Revisit this whole section as step 1 of any multi-user rollout._
+
+---
 
 ### Data / API — mediums
 - [ ] **DAT-M1** · 🟡 Medium · Fire-and-forget async dropped on serverless (concept extraction, rationale patch)
@@ -524,11 +565,15 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-12 | PIPE-H2 | Aesthetic proximity stays raw centered cosine ∈ [−1,1] (no re-mapping to [0,1]); unscored articles get 0; `DRIFT_THRESHOLD` 0.25 → 0.5 | 0 = orthogonal = "no signal" makes the unscored fallback genuinely neutral; a [0,1] re-map would have made unscored (0) read as "maximally opposite". 0.5 ≈ 60° divergence between short/long-term centroids — a real taste shift, reachable but not noisy. |
 | 2026-06-12 | PIPE-H1 | Degraded run = write the batch + flag `degraded:true` + return 500 (rather than refusing to write); degraded refresh does not consume the cooldown | Articles are still readable when unranked, so readers keep a feed; the 500 makes cron/manual callers alert. Cooldown skip lets Kyle retry immediately after fixing the API key, and a fully-failed run made zero billable LLM calls anyway. |
 | 2026-06-12 | DAT-C2 | Chose `UNIQUE NULLS NOT DISTINCT` (not the `user_id=''` sentinel); de-dup strategy per table: keep-newest for `user_aesthetic_profiles`/`discovery_topic_weights`, SUM-merge for `user_concepts`/`user_concept_edges`, keep-oldest + `probe_count = duplicates − 1` for `blind_spot_clusters` | Sentinel would require touching every read/write path. De-dup mirrors each upsert's write style: full-state rewrites → newest row is truth; increment-style upserts scattered +1s across duplicate rows → SUM restores accumulated taste data; blind-spot status UPDATEs matched all duplicates so the oldest row saw every update, and the on-conflict probe increment never fired so row-count reconstructs it. |
+| 2026-06-12 | (scope) | Deferred remaining security hardening (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to a new *Future state — multi-user rollout* section; not enabling Vercel password protection | Kyle confirmed Tangent is private/single-user. These defend multi-user/abuse threat models that don't apply yet; production password protection is a ~$150/mo Vercel Pro feature. Revisit at multi-user rollout. |
 
 ---
 
 ## Migrations awaiting Kyle (apply to Neon)
 _List each new migration file + the exact apply step. Code must NOT apply these to prod._
+
+> ✅ **All applied to Neon on 2026-06-12** via `npm run db:migrate` (19 migrations); verified live by
+> the reviewer (save 200, discovery running, limiter active, NULLS-NOT-DISTINCT live). Rows kept for history.
 
 | Migration file | For finding | Apply note |
 |----------------|-------------|------------|
@@ -617,3 +662,18 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **SEC-M1** → DONE: `getValidatedBaseUrl()` validates `NEXTAUTH_URL` (absolute https + optional
   `ALLOWED_BASE_URLS`) for email links; token encoded; fails closed.
 - RESUME AT: **SEC-M2**
+
+### Session 2 — 2026-06-12 — reviewer (Cowork): migrations applied, env set, scope update
+- Kyle ran `npm run db:migrate`: all 19 migrations applied to Neon cleanly. Reviewer verified live:
+  save returns 200 (DAT-H4/018), `/api/auth/me` serves `OWNER_EMAIL` (SEC-C1), discovery now runs
+  (DAT-C1/015 — function logs show Small-Web fetch + candidate scoring), rate-limit table present
+  (SEC-H2/019), NULLS-NOT-DISTINCT live (DAT-C2/016). Flipped those 5 from BLOCKED-ON-APPLY → VERIFIED.
+- Triggered a pipeline refresh (200, **2m51s / 5m** — DAT-H2): clean batch confirmed — PIPE-Q1 (no
+  body boilerplate, 0 share-bar hits), PIPE-Q2 (logs show `FILTERED PURE_VIDEO`), PIPE-Q3 (realistic
+  read times: 33/27/17 min). Discovery runs but this run's candidates scored below threshold (0
+  surfaced) — expected variance; watch over a few runs and re-tune PIPE-H5 floor if always empty.
+- Set Vercel env `OWNER_EMAIL` + `ALLOWED_BASE_URLS`; redeployed to apply.
+- **Scope decision (Kyle):** Tangent is private/single-user. Deferred remaining security hardening
+  (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to the new *Future state —
+  multi-user rollout* section. Vercel password protection (~$150/mo Pro) is **not** being enabled.
+- RESUME AT: **DAT-M1**
