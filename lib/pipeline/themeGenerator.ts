@@ -41,7 +41,9 @@ async function generateTheme(articles: Article[]): Promise<ThemeResult> {
 
   const msg = await getClient().messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 80,
+    // 160: the JSON envelope + a 22-word note can exceed 80 tokens, truncating
+    // mid-string and failing JSON.parse → fallback theme (PIPE-L3).
+    max_tokens: 160,
     system,
     messages: [{ role: 'user', content: wrapUntrusted(titles) }],
   });
