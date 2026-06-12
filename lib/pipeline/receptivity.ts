@@ -20,8 +20,9 @@ import {
  * Computes the topic diversity score from recent liked articles.
  *
  * Queries the trailing 7-day liked articles, reads their extractedConcepts from batch
- * JSON, and returns: Math.min(distinct_concepts / liked_count, 1.0).
- * Returns 0.5 if fewer than RECEPTIVITY_DIVERSITY_MIN_LIKES liked articles exist.
+ * JSON, and returns: distinct_concepts / total_concept_occurrences (in (0, 1]).
+ * Returns 0.5 if fewer than RECEPTIVITY_DIVERSITY_MIN_LIKES liked articles exist
+ * or no concept data is found.
  */
 export async function computeDiversityScore(
   userId: string | null,
@@ -46,6 +47,7 @@ export async function computeDiversityScore(
   // Group by batchDate for efficient batch loading.
   const batchCache = new Map<string, ArticleBatch | null>();
   const distinctConcepts = new Set<string>();
+  let totalConceptOccurrences = 0;
 
   for (const row of likedRows) {
     // Derive batchDate from updated_at (YYYY-MM-DD prefix)
@@ -57,10 +59,18 @@ export async function computeDiversityScore(
     const article = batch?.articles.find(a => a.id === row.article_id);
     for (const concept of article?.extractedConcepts ?? []) {
       distinctConcepts.add(concept);
+      totalConceptOccurrences++;
     }
   }
 
-  return Math.min(distinctConcepts.size / likedRows.length, 1.0);
+  // No concept data found (e.g. missing batches) → neutral.
+  if (totalConceptOccurrences === 0) return 0.5;
+
+  // distinct / total occurrences: 1.0 = every liked article explores new
+  // territory; → 1/N as likes converge on the same concepts. The previous
+  // distinct/likes ratio always exceeded 1 (each article has 5–8 concepts)
+  // and clamped to 1.0, so overlap never lowered the score.
+  return distinctConcepts.size / totalConceptOccurrences;
 }
 
 /**

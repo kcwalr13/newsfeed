@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 10 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 35
-- Current branch expected: `main` · Last resume point: PIPE-H4
+- DONE: 11 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 34
+- Current branch expected: `main` · Last resume point: PIPE-H3
 
 ---
 
@@ -227,11 +227,14 @@ npm run dev           # for manual/browser spot-checks
     divergence on centered vectors). Numeric verification: opposite profiles raw cosine 0.718 →
     centered −1.000; similar profiles 0.943; drift distance reaches 2.0. Gate green.
 
-- [ ] **PIPE-H4** · 🟠 High · `computeDiversityScore` always saturates at 1.0
+- [x] **PIPE-H4** · 🟠 High · `computeDiversityScore` always saturates at 1.0
   - Where: `lib/pipeline/receptivity.ts:63`
   - Fix: normalize by total extracted concepts, e.g. `distinct / totalConceptOccurrences`, so overlap actually lowers the score.
   - Verify: diversity score varies with concept overlap across liked articles.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Now `distinct / totalConceptOccurrences` ∈ (0,1]
+    (1.0 = every like explores new concepts, →1/N as likes converge); returns neutral 0.5 when
+    no concept data found. Previously `distinct/likes` always exceeded 1 (5–8 concepts per
+    article) and clamped to 1.0. Doc comment updated. Gate green.
 
 - [ ] **PIPE-H3** · 🟠 High · Blind-spot prober is dead code (never imported)
   - Where: `lib/pipeline/blindSpotProber.ts` (no importers)
@@ -488,5 +491,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-H5** → DONE: Brave timeout + 429 retry + serialized queries; adaptive LLM threshold
   with floor 3.0 and loud 0%-pass logging. Commit: ad618b5.
 - **PIPE-H2** → DONE: centered cosine ((v−3)/2) in ranker + drift score; DRIFT_THRESHOLD 0.5.
-  Numerically verified (opposite profiles −1.0 vs inert 0.718).
-- RESUME AT: **PIPE-H4**
+  Numerically verified (opposite profiles −1.0 vs inert 0.718). Commit: c5c8530.
+- **PIPE-H4** → DONE: diversity = distinct/totalConceptOccurrences; neutral 0.5 on no data.
+- RESUME AT: **PIPE-H3**
