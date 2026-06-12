@@ -30,8 +30,13 @@ export async function fetchNewsApiArticles(_source: Source): Promise<PartialArti
   }
 
   try {
-    const url = `https://newsapi.org/v2/top-headlines?language=en&pageSize=40&apiKey=${apiKey}`;
-    const res = await fetch(url);
+    // Key goes in the X-Api-Key header, not the query string — URLs land in
+    // logs/proxies in cleartext (PIPE-L7). 10s timeout matches the RSS parser.
+    const url = 'https://newsapi.org/v2/top-headlines?language=en&pageSize=40';
+    const res = await fetch(url, {
+      headers: { 'X-Api-Key': apiKey },
+      signal: AbortSignal.timeout(10000),
+    });
     if (!res.ok) {
       console.warn(`[newsApiAdapter] NewsAPI returned HTTP ${res.status} — skipping.`);
       return [];

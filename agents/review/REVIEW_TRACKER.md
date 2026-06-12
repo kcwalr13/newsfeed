@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 71 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 2 · BLOCKED: 0
+- DONE/VERIFIED: 72 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 1 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **PIPE-L7**
+- Current branch: `main` · Last resume point: **PIPE-L9**
 
 ---
 
@@ -674,7 +674,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **PIPE-L3** · 🟢 · `themeGenerator` `max_tokens:80` can truncate JSON → use a tool schema or raise to ~160. (`themeGenerator.ts:40-52`) — DONE: raised to 160 (the smaller of the two suggested fixes; the JSON-shape + fence-strip + shape-validation parsing already in place stays). Commit: fix(PIPE-L3).
 - [x] **PIPE-L4** · 🟢 · `refresh-query-banks.ts` bare `JSON.parse` w/o fence-strip → 0 queries on fenced reply. — DONE: strips ```/```json fences before parsing (same idiom as themeGenerator). Commit: fix(PIPE-L4).
 - [x] **PIPE-L5** · 🟢 · `serendipityScorer` bidirectional substring over-matches short labels; require token-boundary/min length. (`:63-68`) — DONE: known-check is now exact-match OR whole-token-sequence containment with a 4-char fuzzy floor ("art" no longer matches "artificial intelligence", "urban" no longer matches "suburban planning"; "machine learning" still matches "applied machine learning"). Vectors verified. Commit: fix(PIPE-L5).
-- [ ] **PIPE-L7** · 🟢 · `newsApiAdapter` puts API key in query string + no timeout; use `X-Api-Key` header. (currently moot — all RSS)
+- [x] **PIPE-L7** · 🟢 · `newsApiAdapter` puts API key in query string + no timeout; use `X-Api-Key` header. (currently moot — all RSS) — DONE: key moved to the `X-Api-Key` header; 10s `AbortSignal.timeout` added (matches the RSS parser). Adapter remains dormant (no active newsapi sources) but is no longer a footgun if one is activated. Commit: fix(PIPE-L7).
 - [ ] **PIPE-L9** · 🟢 · Centralize the hardcoded model name `claude-haiku-4-5-20251001` (7 files) into one `LLM_MODEL` constant.
 
 ---
@@ -886,5 +886,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-L2** → DONE: ARTICLES_PER_DAY replaces hardcoded 20. Commit: a4726aa.
 - **PIPE-L3** → DONE: theme max_tokens 80 → 160. Commit: 4887063.
 - **PIPE-L4** → DONE: fence-strip before JSON.parse in refresh-query-banks. Commit: 959fd58.
-- **PIPE-L5** → DONE: token-boundary concept matching with 4-char fuzzy floor. Commit: pending.
-- RESUME AT: **PIPE-L7**
+- **PIPE-L5** → DONE: token-boundary concept matching with 4-char fuzzy floor. Commit: 74d161d.
+- **PIPE-L7** → DONE: X-Api-Key header + 10s timeout on the dormant NewsAPI adapter.
+  Commit: pending.
+- RESUME AT: **PIPE-L9**
