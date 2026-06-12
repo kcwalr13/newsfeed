@@ -3,43 +3,44 @@
 import path from 'path';
 import fs from 'fs';
 import { DISCOVERY_TOPICS } from './topics';
+import { sql } from '@/lib/db/client';
 import { appendLog } from '@/lib/pipeline/storage';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const BANK_PATH = path.join(DATA_DIR, 'query_banks.json');
 const BANK_DEFAULT_PATH = path.join(DATA_DIR, 'query_banks.default.json');
-const STATE_PATH = path.join(DATA_DIR, 'query_rotation_state.json');
 
 /**
- * Loads query banks from data/query_banks.json (copying from default on first run).
- * Returns a Map of topicId -> string[] of queries.
+ * Loads query banks from data/query_banks.json, falling back to
+ * data/query_banks.default.json, then to each topic's built-in queries.
+ * Read-only: never writes to disk (the serverless filesystem is read-only
+ * at runtime, so the old copy-on-first-run behavior threw in prod).
  */
 export function loadQueryBanks(): Map<string, string[]> {
-  if (!fs.existsSync(BANK_PATH)) {
-    appendLog('[queryBank] query_banks.json not found; copying from default');
-    fs.copyFileSync(BANK_DEFAULT_PATH, BANK_PATH);
-  }
-
-  let parsed: { topics: Record<string, { queries: string[] }> };
-  try {
-    parsed = JSON.parse(fs.readFileSync(BANK_PATH, 'utf-8'));
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    appendLog(`[queryBank] Failed to parse query_banks.json: ${msg}; using fallback queries`);
-    const fallback = new Map<string, string[]>();
-    for (const topic of DISCOVERY_TOPICS) {
-      fallback.set(topic.id, topic.searchQueries);
+  let parsed: { topics: Record<string, { queries: string[] }> } | null = null;
+  for (const candidate of [BANK_PATH, BANK_DEFAULT_PATH]) {
+    try {
+      if (!fs.existsSync(candidate)) continue;
+      parsed = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendLog(`[queryBank] Failed to read ${path.basename(candidate)}: ${msg}`);
     }
-    return fallback;
+  }
+  if (!parsed) {
+    appendLog('[queryBank] No query bank file readable; using built-in topic queries');
   }
 
   const result = new Map<string, string[]>();
   for (const topic of DISCOVERY_TOPICS) {
-    const entry = parsed.topics?.[topic.id];
+    const entry = parsed?.topics?.[topic.id];
     if (entry && Array.isArray(entry.queries) && entry.queries.length > 0) {
       result.set(topic.id, entry.queries);
     } else {
-      appendLog(`[queryBank] Topic ${topic.id} missing from query bank; using fallback query`);
+      if (parsed) {
+        appendLog(`[queryBank] Topic ${topic.id} missing from query bank; using fallback query`);
+      }
       result.set(topic.id, topic.searchQueries);
     }
   }
@@ -47,46 +48,44 @@ export function loadQueryBanks(): Map<string, string[]> {
 }
 
 /**
- * Reads the rotation cursor state from data/query_rotation_state.json.
- * Returns an empty Map if the file does not exist or is unparseable.
+ * Reads rotation cursors from the query_rotation_state table (migration 015).
+ * Returns an empty Map if the table is missing or the read fails — each topic
+ * then starts from the beginning of its bank, matching the old behavior when
+ * the state file was absent.
  */
-export function loadRotationState(): Map<string, number> {
-  if (!fs.existsSync(STATE_PATH)) {
-    return new Map();
-  }
+export async function loadRotationState(): Promise<Map<string, number>> {
   try {
-    const parsed = JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8')) as {
-      cursors: Record<string, number>;
-    };
+    const rows = await sql`SELECT topic_id, cursor FROM query_rotation_state`;
     const result = new Map<string, number>();
-    for (const [topicId, cursor] of Object.entries(parsed.cursors ?? {})) {
-      result.set(topicId, cursor);
+    for (const row of rows as Array<{ topic_id: string; cursor: number }>) {
+      result.set(row.topic_id, row.cursor);
     }
     return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    appendLog(`[queryBank] Warning: could not parse rotation state: ${msg}`);
+    appendLog(`[queryBank] Could not load rotation state from DB (migration 015 applied?): ${msg}`);
     return new Map();
   }
 }
 
 /**
- * Writes the rotation cursor state to data/query_rotation_state.json atomically.
- * Logs at warn level on write error; does not throw.
+ * Persists rotation cursors to the query_rotation_state table.
+ * Logs and returns on failure (e.g. migration 015 not yet applied); never throws.
  */
-export function saveRotationState(state: Map<string, number>): void {
-  const cursors: Record<string, number> = {};
-  for (const [topicId, cursor] of state.entries()) {
-    cursors[topicId] = cursor;
-  }
-  const data = { updated_at: new Date().toISOString(), cursors };
-  const tmp = STATE_PATH + '.tmp';
+export async function saveRotationState(state: Map<string, number>): Promise<void> {
+  if (state.size === 0) return;
   try {
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(tmp, STATE_PATH);
+    for (const [topicId, cursor] of state.entries()) {
+      await sql`
+        INSERT INTO query_rotation_state (topic_id, cursor, updated_at)
+        VALUES (${topicId}, ${cursor}, NOW())
+        ON CONFLICT (topic_id)
+        DO UPDATE SET cursor = ${cursor}, updated_at = NOW()
+      `;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    appendLog(`[queryBank] Failed to save rotation state: ${msg}`);
+    appendLog(`[queryBank] Failed to save rotation state to DB: ${msg}`);
   }
 }
 

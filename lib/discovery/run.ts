@@ -181,7 +181,7 @@ export async function runDiscovery(
 
   // Load query banks and rotation state (Group D)
   const queryBanks = loadQueryBanks();
-  const rotationState = loadRotationState();
+  const rotationState = await loadRotationState();
   const updatedRotationState = new Map<string, number>(rotationState);
 
   // Issue two queries per selected topic
@@ -334,7 +334,7 @@ export async function runDiscovery(
   );
 
   // Save updated rotation state
-  saveRotationState(updatedRotationState);
+  await saveRotationState(updatedRotationState);
 
   // Map to Article objects
   const now = new Date().toISOString();
