@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 12 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 33
-- Current branch expected: `main` · Last resume point: FE-H3
+- DONE: 13 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 32
+- Current branch expected: `main` · Last resume point: FE-M4
 
 ---
 
@@ -256,11 +256,17 @@ npm run dev           # for manual/browser spot-checks
     clusters; probe fires only when a theme spans ≥3 articles (module's original threshold —
     selective by design, "engineered serendipity"). Gate green.
 
-- [ ] **FE-H3** · 🟠 High · `--dim` functional text fails contrast (~2.47:1) at 8–9px
+- [x] **FE-H3** · 🟠 High · `--dim` functional text fails contrast (~2.47:1) at 8–9px
   - Where: `app/globals.css:10` (`--dim:#A49B88` on `--bg:#F6F2EA`)
   - Fix: darken `--dim` to ~`#857B66` (≈4.5:1), or move functional labels (folios, dates, tabs, progress count) to `--muted` (#6B645A ≈5.2:1) and keep `--dim` for ornament only. Consider 10–11px for mono labels. (Brand-color tweak — log in Decisions Log.)
   - Verify: contrast ≥4.5:1 on functional labels (DevTools / axe).
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Darkened `--dim` in ALL four themes to clear WCAG
+    AA 4.5:1 (report's `#857B66` only measured 3.74:1 — recomputed real values):
+    light `#A49B88`→`#736A56` (2.47→4.79), sepia `#A89274`→`#736246` (2.37→4.68),
+    paper `#B3B3B3`→`#727272` (2.10→4.81), dark `#6A6456`→`#8A8472` (3.16→4.98). Chose the
+    single-token darken over re-routing every functional label to `--muted` (smaller, lower-risk
+    diff; keeps the dim/muted hierarchy). Contrast verified via WCAG relative-luminance calc.
+    Gate green.
 
 - [ ] **FE-M4** · 🟡 Medium · Overlays lack focus management (no trap/Escape/scroll-lock)
   - Where: `app/components/EditorLetterModal.tsx:22-28`, victory overlay `app/components/ArticleBodyClient.tsx:124-199`, `app/components/IssueCover.tsx:62-66`
@@ -445,6 +451,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 |------|---------|----------|-----------|
 | 2026-06-12 | (infra) | Added `.claude/**` to eslint `globalIgnores` and fixed 8 pre-existing lint errors (5 unescaped JSX entities escaped properly; 2 `set-state-in-effect` + 1 `react-hooks/purity` silenced with justified `eslint-disable-next-line`) in a separate `chore(lint)` commit | `npm run lint` had never been green: it scanned stale `.claude/worktrees/*/.next` build artifacts (1951 errors) and 8 real pre-existing errors. The campaign's verification gate requires lint green before every push, so this baseline was a prerequisite. The three disabled sites are mount-time localStorage reads / a mount timestamp ref — legit patterns; the components get properly reworked later by FE-M3/FE-M4/FE-H1. |
 | 2026-06-12 | DAT-C1 | Rotation cursor table `query_rotation_state` is global (keyed by `topic_id` only), not per-user | Matches the semantics of the JSON file it replaces; app is single-user. Re-key by identity later if multi-user needs it. |
+| 2026-06-12 | FE-H3 | Darkened the `--dim` token in all 4 themes (not just the cited light theme; not the "move labels to --muted" alternative). Real target values computed (report's #857B66 = 3.74:1, not 4.5:1) | `--dim` is one shared token driving the same failing functional labels in every theme; fixing only light would leave sepia/paper/dark failing the next audit. Darkening the token is a 4-line diff vs. auditing every `--dim` usage to re-route functional vs. ornamental. dim stays visually below muted, preserving the hierarchy. |
 | 2026-06-12 | PIPE-H3 | Wired the prober (report default) rather than deleting; cron identity falls back to the most-recently-active feedback identity | Wiring was moderate, not large, so the fallback option didn't trigger. The probe is the core Phase-4 "engineered serendipity" feature — worth keeping. Cron has no session, and the app is single-user, so the latest feedback identity is the correct target. |
 | 2026-06-12 | PIPE-H2 | Aesthetic proximity stays raw centered cosine ∈ [−1,1] (no re-mapping to [0,1]); unscored articles get 0; `DRIFT_THRESHOLD` 0.25 → 0.5 | 0 = orthogonal = "no signal" makes the unscored fallback genuinely neutral; a [0,1] re-map would have made unscored (0) read as "maximally opposite". 0.5 ≈ 60° divergence between short/long-term centroids — a real taste shift, reachable but not noisy. |
 | 2026-06-12 | PIPE-H1 | Degraded run = write the batch + flag `degraded:true` + return 500 (rather than refusing to write); degraded refresh does not consume the cooldown | Articles are still readable when unranked, so readers keep a feed; the 500 makes cron/manual callers alert. Cooldown skip lets Kyle retry immediately after fixing the API key, and a fully-failed run made zero billable LLM calls anyway. |
@@ -512,5 +519,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-H3** → DONE: blind-spot prober wired into runPipeline (probeInfo in batch JSON);
   cron identity fallback; lazy LLM client; +fixed a latent `${userId} IS NULL` Neon param-type
   crash across 4 files (20 sites) and a label-cap/token truncation in cluster grouping.
-  Live-verified end-to-end.
-- RESUME AT: **FE-H3**
+  Live-verified end-to-end. Commit: 1cc841e.
+- **FE-H3** → DONE: darkened `--dim` in all 4 themes to ≥4.5:1 (light 4.79, sepia 4.68,
+  paper 4.81, dark 4.98); verified by WCAG luminance calc.
+- RESUME AT: **FE-M4**

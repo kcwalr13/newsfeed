@@ -7,7 +7,7 @@
   --bg:          #F6F2EA;
   --fg:          #1A1814;
   --muted:       #6B645A;
-  --dim:         #A49B88;
+  --dim:         #736A56;  /* 4.79:1 on --bg — functional labels meet WCAG AA */
   --rule:        #D9D1C1;
   --card:        #FBF8F1;
   --accent-soft: #EFE8D5;
@@ -24,7 +24,7 @@
   --bg:          #14130F;
   --fg:          #E9E3D4;
   --muted:       #9B9480;
-  --dim:         #6A6456;
+  --dim:         #8A8472;  /* 4.98:1 on --bg */
   --rule:        #2E2B23;
   --card:        #1B1A15;
   --accent-soft: #22201A;
@@ -35,7 +35,7 @@
   --bg:          #EFE4CF;
   --fg:          #2A1F12;
   --muted:       #7A6A53;
-  --dim:         #A89274;
+  --dim:         #736246;  /* 4.68:1 on --bg */
   --rule:        #CFBE9E;
   --card:        #F5ECD9;
   --accent-soft: #E2D3B4;
@@ -46,7 +46,7 @@
   --bg:          #FFFFFF;
   --fg:          #111111;
   --muted:       #6B6B6B;
-  --dim:         #B3B3B3;
+  --dim:         #727272;  /* 4.81:1 on --bg */
   --rule:        #E4E4E4;
   --card:        #FAFAFA;
   --accent-soft: #F2F2F2;
