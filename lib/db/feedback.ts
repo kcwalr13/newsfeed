@@ -96,33 +96,35 @@ export async function deleteFeedback(deviceId: string, articleId: string): Promi
  * Associates all unclaimed device feedback rows to a user on login.
  * Step A: most-recent-wins on conflict with existing user records.
  * Step B: claims all remaining unclaimed device rows.
- * Must run sequentially (Step A before Step B).
+ * Both steps run in one transaction (in order), so a failure between them
+ * can't leave device rows merged into user records but still unclaimed.
  */
 export async function associateFeedbackToUser(
   deviceId: string,
   userId: string
 ): Promise<void> {
-  // Step A: update existing user records where the device record is newer
-  await sql`
-    UPDATE feedback AS existing
-    SET
-      value      = device.value,
-      updated_at = device.updated_at
-    FROM feedback AS device
-    WHERE device.device_id = ${deviceId}
-      AND device.user_id IS NULL
-      AND existing.user_id = ${userId}
-      AND existing.article_id = device.article_id
-      AND device.updated_at > existing.updated_at
-  `;
-
-  // Step B: claim all remaining unclaimed device rows
-  await sql`
-    UPDATE feedback
-    SET user_id = ${userId}
-    WHERE device_id = ${deviceId}
-      AND user_id IS NULL
-  `;
+  await sql.transaction([
+    // Step A: update existing user records where the device record is newer
+    sql`
+      UPDATE feedback AS existing
+      SET
+        value      = device.value,
+        updated_at = device.updated_at
+      FROM feedback AS device
+      WHERE device.device_id = ${deviceId}
+        AND device.user_id IS NULL
+        AND existing.user_id = ${userId}
+        AND existing.article_id = device.article_id
+        AND device.updated_at > existing.updated_at
+    `,
+    // Step B: claim all remaining unclaimed device rows
+    sql`
+      UPDATE feedback
+      SET user_id = ${userId}
+      WHERE device_id = ${deviceId}
+        AND user_id IS NULL
+    `,
+  ]);
 }
 
 /** Max records accepted by a single localStorage-migration call (DAT-M7). */

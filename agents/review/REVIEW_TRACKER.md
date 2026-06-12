@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 32 · DEFERRED (multi-user): 4 · TODO: 11 · BLOCKED: 0
+- DONE/VERIFIED: 33 · DEFERRED (multi-user): 4 · TODO: 10 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M8**
+- Current branch: `main` · Last resume point: **DAT-M9**
 
 ---
 
@@ -494,9 +494,13 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     with a defensive `MAX_MIGRATE_RECORDS = 500` slice. The migrate route 400s arrays over the
     cap and rejects records whose `updatedAt` fails `Date.parse` (previously an unparseable
     timestamp 500'd at the `::timestamptz` cast). Gate green.
-- [ ] **DAT-M8** · 🟡 Medium · "Transactions" that aren't (multi-statement invariants non-atomic)
+- [x] **DAT-M8** · 🟡 Medium · "Transactions" that aren't (multi-statement invariants non-atomic)
   - Fix: use `sql.transaction([...])` for node+edge delete (`lib/db/concepts.ts:109-141`) and `associateFeedbackToUser` (`feedback.ts:82-107`).
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Both multi-statement invariants now run via
+    `sql.transaction([...])` (non-interactive txn, statements execute in array order):
+    `deleteConceptNodesByIds` (edge delete + node delete — no more orphaned edges on partial
+    failure) and `associateFeedbackToUser` (merge-newer + claim-unclaimed). The stale comment
+    claiming the driver lacks transaction support was removed. Gate green.
 - [ ] **DAT-M9** · 🟡 Medium · `data/sources.json` runtime read may not be traced into the Vercel bundle
   - Fix: add `outputFileTracingIncludes` for `data/sources.json` + `query_banks.default.json` in `next.config.ts`, or move sources to DB. (`lib/pipeline/config.ts:38-42`)
   - Status: TODO · Commit: — · Notes: —
@@ -730,5 +734,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-M6** → DONE: bodyText stripped from both feed/today response paths (archive half was
   already fixed). Commit: 443c1fb.
 - **DAT-M7** → DONE: migrate upserts atomic via sql.transaction; 500-record cap; timestamp
-  validation in route. Commit: pending.
-- RESUME AT: **DAT-M8**
+  validation in route. Commit: 6cb4a68.
+- **DAT-M8** → DONE: concept node+edge delete and associateFeedbackToUser wrapped in
+  sql.transaction. Commit: pending.
+- RESUME AT: **DAT-M9**

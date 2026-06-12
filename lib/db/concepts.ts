@@ -125,20 +125,21 @@ export async function deleteConceptNodesByIds(
 
   if (labels.length === 0) return;
 
-  // Delete nodes and edges in a transaction.
-  // Neon serverless does not support BEGIN/COMMIT in the tagged-template API
-  // with the standard client. Use the sql.transaction API if available, or
-  // perform sequentially (deletion order: edges first, then nodes).
-  await sql`
-    DELETE FROM user_concept_edges
-    WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
-      AND (concept_a = ANY(${labels}) OR concept_b = ANY(${labels}))
-  `;
-  await sql`
-    DELETE FROM user_concepts
-    WHERE id = ANY(${nodeIds})
-  `;
+  // Delete edges + nodes atomically: sql.transaction runs both statements in
+  // one non-interactive Postgres transaction, so a failure can't leave
+  // orphaned edges or half-deleted nodes.
+  await sql.transaction([
+    sql`
+      DELETE FROM user_concept_edges
+      WHERE device_id = ${deviceId}
+        AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
+        AND (concept_a = ANY(${labels}) OR concept_b = ANY(${labels}))
+    `,
+    sql`
+      DELETE FROM user_concepts
+      WHERE id = ANY(${nodeIds})
+    `,
+  ]);
 }
 
 // ── Phase 4: Full graph reads for serendipity scoring ────────────────────────
