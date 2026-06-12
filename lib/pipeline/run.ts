@@ -47,10 +47,12 @@ function slugify(name: string): string {
 /**
  * Estimates reading time in minutes from plain text.
  * Uses 238 WPM (average adult reading speed for non-fiction).
- * Minimum of 1 minute; falls back to 2 minutes if text is absent.
+ * Returns undefined when the text is absent or excerpt-length (below
+ * AESTHETIC_BODY_MIN_CHARS) — a "1 min" estimate computed from an RSS
+ * excerpt is misleading, and the UI hides the label when undefined.
  */
-function estimateReadTime(text?: string): number {
-  if (!text || text.trim().length === 0) return 2;
+function estimateReadTime(text?: string): number | undefined {
+  if (!text || text.trim().length < AESTHETIC_BODY_MIN_CHARS) return undefined;
   const wordCount = text.trim().split(/\s+/).length;
   return Math.max(1, Math.ceil(wordCount / 238));
 }

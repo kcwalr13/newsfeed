@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 6 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 39
-- Current branch expected: `main` · Last resume point: PIPE-Q3
+- DONE: 7 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 38
+- Current branch expected: `main` · Last resume point: PIPE-H6
 
 ---
 
@@ -185,11 +185,15 @@ npm run dev           # for manual/browser spot-checks
     ("Watch repair as…", "Why Meetup Culture Died…") all pass. Gate green. Live verify: next
     batch should carry no Open Thread/meetup/video items.
 
-- [ ] **PIPE-Q3** · 🟡 Medium (UX-validated) · Read-time collapses to "1 MIN" for most pieces
+- [x] **PIPE-Q3** · 🟡 Medium (UX-validated) · Read-time collapses to "1 MIN" for most pieces
   - Where: read-time computation (downstream of `bodyText` length)
   - Fix: likely resolved by PIPE-Q1 (fuller bodies). Confirm read-time is computed from cleaned body word-count; add a floor/heuristic if body extraction failed.
   - Verify: long Quanta/essay pieces show realistic multi-minute read times.
-  - Status: TODO · Commit: — · Notes: — (may be a no-op after PIPE-Q1)
+  - Status: DONE · Commit: pending · Notes: Main cause fixed by PIPE-Q1 + the existing
+    `fetchMissingBodyText` pass (recomputes readTime from full text). Residual case fixed:
+    `estimateReadTime` now returns `undefined` (UI hides the label — `ArticleCard.tsx:62`
+    already guards) instead of fabricating "1 min" from an excerpt-length body
+    (< AESTHETIC_BODY_MIN_CHARS = 300 chars) or "2 min" from no body at all. Gate green.
 
 - [ ] **PIPE-H6** · 🟠 High · One bad RSS pubDate drops the whole source; no parser timeout/UA
   - Where: `lib/pipeline/adapters/rssAdapter.ts:6-10,92`
@@ -461,5 +465,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   (+ DOM noise selectors, og:title echo removal, tail trim); fixed shadowing
   `types/node-html-parser.d.ts` stub. Live-verified on 3 articles. Commit: 607926f.
 - **PIPE-Q2** → DONE: `classifyLowValuePost` housekeeping/video gate on both the discovery and
-  fixed-RSS paths; 11-case test pass.
-- RESUME AT: **PIPE-Q3**
+  fixed-RSS paths; 11-case test pass. Commit: c9db7c6.
+- **PIPE-Q3** → DONE: `estimateReadTime` returns undefined for excerpt-length/missing bodies
+  (UI hides label) instead of a fabricated 1-2 min.
+- RESUME AT: **PIPE-H6**
