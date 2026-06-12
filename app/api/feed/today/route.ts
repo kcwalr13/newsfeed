@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { readBatch, readLatestBatch, patchBatchArticleFields } from '@/lib/pipeline/storage';
 import { resolveSession } from '@/lib/auth/session';
 import { getFeedbackForUser, getFeedbackForDevice } from '@/lib/db/feedback';
@@ -110,20 +110,22 @@ export async function GET(req: NextRequest) {
   );
 
   // Generate rationales for newly-slotted exploration articles (no-op if all already set).
-  // Fire-and-forget the DB patch so the response is not delayed on subsequent requests.
   const rationalesGenerated = await generateMissingRationales(rankedArticles);
   if (rationalesGenerated > 0) {
-    // Persist rationale + explorationSlotType back to the batch non-blockingly
+    // Persist rationale + explorationSlotType back to the batch after the
+    // response is sent. after() keeps the serverless function alive for this
+    // work; a bare floating promise would be frozen once the response went out.
     const batchDate = batch.batchDate;
     const patches = new Map(
       rankedArticles
         .filter((a) => a.explorationSlotType != null && a.rationale)
         .map((a) => [a.id, { rationale: a.rationale, explorationSlotType: a.explorationSlotType }])
     );
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    patchBatchArticleFields(batchDate, patches).catch((err: unknown) => {
-      console.error('[feed/today] rationale patch failed:', err);
-    });
+    after(() =>
+      patchBatchArticleFields(batchDate, patches).catch((err: unknown) => {
+        console.error('[feed/today] rationale patch failed:', err);
+      })
+    );
   }
 
   // Strip internal fields before sending to client; keep explorationSlotType + rationale for display

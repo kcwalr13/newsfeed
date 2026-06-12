@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { getFeedbackForDevice, getFeedbackForUser, upsertFeedback, getFeedbackRow } from '@/lib/db/feedback';
 import { resolveSession, extractDeviceId } from '@/lib/auth/session';
 import {
@@ -266,8 +266,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Phase 3: concept extraction + graph upsert (only on like and save)
     if ((value === 'like' || value === 'save') && articleId) {
-      // Run fire-and-forget to not delay the response
-      (async () => {
+      // after(): runs once the response is sent, but within the serverless
+      // function lifetime — a bare fire-and-forget promise gets frozen/killed
+      // when the lambda suspends after responding.
+      after(async () => {
         try {
           const { readBatch, readLatestBatch } = await import('@/lib/pipeline/storage');
           const today = new Date().toISOString().slice(0, 10);
@@ -300,7 +302,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           console.error('[Phase3] concept extraction/graph upsert failed:', err);
           // swallow — never fail the feedback POST
         }
-      })();
+      });
     }
 
     // Return consistent shape; for beacon (value === null), synthesize a minimal response

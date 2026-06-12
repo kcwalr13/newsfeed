@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 25 · DEFERRED (multi-user): 4 · TODO: 18 · BLOCKED: 0
+- DONE/VERIFIED: 26 · DEFERRED (multi-user): 4 · TODO: 17 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M1**
+- Current branch: `main` · Last resume point: **DAT-M2**
 
 ---
 
@@ -441,9 +441,15 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 ---
 
 ### Data / API — mediums
-- [ ] **DAT-M1** · 🟡 Medium · Fire-and-forget async dropped on serverless (concept extraction, rationale patch)
+- [x] **DAT-M1** · 🟡 Medium · Fire-and-forget async dropped on serverless (concept extraction, rationale patch)
   - Fix: use `after()`/`waitUntil` or await. (`app/api/feedback/route.ts:260-293`, `app/api/feed/today/route.ts:123-126`) Generate rationales at pipeline time so they aren't recomputed per feed load.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Both fire-and-forget sites now use `after()` from
+    `next/server` (stable in Next 16): the concept-extraction IIFE in the feedback POST and the
+    rationale/slot-type batch patch in feed/today. Work now runs after the response is sent but
+    within the function lifetime, instead of being frozen when the lambda suspends. The
+    "generate at pipeline time" half is unnecessary once persistence works: rationale generation
+    is already incremental (`generateMissingRationales` no-ops when set) and the patch — which
+    previously never landed in prod, causing the per-load recompute — now persists. Gate green.
 - [ ] **DAT-M2** · 🟡 Medium · `patchBatchArticleFields` read-modify-write can clobber a refreshed batch
   - Fix: single-statement `jsonb_set` update, or guard `WHERE generated_at = ...`. (`lib/pipeline/storage.ts:74-98`)
   - Status: TODO · Commit: — · Notes: —
@@ -677,3 +683,13 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to the new *Future state —
   multi-user rollout* section. Vercel password protection (~$150/mo Pro) is **not** being enabled.
 - RESUME AT: **DAT-M1**
+
+### Session 3 — 2026-06-12 — Claude Code (Tier-3 mediums/lows)
+- Pre-step: ran a read-only parallel re-confirmation sweep of all remaining TODO findings against
+  current code (13 agents). Results: DAT-L1, DAT-L8, and the archive half of DAT-M6 are already
+  fixed; everything else confirmed (details applied per finding below).
+- Pre-step: `.gitignore` now covers local scratch (`commit-*.sh`, `.claude/worktrees/`,
+  `.claude/settings.local.json`) so `git add -A` can't scoop up session artifacts.
+- **DAT-M1** → DONE: `after()` (next/server) wraps the feedback-route concept-extraction job and
+  the feed/today rationale batch patch; background work now survives the response. Gate green.
+- RESUME AT: **DAT-M2**

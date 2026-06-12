@@ -50,3 +50,8 @@ next-env.d.ts
 
 # convenience scripts (local use only)
 push.sh
+commit-*.sh
+
+# local Claude Code state (agents/ definitions stay tracked)
+.claude/worktrees/
+.claude/settings.local.json
