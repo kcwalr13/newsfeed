@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 34 · DEFERRED (multi-user): 4 · TODO: 9 · BLOCKED: 0
+- DONE/VERIFIED: 35 · DEFERRED (multi-user): 4 · TODO: 8 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-H5**
+- Current branch: `main` · Last resume point: **DAT-L group**
 
 ---
 
@@ -509,9 +509,18 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     Verified post-build: both routes' `.nft.json` trace manifests include sources.json and
     query_banks.default.json. Gate green. (Side observation: the legacy `data/batches/*.json` +
     `pipeline.log` also get traced into the bundle — DAT-L7's deletion will slim that.)
-- [ ] **DAT-H5** · 🟠 High · `/api/feed/refresh` unauthenticated + in-memory cooldown (cost / clobber)
+- [x] **DAT-H5** · 🟠 High · `/api/feed/refresh` unauthenticated + in-memory cooldown (cost / clobber)
   - Fix: require session/secret; persist cooldown in Postgres atomically; take an advisory lock before running. (`app/api/feed/refresh/route.ts:9-15`, `lib/pipeline/cooldown.ts:5`) Overlaps SEC-H2 / PIPE-M3.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `lib/pipeline/cooldown.ts` rewritten Postgres-backed
+    on the existing `rate_limits` table (no new migration): rolling per-user cooldown row
+    (`cooldown:refresh:<user>`, upserted only on success) + global `lock:pipeline-run` claimed
+    via conditional ON CONFLICT (steals only when TTL ≤ NOW; 300s TTL = maxDuration so a crashed
+    run self-heals). Both routes that call runPipeline take the lock (refresh 409s; cron 409s)
+    and release in `finally`. All fail OPEN on DB error like lib/rateLimit.ts. Lock semantics
+    verified live on a scratch key (held→blocked, concurrent claims can't both win, TTL steal,
+    release re-acquire). Auth half: route stays deliberately unauthenticated — single-user app
+    with auth off, the in-app button calls it, a secret would have to ship to the client; bounded
+    by per-IP rate limit + cooldown + lock; documented in a SECURITY comment. Gate green.
 
 ### Data / API — lows (may be grouped into one `chore(DAT-L): cleanup` commit if trivial)
 - [ ] **DAT-L1** · 🟢 · `updateDriftState` compares two untyped params as text → cast `::float8`. (`aesthetics.ts:308-323`)
@@ -606,6 +615,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-12 | PIPE-H2 | Aesthetic proximity stays raw centered cosine ∈ [−1,1] (no re-mapping to [0,1]); unscored articles get 0; `DRIFT_THRESHOLD` 0.25 → 0.5 | 0 = orthogonal = "no signal" makes the unscored fallback genuinely neutral; a [0,1] re-map would have made unscored (0) read as "maximally opposite". 0.5 ≈ 60° divergence between short/long-term centroids — a real taste shift, reachable but not noisy. |
 | 2026-06-12 | PIPE-H1 | Degraded run = write the batch + flag `degraded:true` + return 500 (rather than refusing to write); degraded refresh does not consume the cooldown | Articles are still readable when unranked, so readers keep a feed; the 500 makes cron/manual callers alert. Cooldown skip lets Kyle retry immediately after fixing the API key, and a fully-failed run made zero billable LLM calls anyway. |
 | 2026-06-12 | DAT-C2 | Chose `UNIQUE NULLS NOT DISTINCT` (not the `user_id=''` sentinel); de-dup strategy per table: keep-newest for `user_aesthetic_profiles`/`discovery_topic_weights`, SUM-merge for `user_concepts`/`user_concept_edges`, keep-oldest + `probe_count = duplicates − 1` for `blind_spot_clusters` | Sentinel would require touching every read/write path. De-dup mirrors each upsert's write style: full-state rewrites → newest row is truth; increment-style upserts scattered +1s across duplicate rows → SUM restores accumulated taste data; blind-spot status UPDATEs matched all duplicates so the oldest row saw every update, and the on-conflict probe increment never fired so row-count reconstructs it. |
+| 2026-06-12 | DAT-H5 | Kept `/api/feed/refresh` unauthenticated; cooldown + run lock reuse the `rate_limits` table instead of a new table/advisory locks | Single-user app with auth off: the in-app button must call the route, so a secret would ship to the client. pg advisory locks don't survive the neon HTTP driver's per-statement sessions; a TTL'd atomic claim row does. Reusing rate_limits avoids a migration entirely. |
 | 2026-06-12 | (scope) | Deferred remaining security hardening (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to a new *Future state — multi-user rollout* section; not enabling Vercel password protection | Kyle confirmed Tangent is private/single-user. These defend multi-user/abuse threat models that don't apply yet; production password protection is a ~$150/mo Vercel Pro feature. Revisit at multi-user rollout. |
 
 ---
@@ -743,5 +753,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-M8** → DONE: concept node+edge delete and associateFeedbackToUser wrapped in
   sql.transaction. Commit: 75480e0.
 - **DAT-M9** → DONE: outputFileTracingIncludes for the two pipeline routes; .nft.json manifests
-  verified to include the data files. Commit: pending.
-- RESUME AT: **DAT-H5**
+  verified to include the data files. Commit: df26e03.
+- **DAT-H5** → DONE: Postgres cooldown + global run lock on rate_limits (no migration); both
+  pipeline entry routes locked; live lock test passed; auth deliberately omitted (documented).
+  Commit: pending.
+- RESUME AT: **DAT-L group (L2,L3,L4,L5,L7,L9; L1+L8 already fixed)**

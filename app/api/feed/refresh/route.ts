@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSession } from '@/lib/auth/session';
 import { runPipeline } from '@/lib/pipeline/run';
-import { checkCooldown, recordRefresh } from '@/lib/pipeline/cooldown';
+import {
+  checkCooldown,
+  recordRefresh,
+  acquirePipelineRunLock,
+  releasePipelineRunLock,
+} from '@/lib/pipeline/cooldown';
 import { appendLog } from '@/lib/pipeline/storage';
 import { enforceRateLimit } from '@/lib/rateLimit';
 
@@ -12,6 +17,12 @@ export const maxDuration = 300;
 // Auth is disabled — use session userId if somehow present, otherwise fall back to solo user.
 const SOLO_USER_ID = 'solo';
 
+// SECURITY (DAT-H5): this route is deliberately unauthenticated — the in-app
+// refresh button calls it and the app is single-user with auth off (a secret
+// here would have to ship to the client). Cost/abuse is bounded by the per-IP
+// rate limit below, the persistent per-user cooldown, and the global run lock;
+// the cron entry point (/api/pipeline/run) is separately CRON_SECRET-gated.
+// Revisit if Tangent goes multi-user (see tracker: Future state).
 export async function POST(req: NextRequest) {
   // Defense in depth on top of the per-user cooldown: cap refreshes per IP
   // (each runs the full, expensive pipeline).
@@ -22,8 +33,8 @@ export async function POST(req: NextRequest) {
   const session = await resolveSession(req, tempRes);
   const userId = session?.userId ?? SOLO_USER_ID;
 
-  // Cooldown check — enforce per-user window
-  const cooldown = checkCooldown(userId);
+  // Cooldown check — persistent (Postgres) per-user rolling window
+  const cooldown = await checkCooldown(userId);
   if (!cooldown.allowed) {
     return NextResponse.json(
       {
@@ -31,6 +42,15 @@ export async function POST(req: NextRequest) {
         secondsRemaining: cooldown.secondsRemaining,
       },
       { status: 429 }
+    );
+  }
+
+  // Global run lock: never let two pipeline runs (refresh × refresh, or
+  // refresh × cron) execute concurrently and clobber each other's batch.
+  if (!(await acquirePipelineRunLock())) {
+    return NextResponse.json(
+      { error: 'A pipeline run is already in progress' },
+      { status: 409 }
     );
   }
 
@@ -61,7 +81,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Record cooldown ONLY after success — failed refresh does not consume cooldown
-    recordRefresh(userId);
+    await recordRefresh(userId);
 
     appendLog(
       `[refresh] Manual refresh complete. userId=${userId} ` +
@@ -77,5 +97,7 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     appendLog(`[refresh] Manual refresh failed. userId=${userId} error=${message}`);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  } finally {
+    await releasePipelineRunLock();
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { runPipeline } from '@/lib/pipeline/run';
+import { acquirePipelineRunLock, releasePipelineRunLock } from '@/lib/pipeline/cooldown';
 
 export const dynamic = 'force-dynamic';
 // Full pipeline run (fetch + discovery + LLM scoring) needs far more than the
@@ -21,6 +22,14 @@ function authorize(req: NextRequest): boolean {
 }
 
 async function handleRun() {
+  // Same global lock as /api/feed/refresh: a manual refresh and the cron run
+  // must never execute the pipeline concurrently (DAT-H5).
+  if (!(await acquirePipelineRunLock())) {
+    return NextResponse.json(
+      { ok: false, error: 'A pipeline run is already in progress' },
+      { status: 409 }
+    );
+  }
   try {
     const result = await runPipeline();
 
@@ -51,6 +60,8 @@ async function handleRun() {
     // Log the detail server-side; don't echo internal error text to callers.
     console.error('[pipeline/run] run failed:', err);
     return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
+  } finally {
+    await releasePipelineRunLock();
   }
 }
 
