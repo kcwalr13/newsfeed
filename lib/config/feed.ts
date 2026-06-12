@@ -45,3 +45,20 @@ export const LLM_EVAL_BODY_CHAR_LIMIT = 3000;
 
 /** Maximum new sources added to the Small Web pool per crawl run (blogroll expansion cap). */
 export const SMALL_WEB_MAX_NEW_SOURCES_PER_RUN = 20;
+
+/**
+ * Wall-clock budget for a full pipeline run (ms). Kept below the route
+ * maxDuration (300s) so the assembled batch is always written before the
+ * platform kills the function.
+ */
+export const PIPELINE_WALL_CLOCK_BUDGET_MS = 270_000;
+
+/**
+ * Time reserved after discovery for body fetch, aesthetic scoring, concept
+ * extraction, and the batch write (ms). Discovery is skipped or cut short to
+ * protect this reserve.
+ */
+export const PIPELINE_POST_DISCOVERY_RESERVE_MS = 120_000;
+
+/** Max concurrent Anthropic calls in the per-article scoring/concept loops. */
+export const PIPELINE_LLM_CONCURRENCY = 4;

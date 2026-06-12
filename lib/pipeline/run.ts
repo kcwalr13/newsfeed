@@ -1,6 +1,11 @@
 import crypto from 'crypto';
 import { MAX_ARTICLES_PER_SOURCE, MIN_SOURCES_PER_BATCH, loadSources } from './config';
-import { ARTICLES_PER_DAY } from '@/lib/config/feed';
+import {
+  ARTICLES_PER_DAY,
+  PIPELINE_WALL_CLOCK_BUDGET_MS,
+  PIPELINE_POST_DISCOVERY_RESERVE_MS,
+  PIPELINE_LLM_CONCURRENCY,
+} from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
 import { writeBatch, readBatch, appendLog } from './storage';
 import { fetchRssArticles } from './adapters/rssAdapter';
@@ -113,6 +118,20 @@ async function fetchFromSource(source: Source) {
 
 type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
 
+/**
+ * Runs fn over items in chunks of `concurrency`. Per-item failures are
+ * isolated (fn is expected to handle its own errors; allSettled is a backstop).
+ */
+async function forEachWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  for (let i = 0; i < items.length; i += concurrency) {
+    await Promise.allSettled(items.slice(i, i + concurrency).map(fn));
+  }
+}
+
 function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle[] {
   const countBySource = new Map<string, number>();
   return articles.filter((a) => {
@@ -134,7 +153,7 @@ async function scoreArticlesAesthetic(articles: Article[]): Promise<void> {
   let scored = 0;
   let skipped = 0;
 
-  for (const article of articles) {
+  await forEachWithConcurrency(articles, PIPELINE_LLM_CONCURRENCY, async (article) => {
     // Prepare input text: prefer bodyText if long enough, else title + description
     let inputText: string;
     if (article.bodyText && article.bodyText.length >= AESTHETIC_BODY_MIN_CHARS) {
@@ -157,7 +176,7 @@ async function scoreArticlesAesthetic(articles: Article[]): Promise<void> {
       skipped++;
       // Do not write a null row — absent row = no score. Article is not dropped.
     }
-  }
+  });
 
   const totalMs = Date.now() - startMs;
   appendLog(
@@ -174,6 +193,7 @@ async function scoreArticlesAesthetic(articles: Article[]): Promise<void> {
  */
 export async function runPipeline(options: RunOptions = {}): Promise<RunResult> {
   const today = todayUTC();
+  const runStartMs = Date.now();
 
   try {
     // Guard: skip if batch already exists (unless explicitly overwriting)
@@ -237,18 +257,53 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       })
     );
 
-    appendLog('[discovery] Starting discovery run...');
+    // Wall-clock budget: discovery only gets what's left after reserving time
+    // for body fetch, scoring, concept extraction, and the batch write. A slow
+    // or hung discovery must never prevent the batch from being written.
     let discoveryArticles: Article[] = [];
-    try {
-      discoveryArticles = await runDiscovery(
-        fixedArticleUrls,
-        options.userId ?? null,
-        options.deviceId ?? null
+    const elapsedMs = Date.now() - runStartMs;
+    const discoveryBudgetMs =
+      PIPELINE_WALL_CLOCK_BUDGET_MS - PIPELINE_POST_DISCOVERY_RESERVE_MS - elapsedMs;
+
+    if (discoveryBudgetMs <= 0) {
+      appendLog(
+        `[discovery] Skipped: wall-clock budget exhausted (${elapsedMs}ms elapsed). ` +
+          `Continuing with fixed-only batch.`
       );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      appendLog(`[discovery] Discovery run failed entirely: ${msg}. Falling back to fixed-only batch.`);
-      discoveryArticles = [];
+    } else {
+      appendLog(`[discovery] Starting discovery run (budget ${discoveryBudgetMs}ms)...`);
+      try {
+        const discoveryPromise = runDiscovery(
+          fixedArticleUrls,
+          options.userId ?? null,
+          options.deviceId ?? null
+        );
+        // Absorb a rejection that lands after the timeout wins the race below,
+        // so it can't surface as an unhandled rejection.
+        discoveryPromise.catch(() => {});
+
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const raced = await Promise.race([
+          discoveryPromise,
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), discoveryBudgetMs);
+          }),
+        ]);
+        if (timer) clearTimeout(timer);
+
+        if (raced === null) {
+          appendLog(
+            `[discovery] Cut short after ${discoveryBudgetMs}ms budget. ` +
+              `Continuing with fixed-only batch.`
+          );
+        } else {
+          discoveryArticles = raced;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendLog(`[discovery] Discovery run failed entirely: ${msg}. Falling back to fixed-only batch.`);
+        discoveryArticles = [];
+      }
     }
 
     const discoveryCount = discoveryArticles.length;
@@ -283,8 +338,8 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     await scoreArticlesAesthetic(articles);
 
     // Phase 4: Extract concepts for all articles before writing the batch.
-    // Sequential to respect Anthropic API rate limits (same reason as aesthetic scoring).
-    for (const article of articles) {
+    // Bounded concurrency to respect Anthropic API rate limits.
+    await forEachWithConcurrency(articles, PIPELINE_LLM_CONCURRENCY, async (article) => {
       try {
         const text = article.bodyText?.trim()
           ? article.bodyText
@@ -295,7 +350,7 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
         console.error(`[pipeline] concept extraction failed for ${article.id}:`, err);
         article.extractedConcepts = [];
       }
-    }
+    });
 
     const batch: ArticleBatch = {
       batchDate: today,

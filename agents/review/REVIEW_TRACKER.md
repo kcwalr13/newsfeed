@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 2 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 43
-- Current branch expected: `main` · Last resume point: DAT-H2
+- DONE: 3 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 42
+- Current branch expected: `main` · Last resume point: PIPE-H1
 
 ---
 
@@ -126,11 +126,18 @@ npm run dev           # for manual/browser spot-checks
     build CSS: `.focus-visible\:ring-\(--accent\):focus-visible{--tw-ring-color:var(--accent)}`
     is emitted (previously no color rule was generated at all). Gate green.
 
-- [ ] **DAT-H2** · 🟠 High · No `maxDuration` on pipeline routes → killed mid-run, no batch written
+- [x] **DAT-H2** · 🟠 High · No `maxDuration` on pipeline routes → killed mid-run, no batch written
   - Where: `app/api/pipeline/run/route.ts`, `app/api/feed/refresh/route.ts`
   - Fix: `export const maxDuration = 300` (or 800 on Pro). Parallelize per-article LLM loops with bounded concurrency (`lib/pipeline/run.ts:132-166,287-298`). Add a wall-clock budget that short-circuits discovery and still writes the assembled batch.
   - Verify: a full run completes within the limit and always writes `article_batches` even if discovery is slow.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `maxDuration = 300` on both routes. Aesthetic
+    scoring + concept extraction now run via `forEachWithConcurrency` (chunks of
+    `PIPELINE_LLM_CONCURRENCY = 4`, same idiom as the existing body-fetch loop). Wall-clock
+    budget: `PIPELINE_WALL_CLOCK_BUDGET_MS = 270s` minus a `120s` post-discovery reserve —
+    discovery is skipped if no budget remains, or raced against a timeout (cut short → fixed-only
+    batch, late rejection absorbed). Constants in `lib/config/feed.ts`. The batch write can no
+    longer be starved by slow discovery. Gate green. Live verify after deploy: cron run completes
+    and writes `article_batches`.
 
 - [ ] **PIPE-H1** · 🟠 High · Total LLM failure degrades silently into a junk batch (`ok:true`)
   - Where: `lib/pipeline/run.ts`; evidence in `data/pipeline.log` (04-17→04-20: `scored=0 skipped=20`, auth failures)
@@ -419,5 +426,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   editorial `app/not-found.tsx`; optional GIN index migration 017. Verified against live dev DB
   (54 batches): old-batch id resolves, missing id 404s. Commit: 9499a92.
 - **FE-H2** → DONE: Tailwind v4 paren syntax for CSS-var utilities, all 17 occurrences; ring
-  color rule confirmed in built CSS.
-- RESUME AT: **DAT-H2**
+  color rule confirmed in built CSS. Commit: 597b1e1.
+- **DAT-H2** → DONE: maxDuration=300 on both pipeline routes; LLM loops at concurrency 4;
+  270s wall-clock budget with 120s post-discovery reserve (skip / cut-short discovery, always
+  write the batch).
+- RESUME AT: **PIPE-H1**

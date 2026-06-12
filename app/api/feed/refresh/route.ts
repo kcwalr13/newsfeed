@@ -5,6 +5,8 @@ import { checkCooldown, recordRefresh } from '@/lib/pipeline/cooldown';
 import { appendLog } from '@/lib/pipeline/storage';
 
 export const dynamic = 'force-dynamic';
+// Manual refresh runs the full pipeline; same timeout needs as /api/pipeline/run.
+export const maxDuration = 300;
 
 // Auth is disabled — use session userId if somehow present, otherwise fall back to solo user.
 const SOLO_USER_ID = 'solo';

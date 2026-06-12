@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runPipeline } from '@/lib/pipeline/run';
 
 export const dynamic = 'force-dynamic';
+// Full pipeline run (fetch + discovery + LLM scoring) needs far more than the
+// default 10-15s function timeout; without this the function is killed mid-run
+// and no batch is written.
+export const maxDuration = 300;
 
 function authorize(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
