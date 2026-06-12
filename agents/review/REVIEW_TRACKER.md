@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 27 · DEFERRED (multi-user): 4 · TODO: 16 · BLOCKED: 0
+- DONE/VERIFIED: 28 · DEFERRED (multi-user): 4 · TODO: 15 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M3**
+- Current branch: `main` · Last resume point: **DAT-M4**
 
 ---
 
@@ -458,9 +458,11 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     is best-effort; the next feed load recomputes). Verified read-only against live Neon that
     `generated_at::text` round-trips to an equal timestamptz, so the guard matches when no
     concurrent regen occurred. Gate green.
-- [ ] **DAT-M3** · 🟡 Medium · `/api/issue/meta` no try/catch; unvalidated `date` param
+- [x] **DAT-M3** · 🟡 Medium · `/api/issue/meta` no try/catch; unvalidated `date` param
   - Fix: wrap in try/catch → JSON 500; validate `^\d{4}-\d{2}-\d{2}$`. (`app/api/issue/meta/route.ts:17-57`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: GET body wrapped in try/catch → logs server-side,
+    returns JSON `{error:'Internal server error'}` 500 (no err.message leak). `date` param
+    validated against `^\d{4}-\d{2}-\d{2}$` → 400 `invalid_date` on mismatch. Gate green.
 - [ ] **DAT-M4** · 🟡 Medium · `/api/reading-position` accepts NaN/Infinity/float/garbage → 500
   - Fix: `Number.isInteger`/clamp ≥0; validate ISO timestamp; type-check `dwellSeconds`. Same class in `/api/feedback` (`Infinity` survives `Math.floor`).
   - Status: TODO · Commit: — · Notes: —
@@ -699,5 +701,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   the feed/today rationale batch patch; background work now survives the response. Gate green.
 - **DAT-M2** → DONE: `patchBatchArticleFields` UPDATE guarded on the read-time `generated_at`
   (optimistic concurrency; stale patch dropped if the batch was regenerated). Round-trip equality
-  verified read-only on live Neon. Commit: ac60a5d was DAT-M1; this one pending.
-- RESUME AT: **DAT-M3**
+  verified read-only on live Neon. Commit: 9613b81.
+- **DAT-M3** → DONE: issue/meta GET wrapped in try/catch (JSON 500, no message leak); `date`
+  param validated to YYYY-MM-DD → 400. Commit: pending.
+- RESUME AT: **DAT-M4**
