@@ -34,9 +34,12 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   const { article, index: articleIndex, total: batchTotal } = found;
 
   // Use pos/total from feed URL params (reflect displayed issue order),
-  // falling back to the article's position in its own batch
-  const folio = sp.pos ? parseInt(sp.pos, 10) : articleIndex + 1;
-  const total = sp.total ? parseInt(sp.total, 10) : batchTotal;
+  // falling back to the article's position in its own batch. Garbage params
+  // (?pos=abc) must not render as "№ NaN" (FE-L7).
+  const parsedPos = parseInt(sp.pos ?? '', 10);
+  const parsedTotal = parseInt(sp.total ?? '', 10);
+  const folio = Number.isInteger(parsedPos) && parsedPos > 0 ? parsedPos : articleIndex + 1;
+  const total = Number.isInteger(parsedTotal) && parsedTotal > 0 ? parsedTotal : batchTotal;
 
   const publishedDate = new Intl.DateTimeFormat('en-US', {
     month: 'long',

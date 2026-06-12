@@ -16,10 +16,15 @@ type IssueMetaStatus = 'idle' | 'loading' | 'ready';
 
 function SevenDotStrip({ total, read }: { total: number; read: number }) {
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className="flex items-center gap-2"
+      role="img"
+      aria-label={`${read} of ${total} articles read`}
+    >
       {Array.from({ length: total }).map((_, i) => (
         <div
           key={i}
+          aria-hidden="true"
           className={`ql-dot${i < read ? ' filled' : ''}`}
         />
       ))}
@@ -222,8 +227,9 @@ export default function FeedPage() {
               </span>
             </div>
 
-            {/* Seven-dot strip */}
-            {status === 'success' && data && (
+            {/* Seven-dot strip — hidden on an empty feed (a 7-dot "0/7" would
+                imply unread articles that don't exist) */}
+            {status === 'success' && data && displayArticles.length > 0 && (
               <div className="flex items-center gap-3">
                 <SevenDotStrip total={total} read={read} />
                 <span
