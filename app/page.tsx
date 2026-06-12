@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { Article, FeedResponse } from '@/lib/types/article';
 import { initDeviceId } from '@/lib/identity/device';
@@ -57,7 +56,6 @@ function countRead(articles: Article[]): number {
 }
 
 export default function FeedPage() {
-  const router = useRouter();
   const [status, setStatus] = useState<Status>('loading');
   const [data, setData] = useState<FeedResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -284,7 +282,7 @@ export default function FeedPage() {
                       key={article.id}
                       article={article}
                       folio={index + 1}
-                      onClick={() => router.push(`/articles/${article.id}?pos=${index + 1}&total=${displayArticles.length}`)}
+                      href={`/articles/${article.id}?pos=${index + 1}&total=${displayArticles.length}`}
                       onFeedbackChange={handleFeedbackChange}
                     />
                   ))}

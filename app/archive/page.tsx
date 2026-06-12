@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 function cleanDesc(text: string): string {
   return text
@@ -53,7 +52,6 @@ function daysAgo(dateStr: string): string {
 }
 
 export default function ArchivePage() {
-  const router = useRouter();
   const [tab,      setTab]      = useState<Tab>('issues');
   const [batches,  setBatches]  = useState<BatchSummary[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -301,9 +299,10 @@ export default function ArchivePage() {
                         </span>
                       </div>
 
-                      <button
-                        onClick={() => router.push(`/articles/${item.id}`)}
-                        className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+                      <Link
+                        href={`/articles/${item.id}`}
+                        className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+                        style={{ textDecoration: 'none' }}
                       >
                         <h3
                           className="ql-serif"
@@ -328,7 +327,7 @@ export default function ArchivePage() {
                             {cleanDesc(item.description)}
                           </p>
                         )}
-                      </button>
+                      </Link>
                     </div>
                   </div>
                 ))}

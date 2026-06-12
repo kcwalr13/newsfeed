@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Article } from '@/lib/types/article';
 import { SLOT_LABELS } from '@/lib/types/article';
 import { getFeedback, setFeedback, clearFeedback } from '@/lib/feedback/store';
@@ -8,7 +9,8 @@ import { getFeedback, setFeedback, clearFeedback } from '@/lib/feedback/store';
 interface Props {
   article: Article;
   folio: number; // 1-based position in the issue
-  onClick?: () => void;
+  /** Destination for the card's navigation regions (image, title, excerpt). */
+  href: string;
   onFeedbackChange?: (articleId: string, value: string | null) => void;
 }
 
@@ -35,7 +37,7 @@ function folioStr(n: number): string {
   return `№\u00A0${String(n).padStart(2, '0')}`;
 }
 
-export default function ArticleCard({ article, folio, onClick, onFeedbackChange }: Props) {
+export default function ArticleCard({ article, folio, href, onFeedbackChange }: Props) {
   const [feedback, setFeedbackState] = useState<Verb>(
     () => getFeedback(article.id) ?? null
   );
@@ -90,8 +92,8 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
 
         {/* Hero image (duotone) OR drop-cap folio */}
         {article.imageUrl ? (
-          <button
-            onClick={onClick}
+          <Link
+            href={href}
             className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
             aria-label={`Read: ${article.title}`}
           >
@@ -105,10 +107,10 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
               <div className="ql-duotone-shadow" />
               <div className="ql-duotone-highlight" />
             </div>
-          </button>
+          </Link>
         ) : (
-          <button
-            onClick={onClick}
+          <Link
+            href={href}
             className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
             aria-label={`Read: ${article.title}`}
           >
@@ -123,7 +125,7 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
                 {folioStr(folio)}
               </span>
             </div>
-          </button>
+          </Link>
         )}
 
         {/* Slot badge (footnote dagger inline with title, caption below meta) */}
@@ -142,9 +144,10 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
         )}
 
         {/* Title */}
-        <button
-          onClick={onClick}
-          className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+        <Link
+          href={href}
+          className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+          style={{ textDecoration: 'none' }}
         >
           <h2
             className="ql-serif"
@@ -191,7 +194,7 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
               {cleanDesc(article.description)}
             </p>
           )}
-        </button>
+        </Link>
 
         {/* Feedback row: Pass / Underline / Read later */}
         <div className="mt-5">

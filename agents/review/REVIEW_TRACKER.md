@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 14 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 31
-- Current branch expected: `main` · Last resume point: FE-M7
+- DONE: 15 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 30
+- Current branch expected: `main` · Last resume point: FE-H1
 
 ---
 
@@ -282,11 +282,16 @@ npm run dev           # for manual/browser spot-checks
     cover will appear today, else waits for that event. Gate green. Interactive a11y behavior
     (Tab containment, Escape, scroll-lock) to be spot-checked on the Vercel deploy.
 
-- [ ] **FE-M7** · 🟡 Medium · Clickable cards are `<button>`s wrapping `<h2>`/`<p>` (invalid; no link behavior)
+- [x] **FE-M7** · 🟡 Medium · Clickable cards are `<button>`s wrapping `<h2>`/`<p>` (invalid; no link behavior)
   - Where: `app/components/ArticleCard.tsx:145-194,92-127`, `app/archive/page.tsx:302-329`
   - Fix: use Next `<Link href>` styled as a block for navigation (keeps Cmd/middle-click, new-tab, prefetch, valid HTML). Keep the separate verb controls as `<button>`s.
   - Verify: Cmd/middle-click a card opens it in a new tab; HTML validates.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `ArticleCard` now takes an `href` prop (was an
+    `onClick` router callback); the image, title, and excerpt navigation regions are Next
+    `<Link>`s (valid `<a>` flow content, prefetch, Cmd/middle-click → new tab). Feedback verb
+    controls stay `<button>`s. `app/page.tsx` passes `href` and dropped its now-unused
+    `useRouter`. Archive shelf card (`app/archive/page.tsx`) converted from `<button onClick=
+    router.push>` to `<Link>`, also dropping `useRouter`. Gate green.
 
 - [ ] **FE-H1** · 🟠 High · ReadingPositionTracker leaks a `visibilitychange` listener per article; inflates dwell
   - Where: `app/components/ReadingPositionTracker.tsx:134-148` (+ uncleared `saveTimerRef`)
@@ -531,5 +536,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-H3** → DONE: darkened `--dim` in all 4 themes to ≥4.5:1 (light 4.79, sepia 4.68,
   paper 4.81, dark 4.98); verified by WCAG luminance calc. Commit: f2e728a.
 - **FE-M4** → DONE: shared `useModalA11y` hook (focus trap/Escape/restore/scroll-lock) on all
-  three overlays; IssueCover Space key; cover→letter sequencing via custom event.
-- RESUME AT: **FE-M7**
+  three overlays; IssueCover Space key; cover→letter sequencing via custom event. Commit: 0364e3b.
+- **FE-M7** → DONE: card navigation regions are Next `<Link>`s (ArticleCard `href` prop +
+  archive shelf card); verb controls stay buttons; removed two unused `useRouter`s.
+- RESUME AT: **FE-H1**
