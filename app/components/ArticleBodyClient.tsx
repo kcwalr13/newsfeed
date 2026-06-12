@@ -167,7 +167,7 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
             <div className="flex flex-col gap-3">
               <Link
                 href="/"
-                className="ql-mono block focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm py-3"
+                className="ql-mono block focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-3"
                 style={{
                   fontSize: '9px',
                   letterSpacing: '0.18em',
@@ -182,7 +182,7 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
 
               <button
                 onClick={() => setShowVictory(false)}
-                className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm py-2"
+                className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
                 style={{
                   fontSize: '9px',
                   letterSpacing: '0.18em',

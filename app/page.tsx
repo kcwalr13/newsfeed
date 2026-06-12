@@ -308,7 +308,7 @@ export default function FeedPage() {
                     </p>
                     <Link
                       href="/archive"
-                      className="ql-mono inline-block focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm"
+                      className="ql-mono inline-block focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
                       style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
                     >
                       Past issues &amp; shelf →

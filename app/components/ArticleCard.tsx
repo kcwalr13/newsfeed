@@ -92,7 +92,7 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
         {article.imageUrl ? (
           <button
             onClick={onClick}
-            className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent]"
+            className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
             aria-label={`Read: ${article.title}`}
           >
             <div className="ql-duotone-wrapper rounded-sm overflow-hidden" style={{ maxHeight: '220px' }}>
@@ -109,7 +109,7 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
         ) : (
           <button
             onClick={onClick}
-            className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent]"
+            className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
             aria-label={`Read: ${article.title}`}
           >
             <div
@@ -144,7 +144,7 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
         {/* Title */}
         <button
           onClick={onClick}
-          className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm"
+          className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
         >
           <h2
             className="ql-serif"
@@ -207,7 +207,7 @@ export default function ArticleCard({ article, folio, onClick, onFeedbackChange 
                   key={verb}
                   onClick={() => handleVerb(verb)}
                   aria-pressed={isActive}
-                  className="ql-verb-btn flex-1 flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm"
+                  className="ql-verb-btn flex-1 flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
                   style={isActive ? { color: 'var(--accent)' } : undefined}
                 >
                   <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: '17px' }}>

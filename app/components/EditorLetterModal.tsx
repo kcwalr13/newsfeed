@@ -91,7 +91,7 @@ export default function EditorLetterModal() {
 
           <button
             onClick={dismiss}
-            className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm px-4 py-2"
+            className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm px-4 py-2"
             style={{
               fontSize: '9px',
               letterSpacing: '0.18em',

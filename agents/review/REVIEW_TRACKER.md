@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 1 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 44
-- Current branch expected: `main` · Last resume point: FE-H2
+- DONE: 2 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 43
+- Current branch expected: `main` · Last resume point: DAT-H2
 
 ---
 
@@ -115,13 +115,16 @@ npm run dev           # for manual/browser spot-checks
     `app/not-found.tsx` (links to today's issue + archive) — also satisfies the not-found half
     of FE-M6. Migration `017_article_batches_gin.sql` adds the GIN index (performance-only;
     query verified correct without it). Verified: gate green + live dev-DB test — article id
-    from the 2026-04-20 batch resolves, nonexistent id returns empty → 404 page.
+    from the 2026-04-20 batch resolves, nonexistent id returns empty → 404 page. Commit: 9499a92.
 
-- [ ] **FE-H2** · 🟠 High · Tailwind v4 CSS-variable syntax broken app-wide → focus rings never render
+- [x] **FE-H2** · 🟠 High · Tailwind v4 CSS-variable syntax broken app-wide → focus rings never render
   - Where: ~17 occurrences: `app/layout.tsx:51`, `app/page.tsx:311`, `app/archive/page.tsx`, `app/articles/[id]/page.tsx`, `app/components/ArticleCard.tsx`, `ArticleInteractions.tsx`, `ArticleBodyClient.tsx`, `EditorLetterModal.tsx`
   - Fix: global replace v3 bracket var syntax with v4 paren syntax — `bg-[--bg]`→`bg-(--bg)`, `text-[--fg]`→`text-(--fg)`, `ring-[--accent]`→`ring-(--accent)`, etc. Grep `\[--` to find all.
   - Verify: Tab through feed/archive → terracotta focus ring is visible; computed `--tw-ring-color` resolves to a real color, not the literal string `--accent`.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: sed-replaced all 17 occurrences (`[--var]`→`(--var)`)
+    across the 8 files; grep `\[--` now returns 0 in app/ and lib/. Verified in the production
+    build CSS: `.focus-visible\:ring-\(--accent\):focus-visible{--tw-ring-color:var(--accent)}`
+    is emitted (previously no color rule was generated at all). Gate green.
 
 - [ ] **DAT-H2** · 🟠 High · No `maxDuration` on pipeline routes → killed mid-run, no batch written
   - Where: `app/api/pipeline/run/route.ts`, `app/api/feed/refresh/route.ts`
@@ -414,5 +417,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-H3 / FE-C1** → DONE: cross-batch article resolution via JSONB containment
   (`findArticleAcrossBatches` in storage.ts; API route + article page now use it); styled
   editorial `app/not-found.tsx`; optional GIN index migration 017. Verified against live dev DB
-  (54 batches): old-batch id resolves, missing id 404s.
-- RESUME AT: **FE-H2**
+  (54 batches): old-batch id resolves, missing id 404s. Commit: 9499a92.
+- **FE-H2** → DONE: Tailwind v4 paren syntax for CSS-var utilities, all 17 occurrences; ring
+  color rule confirmed in built CSS.
+- RESUME AT: **DAT-H2**

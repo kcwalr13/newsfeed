@@ -78,7 +78,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
         <div className="max-w-2xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
           <Link
             href="/"
-            className="ql-mono flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm py-2"
+            className="ql-mono flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
             style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
           >
             ← Back
@@ -95,7 +95,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             href={article.articleUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm py-2"
+            className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
             style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
           >
             Source ↗
@@ -210,7 +210,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
           <div className="flex items-center justify-between">
             <Link
               href="/"
-              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm py-2"
+              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
               style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
             >
               ← Back to issue

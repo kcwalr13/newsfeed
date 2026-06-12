@@ -112,7 +112,7 @@ export default function ArticleInteractions({ articleId }: Props) {
               key={verb}
               onClick={() => handleVerb(verb)}
               aria-pressed={isActive}
-              className="ql-verb-btn flex-1 flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm"
+              className="ql-verb-btn flex-1 flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
               style={isActive ? { color: 'var(--accent)' } : undefined}
             >
               <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: '17px', color: 'inherit' }}>

@@ -95,7 +95,7 @@ export default function ArchivePage() {
         <div className="max-w-2xl mx-auto px-5 py-3 flex items-center justify-between">
           <Link
             href="/"
-            className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm py-2"
+            className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm py-2"
             style={{ fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.14em', textDecoration: 'none' }}
           >
             ← Issue
@@ -118,7 +118,7 @@ export default function ArchivePage() {
             <button
               key={t}
               onClick={() => setTab(t)}
-              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent]"
+              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
               style={{
                 fontSize: '9px',
                 letterSpacing: '0.18em',
@@ -224,7 +224,7 @@ export default function ArchivePage() {
                           {isToday && (
                             <Link
                               href="/"
-                              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm"
+                              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
                               style={{ fontSize: '8px', color: 'var(--accent)', letterSpacing: '0.14em', textDecoration: 'none', whiteSpace: 'nowrap' }}
                             >
                               Open →
@@ -303,7 +303,7 @@ export default function ArchivePage() {
 
                       <button
                         onClick={() => router.push(`/articles/${item.id}`)}
-                        className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[--accent] rounded-sm"
+                        className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
                       >
                         <h3
                           className="ql-serif"
