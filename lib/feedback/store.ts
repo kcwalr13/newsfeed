@@ -160,7 +160,6 @@ export async function drainQueue(): Promise<void> {
     const queue = readQueue();
     if (queue.length === 0) return;
 
-    const remaining = [...queue];
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       try {
@@ -178,8 +177,20 @@ export async function drainQueue(): Promise<void> {
           });
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        remaining.shift();
-        writeQueue(remaining);
+        // Remove the completed item from a FRESH read: an enqueue() that
+        // happened during the await above must not be clobbered by writing
+        // back a stale snapshot of the queue.
+        const current = readQueue();
+        const idx = current.findIndex(
+          (q) =>
+            q.articleId === item.articleId &&
+            q.value === item.value &&
+            q.timestamp === item.timestamp
+        );
+        if (idx !== -1) {
+          current.splice(idx, 1);
+          writeQueue(current);
+        }
       } catch {
         break;
       }

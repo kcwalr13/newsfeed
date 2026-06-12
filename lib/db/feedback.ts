@@ -84,11 +84,21 @@ export async function getFeedbackRow(
   return rows.length > 0 ? (rows[0] as DbFeedbackRow) : null;
 }
 
-/** Deletes a feedback record. No-op if not found. */
-export async function deleteFeedback(deviceId: string, articleId: string): Promise<void> {
+/**
+ * Deletes a feedback record. No-op if not found.
+ * When a userId is present, rows for that user on OTHER devices are deleted
+ * too — otherwise getFeedbackForUser (which reads by user_id) resurrects the
+ * article's feedback from a sibling device after a device-scoped delete.
+ */
+export async function deleteFeedback(
+  deviceId: string,
+  articleId: string,
+  userId?: string | null
+): Promise<void> {
   await sql`
     DELETE FROM feedback
-    WHERE device_id = ${deviceId} AND article_id = ${articleId}
+    WHERE article_id = ${articleId}
+      AND (device_id = ${deviceId} OR user_id = ${userId ?? null})
   `;
 }
 

@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 35 · DEFERRED (multi-user): 4 · TODO: 8 · BLOCKED: 0
+- DONE/VERIFIED: 41 · DEFERRED (multi-user): 4 · TODO: 2 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-L group**
+- Current branch: `main` · Last resume point: **DAT-L2**
 
 ---
 
@@ -523,15 +523,15 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     by per-IP rate limit + cooldown + lock; documented in a SECURITY comment. Gate green.
 
 ### Data / API — lows (may be grouped into one `chore(DAT-L): cleanup` commit if trivial)
-- [ ] **DAT-L1** · 🟢 · `updateDriftState` compares two untyped params as text → cast `::float8`. (`aesthetics.ts:308-323`)
+- [x] **DAT-L1** · 🟢 · `updateDriftState` compares two untyped params as text → cast `::float8`. (`aesthetics.ts:308-323`) — DONE: already resolved — verified by reading `lib/db/aesthetics.ts` (driftScore is passed as a typed number; the CASE comparisons are numeric; the `::text` casts added by PIPE-H3 cover the null-identity checks). No change needed.
 - [ ] **DAT-L2** · 🟢 · N+1 upserts in `upsertConceptGraph`; batch with `unnest`. (`concepts.ts:237-248`)
 - [ ] **DAT-L3** · 🟢 · EMA read-modify-write race in feedback; single SQL statement. (`feedback/route.ts:48-105`) (moot after DAT-C2)
-- [ ] **DAT-L4** · 🟢 · `GET /api/feedback` swallows DB errors as `{}` 200 → return 500. (`feedback/route.ts:144-147`)
-- [ ] **DAT-L5** · 🟢 · Delete is device-scoped only; `getFeedbackForUser` resurrects other-device rows. (`feedback.ts:69-74`)
+- [x] **DAT-L4** · 🟢 · `GET /api/feedback` swallows DB errors as `{}` 200 → return 500. (`feedback/route.ts:144-147`) — DONE: catch now returns JSON 500 (matches POST handler), so clients can't mistake a DB failure for "no feedback". Commit: chore(DAT-L).
+- [x] **DAT-L5** · 🟢 · Delete is device-scoped only; `getFeedbackForUser` resurrects other-device rows. (`feedback.ts:69-74`) — DONE: `deleteFeedback` takes optional `userId` and deletes `(device_id = X OR user_id = Y)` for the article; DELETE route passes the session userId. Null userId keeps the old device-only scope. Commit: chore(DAT-L).
 - [x] **DAT-L6** · 🟢 · Non-constant-time secret compare + raw `err.message` leak. (`pipeline/run/route.ts:9,26`) (≈SEC-H3) — DONE via SEC-H3 (commit pending in that finding's commit).
-- [ ] **DAT-L7** · 🟢 · Delete dead legacy artifacts: `data/refresh_cooldowns.json`, `data/pipeline.log`, `data/batches/*.json`, dead `BATCH_DIR`/`LOG_PATH` consts.
-- [ ] **DAT-L8** · 🟢 · `getBatchCount()` returns 0 on empty table ("Issue № 0"). (`issueMeta.ts:11-15`)
-- [ ] **DAT-L9** · 🟢 · `drainQueue` lost-write race (client, rare). (`store.ts:163-186`)
+- [x] **DAT-L7** · 🟢 · Delete dead legacy artifacts: `data/refresh_cooldowns.json`, `data/pipeline.log`, `data/batches/*.json`, dead `BATCH_DIR`/`LOG_PATH` consts. — DONE: all three artifact sets deleted from disk (they were untracked/gitignored, but were getting traced into the serverless bundle — see DAT-M9 note) and the two unreferenced consts removed from `lib/pipeline/config.ts` (grep: zero importers). Commit: chore(DAT-L).
+- [x] **DAT-L8** · 🟢 · `getBatchCount()` returns 0 on empty table ("Issue № 0"). (`issueMeta.ts:11-15`) — DONE: already resolved — verified by reading `lib/db/issueMeta.ts` (`row?.n ?? 1` fallback in place). No change needed.
+- [x] **DAT-L9** · 🟢 · `drainQueue` lost-write race (client, rare). (`store.ts:163-186`) — DONE: after each successful send, the item is now removed from a FRESH `readQueue()` (matched by articleId+value+timestamp) instead of writing back a drain-start snapshot, so an `enqueue()` during the in-flight await is never clobbered. Commit: chore(DAT-L).
 
 ### Frontend — mediums
 - [ ] **FE-M1** · 🟡 Medium · Hydration mismatch: localStorage read in `useState` initializer on SSR'd page
@@ -756,5 +756,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   verified to include the data files. Commit: df26e03.
 - **DAT-H5** → DONE: Postgres cooldown + global run lock on rate_limits (no migration); both
   pipeline entry routes locked; live lock test passed; auth deliberately omitted (documented).
-  Commit: pending.
-- RESUME AT: **DAT-L group (L2,L3,L4,L5,L7,L9; L1+L8 already fixed)**
+  Commit: 3d8c33d.
+- **DAT-L group** → chore(DAT-L) commit: L1 + L8 already-fixed (notes); L4 GET 500; L5 user-scoped
+  delete; L7 legacy artifacts + dead consts removed; L9 drainQueue fresh-read removal. L2 and L3
+  follow as their own commits (not trivial).
+- RESUME AT: **DAT-L2**

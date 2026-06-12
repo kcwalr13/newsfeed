@@ -15,12 +15,13 @@ export async function DELETE(
     return NextResponse.json({ error: 'Device ID required' }, { status: 400 });
   }
 
-  // Resolve session to refresh sliding window (userId not used for delete)
+  // Resolve session for the sliding window; userId widens the delete to the
+  // user's rows on other devices (DAT-L5).
   const cookieRes = new NextResponse();
-  await resolveSession(req, cookieRes);
+  const session = await resolveSession(req, cookieRes);
 
   try {
-    await deleteFeedback(deviceId, articleId);
+    await deleteFeedback(deviceId, articleId, session?.userId ?? null);
     const finalRes = NextResponse.json({ ok: true });
     const setCookie = cookieRes.headers.get('Set-Cookie');
     if (setCookie) finalRes.headers.set('Set-Cookie', setCookie);

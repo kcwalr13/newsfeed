@@ -4,14 +4,8 @@ import type { Source } from '../types/article';
 
 export { ARTICLES_PER_DAY } from '@/lib/config/feed';
 
-/** Absolute path to the directory where daily batch JSON files are stored. */
-export const BATCH_DIR: string = path.resolve(process.cwd(), 'data', 'batches');
-
 /** Absolute path to the sources configuration file. */
 export const SOURCES_PATH: string = path.resolve(process.cwd(), 'data', 'sources.json');
-
-/** Absolute path to the pipeline run log. */
-export const LOG_PATH: string = path.resolve(process.cwd(), 'data', 'pipeline.log');
 
 /** Maximum number of articles any single source may contribute to one batch.
  *  Enforced after cross-source deduplication. Excess articles are discarded;

@@ -143,8 +143,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (setCookie) finalRes.headers.set('Set-Cookie', setCookie);
     return finalRes;
   } catch (err) {
+    // A DB failure must not masquerade as "no feedback" — clients would treat
+    // the empty 200 as authoritative and overwrite local state.
     console.error('[GET /api/feedback]', err);
-    return NextResponse.json({});
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
