@@ -1,23 +1,42 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useModalA11y } from '@/app/hooks/useModalA11y';
 
 const STORAGE_KEY = 'tangent_onboarding_dismissed';
+const COVER_STORAGE_KEY = 'tangent_cover_last_shown';
+const COVER_DISMISSED_EVENT = 'tangent:cover-dismissed';
 
 export default function EditorLetterModal() {
   const [visible, setVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const dismissed = localStorage.getItem(STORAGE_KEY);
-    // localStorage is only readable after mount; runs once
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!dismissed) setVisible(true);
+    if (dismissed) return;
+
+    // Show the letter only after the issue cover is gone. If the cover will
+    // show today (its key isn't set), wait for its dismissal event; otherwise
+    // show immediately.
+    const today = new Date().toISOString().slice(0, 10);
+    const coverShowingToday = localStorage.getItem(COVER_STORAGE_KEY) !== today;
+
+    if (!coverShowingToday) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVisible(true);
+      return;
+    }
+    const onCoverDismissed = () => setVisible(true);
+    window.addEventListener(COVER_DISMISSED_EVENT, onCoverDismissed, { once: true });
+    return () => window.removeEventListener(COVER_DISMISSED_EVENT, onCoverDismissed);
   }, []);
 
   function dismiss() {
     localStorage.setItem(STORAGE_KEY, '1');
     setVisible(false);
   }
+
+  useModalA11y(visible, dialogRef, dismiss);
 
   if (!visible) return null;
 
@@ -30,7 +49,9 @@ export default function EditorLetterModal() {
       style={{ background: 'rgba(26,24,20,0.55)', backdropFilter: 'blur(2px)' }}
     >
       <div
-        className="relative w-full max-w-lg rounded-sm"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="relative w-full max-w-lg rounded-sm focus:outline-none"
         style={{
           background: 'var(--card)',
           padding: '40px 36px 32px',

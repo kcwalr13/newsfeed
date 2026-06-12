@@ -13,6 +13,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import ReadingPositionTracker from './ReadingPositionTracker';
 import Link from 'next/link';
+import { useModalA11y } from '@/app/hooks/useModalA11y';
 
 interface Props {
   articleId: string;
@@ -24,6 +25,10 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
   const [finished,   setFinished]   = useState(false);
   const [showVictory, setShowVictory] = useState(false);
   const paragraphRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const victoryRef = useRef<HTMLDivElement>(null);
+
+  const dismissVictory = useCallback(() => setShowVictory(false), []);
+  useModalA11y(showVictory, victoryRef, dismissVictory);
 
   const handlePositionLoaded = useCallback((index: number, wasFinished: boolean) => {
     if (wasFinished) {
@@ -128,7 +133,12 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
           onClick={() => setShowVictory(false)}
         >
           <div
-            className="max-w-xs w-full mx-6 rounded-sm text-center"
+            ref={victoryRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="You finished the article"
+            tabIndex={-1}
+            className="max-w-xs w-full mx-6 rounded-sm text-center focus:outline-none"
             style={{
               background: 'var(--bg)',
               border: '1px solid var(--rule)',

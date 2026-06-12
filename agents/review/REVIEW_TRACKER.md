@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 13 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 32
-- Current branch expected: `main` · Last resume point: FE-M4
+- DONE: 14 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 31
+- Current branch expected: `main` · Last resume point: FE-M7
 
 ---
 
@@ -268,11 +268,19 @@ npm run dev           # for manual/browser spot-checks
     diff; keeps the dim/muted hierarchy). Contrast verified via WCAG relative-luminance calc.
     Gate green.
 
-- [ ] **FE-M4** · 🟡 Medium · Overlays lack focus management (no trap/Escape/scroll-lock)
+- [x] **FE-M4** · 🟡 Medium · Overlays lack focus management (no trap/Escape/scroll-lock)
   - Where: `app/components/EditorLetterModal.tsx:22-28`, victory overlay `app/components/ArticleBodyClient.tsx:124-199`, `app/components/IssueCover.tsx:62-66`
   - Fix: on open move focus into the dialog, trap Tab, close on Escape, restore focus on close, `overflow:hidden` on body. Add Space handling to IssueCover; show the letter only after the cover is dismissed.
   - Verify: Escape closes the victory overlay; Tab stays within open modals; page behind doesn't scroll.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New shared hook `app/hooks/useModalA11y.ts` — moves
+    focus into the dialog on open, traps Tab/Shift+Tab, closes on Escape, restores focus to the
+    prior element on close, and sets `body overflow:hidden` (restoring the prior value). Applied
+    to all three overlays: EditorLetterModal (+ container ref/tabIndex), the victory overlay in
+    ArticleBodyClient (+ role=dialog/aria-modal), and IssueCover. IssueCover also gains
+    Space/Spacebar dismissal. Cover→letter coordination: IssueCover dispatches a
+    `tangent:cover-dismissed` window event on dismiss; EditorLetterModal shows immediately if no
+    cover will appear today, else waits for that event. Gate green. Interactive a11y behavior
+    (Tab containment, Escape, scroll-lock) to be spot-checked on the Vercel deploy.
 
 - [ ] **FE-M7** · 🟡 Medium · Clickable cards are `<button>`s wrapping `<h2>`/`<p>` (invalid; no link behavior)
   - Where: `app/components/ArticleCard.tsx:145-194,92-127`, `app/archive/page.tsx:302-329`
@@ -521,5 +529,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   crash across 4 files (20 sites) and a label-cap/token truncation in cluster grouping.
   Live-verified end-to-end. Commit: 1cc841e.
 - **FE-H3** → DONE: darkened `--dim` in all 4 themes to ≥4.5:1 (light 4.79, sepia 4.68,
-  paper 4.81, dark 4.98); verified by WCAG luminance calc.
-- RESUME AT: **FE-M4**
+  paper 4.81, dark 4.98); verified by WCAG luminance calc. Commit: f2e728a.
+- **FE-M4** → DONE: shared `useModalA11y` hook (focus trap/Escape/restore/scroll-lock) on all
+  three overlays; IssueCover Space key; cover→letter sequencing via custom event.
+- RESUME AT: **FE-M7**

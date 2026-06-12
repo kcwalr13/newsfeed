@@ -11,17 +11,20 @@
  * date so the cover is not shown again today.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DailyIssue } from '@/lib/types/article';
+import { useModalA11y } from '@/app/hooks/useModalA11y';
 
 interface Props {
   issue: DailyIssue;
 }
 
 const COVER_STORAGE_KEY = 'tangent_cover_last_shown';
+const COVER_DISMISSED_EVENT = 'tangent:cover-dismissed';
 
 export default function IssueCover({ issue }: Props) {
   const [visible, setVisible] = useState(false);
+  const coverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Show only once per day
@@ -37,7 +40,11 @@ export default function IssueCover({ issue }: Props) {
     const today = new Date().toISOString().slice(0, 10);
     localStorage.setItem(COVER_STORAGE_KEY, today);
     setVisible(false);
+    // Let the editor's letter know it may show now.
+    window.dispatchEvent(new Event(COVER_DISMISSED_EVENT));
   }
+
+  useModalA11y(visible, coverRef, dismiss);
 
   if (!visible) return null;
 
@@ -53,7 +60,8 @@ export default function IssueCover({ issue }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer"
+      ref={coverRef}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer focus:outline-none"
       style={{
         background: 'var(--bg)',
         padding: '40px 24px',
@@ -63,7 +71,12 @@ export default function IssueCover({ issue }: Props) {
       role="button"
       tabIndex={0}
       aria-label="Dismiss cover and open today's issue"
-      onKeyDown={(e) => e.key === 'Enter' && dismiss()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          dismiss();
+        }
+      }}
     >
       {/* Volume + issue number */}
       <p
