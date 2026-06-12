@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 0 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 1 · BLOCKED: 0 · TODO: 46
-- Current branch expected: `main` · Last resume point: DAT-C2
+- DONE: 0 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 45
+- Current branch expected: `main` · Last resume point: DAT-H3 / FE-C1
 
 ---
 
@@ -80,7 +80,7 @@ npm run dev           # for manual/browser spot-checks
   - Where: `lib/discovery/queryBank.ts:18-21` (the un-try/caught `fs.copyFileSync`), `lib/discovery/run.ts:183-184`, fallback at `lib/pipeline/run.ts:248-252`
   - Fix: never write in the load path. If `query_banks.json` is absent, read `query_banks.default.json` straight into memory. Move the rotation cursor out of `query_rotation_state.json` into Postgres (small table) so it persists and never writes to disk in prod.
   - Verify: after deploy, the feed contains discovered / Small-Web sources (not only Nautilus/ACX/Quanta/Aeon); rotation cursor advances across runs.
-  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Code fix complete and deploy-safe.
+  - Status: BLOCKED-ON-APPLY · Commit: 651c62f (+ lint baseline 05dac66) · Notes: Code fix complete and deploy-safe.
     `loadQueryBanks()` is now read-only (tries `query_banks.json` → `query_banks.default.json` →
     built-in `DISCOVERY_TOPICS` queries; never copies/writes). Rotation cursor moved to Postgres
     table `query_rotation_state` (migration `015_query_rotation_state.sql`); `loadRotationState`/
@@ -89,12 +89,20 @@ npm run dev           # for manual/browser spot-checks
     live regardless; only cursor persistence waits on migration 015. Verified: tsc + lint + build
     green. Live re-validation after deploy: feed should again contain discovered/Small-Web sources.
 
-- [ ] **DAT-C2** · 🔴 Critical · NULL-keyed upserts never converge (NULL ≠ NULL in UNIQUE)
+- [x] **DAT-C2** · 🔴 Critical · NULL-keyed upserts never converge (NULL ≠ NULL in UNIQUE)
   - Where: `lib/db/aesthetics.ts:188-198`, `lib/db/concepts.ts:19-47`, `lib/db/blindSpots.ts:81-88`, `lib/db/discovery.ts:62-67`; constraints in migrations `009`,`010`,`011` + `discovery_topic_weights`
   - Fix: new migration recreating the unique constraints as `UNIQUE NULLS NOT DISTINCT (...)` (Neon/PG≥15) **after de-duplicating existing rows**, or sentinel `user_id=''`. Also add `ORDER BY updated_at DESC` to the `LIMIT 1` profile read in `aesthetics.ts:123-136`.
   - ⚠️ DB-schema + requires de-dup → write migration file, make reads defensive, mark `BLOCKED-ON-APPLY`, give Kyle the de-dup + constraint SQL.
   - Verify: a repeated like updates one profile row (feedback_count increments) instead of inserting duplicates.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Migration
+    `016_nulls_not_distinct_unique.sql` written: de-dups all five identity tables
+    (keep-newest for full-state tables, SUM-merge for concept/edge increments, keep-oldest +
+    reconstructed probe_count for blind_spot_clusters), then drops the old unique constraints
+    (catalog-driven, name-agnostic) and recreates them as `UNIQUE NULLS NOT DISTINCT`. Code
+    change: anonymous profile read in `aesthetics.ts` now `ORDER BY updated_at DESC LIMIT 1`
+    (deterministic newest row pre-apply; harmless post-apply). No other code changes needed —
+    existing `ON CONFLICT` clauses start converging the moment the constraints are replaced.
+    No hard schema dependency in the deploy. Verified: tsc + lint + build green.
 
 - [ ] **DAT-H3 / FE-C1** · 🟠 High · Archive/shelf links 404 for any article not in the latest batch
   - Where: `app/api/articles/[id]/route.ts:11-21`, `app/articles/[id]/page.tsx:46-52`; links from `app/archive/page.tsx:302-304`
@@ -361,6 +369,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 |------|---------|----------|-----------|
 | 2026-06-12 | (infra) | Added `.claude/**` to eslint `globalIgnores` and fixed 8 pre-existing lint errors (5 unescaped JSX entities escaped properly; 2 `set-state-in-effect` + 1 `react-hooks/purity` silenced with justified `eslint-disable-next-line`) in a separate `chore(lint)` commit | `npm run lint` had never been green: it scanned stale `.claude/worktrees/*/.next` build artifacts (1951 errors) and 8 real pre-existing errors. The campaign's verification gate requires lint green before every push, so this baseline was a prerequisite. The three disabled sites are mount-time localStorage reads / a mount timestamp ref — legit patterns; the components get properly reworked later by FE-M3/FE-M4/FE-H1. |
 | 2026-06-12 | DAT-C1 | Rotation cursor table `query_rotation_state` is global (keyed by `topic_id` only), not per-user | Matches the semantics of the JSON file it replaces; app is single-user. Re-key by identity later if multi-user needs it. |
+| 2026-06-12 | DAT-C2 | Chose `UNIQUE NULLS NOT DISTINCT` (not the `user_id=''` sentinel); de-dup strategy per table: keep-newest for `user_aesthetic_profiles`/`discovery_topic_weights`, SUM-merge for `user_concepts`/`user_concept_edges`, keep-oldest + `probe_count = duplicates − 1` for `blind_spot_clusters` | Sentinel would require touching every read/write path. De-dup mirrors each upsert's write style: full-state rewrites → newest row is truth; increment-style upserts scattered +1s across duplicate rows → SUM restores accumulated taste data; blind-spot status UPDATEs matched all duplicates so the oldest row saw every update, and the on-conflict probe increment never fired so row-count reconstructs it. |
 
 ---
 
@@ -370,6 +379,7 @@ _List each new migration file + the exact apply step. Code must NOT apply these 
 | Migration file | For finding | Apply note |
 |----------------|-------------|------------|
 | `lib/db/migrations/015_query_rotation_state.sql` | DAT-C1 | Run the file's SQL against Neon (psql or console). Idempotent (`CREATE TABLE IF NOT EXISTS`). Until applied, discovery works but the query-rotation cursor resets each run (logged as a warning, non-fatal). After applying, flip DAT-C1 to DONE. |
+| `lib/db/migrations/016_nulls_not_distinct_unique.sql` | DAT-C2 | Requires PG ≥ 15 (`SHOW server_version` to confirm; Neon qualifies). Runs in one transaction: de-dups the five identity tables, then swaps the unique constraints to `UNIQUE NULLS NOT DISTINCT`. Idempotent — safe to re-run. Until applied, anonymous upserts keep duplicating (current prod behavior, no worse). After applying, verify: repeat a like → `SELECT COUNT(*) FROM user_aesthetic_profiles WHERE user_id IS NULL` stays constant and `feedback_count` increments; then flip DAT-C2 to DONE. |
 
 ---
 
@@ -388,4 +398,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   chain), moved rotation cursor to Postgres via migration 015 with graceful degradation until
   applied. Files: `lib/discovery/queryBank.ts`, `lib/discovery/run.ts`,
   `lib/db/migrations/015_query_rotation_state.sql`. Verified: tsc + lint + build green.
-- RESUME AT: **DAT-C2**
+  Commits: 05dac66 (chore), 651c62f (fix).
+- **DAT-C2** → BLOCKED-ON-APPLY: migration `016_nulls_not_distinct_unique.sql` (de-dup + NULLS
+  NOT DISTINCT constraints on the five identity tables); defensive `ORDER BY updated_at DESC` on
+  the anonymous profile read in `lib/db/aesthetics.ts`. Verified: tsc + lint + build green.
+- RESUME AT: **DAT-H3 / FE-C1**

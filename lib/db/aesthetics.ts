@@ -132,6 +132,7 @@ export async function getAestheticProfile(
              exploration_budget
       FROM user_aesthetic_profiles
       WHERE user_id IS NULL AND device_id = ${deviceId}
+      ORDER BY updated_at DESC
       LIMIT 1
     `;
   }
