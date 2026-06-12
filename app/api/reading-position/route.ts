@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { upsertReadingPosition } from '@/lib/db/readingPositions';
+import { extractDeviceId } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ interface PositionBody {
 }
 
 export async function POST(req: NextRequest) {
-  const deviceId = req.cookies.get('dd_device_id')?.value;
+  const deviceId = extractDeviceId(req);
   if (!deviceId) {
     return NextResponse.json({ error: 'no_device' }, { status: 400 });
   }

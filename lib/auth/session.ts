@@ -50,10 +50,24 @@ export function clearSessionCookie(): string {
   return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
 }
 
+// Device IDs are crypto.randomUUID() (UUID v4) generated client-side.
+const DEVICE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Reads the device ID from the dd_device_id cookie, falling back to the
- * X-Device-ID request header. Returns null if neither is present.
+ * X-Device-ID request header. Returns null if neither is present or the value
+ * is not a well-formed UUID.
+ *
+ * SECURITY (SEC-H1): the device ID is CLIENT-SUPPLIED and is NOT an
+ * authentication/authorization boundary — a caller can present any value.
+ * It is used only to namespace anonymous (logged-out) data. When a real
+ * session exists, callers must prefer `resolveSession().userId` as the
+ * authoritative identity and treat the device ID as a secondary key only.
+ * Validating the UUID shape here bounds the key space so arbitrary strings
+ * can't be used to fabricate or probe identities.
  */
 export function extractDeviceId(req: NextRequest): string | null {
-  return req.cookies.get('dd_device_id')?.value ?? req.headers.get('X-Device-ID') ?? null;
+  const raw = req.cookies.get('dd_device_id')?.value ?? req.headers.get('X-Device-ID') ?? null;
+  if (!raw || !DEVICE_ID_RE.test(raw)) return null;
+  return raw;
 }

@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 17 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 25
-- Current branch expected: `main` · Last resume point: SEC-H1
+- DONE: 18 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 24
+- Current branch expected: `main` · Last resume point: SEC-H3
 
 ---
 
@@ -358,10 +358,16 @@ npm run dev           # for manual/browser spot-checks
     routes (login/reset 20·5m; register/forgot/resend 5·15m; verify-email 30·5m), `POST
     /api/feedback` (60·1m per IP+device), and `/api/feed/refresh` (10·1h, on top of the cooldown).
     Gate green. Rate limiting becomes ACTIVE once migration 019 is applied.
-- [ ] **SEC-H1** · 🟠 High · Data routes trust client-supplied `deviceId` as identity
+- [x] **SEC-H1** · 🟠 High · Data routes trust client-supplied `deviceId` as identity
   - Where: `lib/auth/session.ts:57-59` + feedback/reading-position/migrate routes
   - Fix: treat `X-Device-ID`/`dd_device_id` as untrusted; bind device→identity server-side or key off session. (Limited impact while single-user; document.)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `extractDeviceId` now validates the UUID-v4 shape and
+    returns null for anything else, bounding the key space so arbitrary strings can't fabricate or
+    probe identities (verified: real device id passes, `../../etc`/`admin`/`''` rejected). Added a
+    SECURITY doc block stating the device id is client-supplied and NOT an auth boundary — only a
+    namespacing key for logged-out data; session `userId` is authoritative when present. Routed the
+    two reading-position routes through `extractDeviceId` (they read the cookie raw, bypassing
+    validation). Per the report, no multi-user binding built (auth stays off, single-user). Gate green.
 - [ ] **SEC-H3** · 🟠 High · `feedback/migrate` unauthenticated; cron secret compared non-constant-time
   - Fix: require a session on `feedback/migrate` (or remove once migration done); use `crypto.timingSafeEqual` in `app/api/pipeline/run/route.ts:9`; stop echoing `err.message` to callers.
   - Status: TODO · Commit: — · Notes: —
@@ -591,5 +597,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   source and client bundle (verified by clean rebuild+grep). `.env.example` documents it + Vercel
   password protection. **Kyle: set `OWNER_EMAIL` in Vercel + enable password protection.** Commit: 7b03ac5.
 - **SEC-H2** → BLOCKED-ON-APPLY: Postgres rate limiter (`lib/rateLimit.ts` + migration 019),
-  fail-open, applied to 6 auth routes + feedback + refresh. Active once 019 applied.
-- RESUME AT: **SEC-H1**
+  fail-open, applied to 6 auth routes + feedback + refresh. Active once 019 applied. Commit: 2004007.
+- **SEC-H1** → DONE: `extractDeviceId` validates UUID shape (rejects injected identities) + SECURITY
+  doc block; reading-position routes routed through it. No multi-user binding (single-user).
+- RESUME AT: **SEC-H3**
