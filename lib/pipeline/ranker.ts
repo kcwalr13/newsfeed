@@ -238,9 +238,12 @@ export function rankFeed(
 
   // Step 3: Sort non-suppressed articles by (blendedScore DESC, publishedAt DESC)
   // Apply concept resonance bonus to mid-ranked articles before final sort.
+  // Must be sorted rawScore DESC first: applyConceptBonus protects the "top
+  // 30%" BY INDEX, which is meaningless on an unsorted array (PIPE-M1).
   const allScores = articles
     .filter(a => !sourceScores.get(slugify(a.sourceName))!.suppressed)
-    .map(a => ({ article: a, rawScore: blendedScore(a) }));
+    .map(a => ({ article: a, rawScore: blendedScore(a) }))
+    .sort((a, b) => b.rawScore - a.rawScore);
 
   const withBonus = topConceptLabels && topConceptLabels.length > 0
     ? applyConceptBonus(allScores, topConceptLabels)

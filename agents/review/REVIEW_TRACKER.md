@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 61 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 12 · BLOCKED: 0
+- DONE/VERIFIED: 62 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 11 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **PIPE-M1**
+- Current branch: `main` · Last resume point: **PIPE-M2**
 
 ---
 
@@ -613,9 +613,12 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **FE-L9** · 🟢 · RefreshButton cooldown effect churn (dead component; fix only if revived). — DONE via FE-L1: RefreshButton.tsx deleted (never imported), so there is no effect to fix.
 
 ### Pipeline — mediums
-- [ ] **PIPE-M1** · 🟡 Medium · `applyConceptBonus` runs on unsorted array → wrong "top-30%" protection
+- [x] **PIPE-M1** · 🟡 Medium · `applyConceptBonus` runs on unsorted array → wrong "top-30%" protection
   - Fix: sort `allScores` by rawScore desc before `applyConceptBonus`. (`ranker.ts:234-239`, `conceptBonus.ts:33-48`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `allScores` now sorts rawScore DESC at construction,
+    satisfying `applyConceptBonus`'s documented "pre-sorted descending" contract (its top-30%
+    floor is index-based). The later final sort is unchanged (re-sorts after bonuses, includes
+    the publishedAt tiebreak). Gate green.
 - [ ] **PIPE-M2** · 🟡 Medium · Receptivity batch lookups key on feedback date, not article batch date
   - Fix: store `batch_date` on the feedback row at upsert, or scan last K batches by id. (`receptivity.ts:52,93,147`)
   - Status: TODO · Commit: — · Notes: —
@@ -836,5 +839,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-L6** → DONE: https?-only scheme guard in validateAndTrim. Commit: 65af7fa.
 - **FE-L7** → DONE: empty-feed strip hidden; aria-label on dot strip; NaN-proof folio params.
   Commit: 3daaed6.
-- **FE-L8** → DONE: Inter Tight removed; --font-sans → system-ui. Commit: pending.
-- RESUME AT: **PIPE-M1** (FE lows complete; FE-L9 closed via FE-L1)
+- **FE-L8** → DONE: Inter Tight removed; --font-sans → system-ui. Commit: 2661539.
+- **PIPE-M1** → DONE: allScores pre-sorted DESC for the concept-bonus index floor.
+  Commit: pending.
+- RESUME AT: **PIPE-M2**
