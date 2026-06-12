@@ -28,7 +28,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (
       !r.articleId ||
       typeof r.articleId !== 'string' ||
-      (r.value !== 'like' && r.value !== 'dislike') ||
+      (r.value !== 'like' && r.value !== 'dislike' && r.value !== 'save') ||
       !r.updatedAt ||
       typeof r.updatedAt !== 'string'
     ) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const written = await migrateFeedbackRecords(
       deviceId,
-      records as Array<{ articleId: string; value: 'like' | 'dislike'; updatedAt: string }>
+      records as Array<{ articleId: string; value: 'like' | 'dislike' | 'save'; updatedAt: string }>
     );
     return NextResponse.json({ ok: true, written });
   } catch (err) {
