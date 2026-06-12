@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 16 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 4 · BLOCKED: 0 · TODO: 27
-- Current branch expected: `main` · Last resume point: SEC-C1
+- DONE: 17 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 4 · BLOCKED: 0 · TODO: 26
+- Current branch expected: `main` · Last resume point: SEC-H2
 
 ---
 
@@ -337,10 +337,16 @@ npm run dev           # for manual/browser spot-checks
 ## TIER 3 — LATER (hardening, security, polish)
 
 ### Security
-- [ ] **SEC-C1** · 🔴 Critical (single-user-mitigated) · Auth disabled; owner email in client bundle
+- [x] **SEC-C1** · 🔴 Critical (single-user-mitigated) · Auth disabled; owner email in client bundle
   - Where: `app/api/auth/me/route.ts:5-8`, `app/components/AuthContext.tsx:16-37`, no `middleware.ts`
   - Fix (report default for single-user): read the email from an env var (stop shipping it in source); document that the deployment should sit behind Vercel password protection. Leave the auth system off but coherent (or hide `/auth`). Don't build multi-user gating now.
-  - Status: TODO · Commit: — · Notes: — (log decision)
+  - Status: DONE · Commit: pending · Notes: Removed the hardcoded `kcwalr13@gmail.com` from both
+    `app/api/auth/me/route.ts` (now `process.env.OWNER_EMAIL ?? ''`, server-only) and
+    `app/components/AuthContext.tsx` (SOLO_USER email is now `''`; AuthProvider fetches
+    `/api/auth/me` on mount to populate it). Net effect: the email is in neither source nor the
+    client bundle — verified by a clean `rm -rf .next` rebuild + grep (`removed from client
+    bundle ✓`). Added `OWNER_EMAIL` to `.env.example` with a note that the deployment should sit
+    behind Vercel password protection while auth is off. Auth left off but coherent. Gate green.
 - [ ] **SEC-H2** · 🟠 High · No rate limiting on auth / feedback / refresh (cost + email-bomb)
   - Fix: add IP+account rate limiting (e.g. Upstash) on auth routes, `POST /api/feedback` (LLM-triggering), and `/api/feed/refresh`. Adds a dependency — log in Decisions Log.
   - Status: TODO · Commit: — · Notes: —
@@ -485,6 +491,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 |------|---------|----------|-----------|
 | 2026-06-12 | (infra) | Added `.claude/**` to eslint `globalIgnores` and fixed 8 pre-existing lint errors (5 unescaped JSX entities escaped properly; 2 `set-state-in-effect` + 1 `react-hooks/purity` silenced with justified `eslint-disable-next-line`) in a separate `chore(lint)` commit | `npm run lint` had never been green: it scanned stale `.claude/worktrees/*/.next` build artifacts (1951 errors) and 8 real pre-existing errors. The campaign's verification gate requires lint green before every push, so this baseline was a prerequisite. The three disabled sites are mount-time localStorage reads / a mount timestamp ref — legit patterns; the components get properly reworked later by FE-M3/FE-M4/FE-H1. |
 | 2026-06-12 | DAT-C1 | Rotation cursor table `query_rotation_state` is global (keyed by `topic_id` only), not per-user | Matches the semantics of the JSON file it replaces; app is single-user. Re-key by identity later if multi-user needs it. |
+| 2026-06-12 | SEC-C1 | Sourced owner email from `OWNER_EMAIL` env (server) + client fetch of `/api/auth/me`, rather than a `NEXT_PUBLIC_` build-time inline | `NEXT_PUBLIC_` would remove the literal from source but still inline it into the client bundle. Fetching keeps it out of the bundle entirely (verified by rebuild+grep). **Kyle: set `OWNER_EMAIL` in Vercel env and enable Vercel password protection while the auth system is off.** |
 | 2026-06-12 | FE-H3 | Darkened the `--dim` token in all 4 themes (not just the cited light theme; not the "move labels to --muted" alternative). Real target values computed (report's #857B66 = 3.74:1, not 4.5:1) | `--dim` is one shared token driving the same failing functional labels in every theme; fixing only light would leave sepia/paper/dark failing the next audit. Darkening the token is a 4-line diff vs. auditing every `--dim` usage to re-route functional vs. ornamental. dim stays visually below muted, preserving the hierarchy. |
 | 2026-06-12 | PIPE-H3 | Wired the prober (report default) rather than deleting; cron identity falls back to the most-recently-active feedback identity | Wiring was moderate, not large, so the fallback option didn't trigger. The probe is the core Phase-4 "engineered serendipity" feature — worth keeping. Cron has no session, and the app is single-user, so the latest feedback identity is the correct target. |
 | 2026-06-12 | PIPE-H2 | Aesthetic proximity stays raw centered cosine ∈ [−1,1] (no re-mapping to [0,1]); unscored articles get 0; `DRIFT_THRESHOLD` 0.25 → 0.5 | 0 = orthogonal = "no signal" makes the unscored fallback genuinely neutral; a [0,1] re-map would have made unscored (0) read as "maximally opposite". 0.5 ≈ 60° divergence between short/long-term centroids — a real taste shift, reachable but not noisy. |
@@ -569,4 +576,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   Kyle runs `npm run db:migrate` to establish the baseline. Commit: ecabc49.
 - **DAT-H4** → BLOCKED-ON-APPLY: migration 018 recreates the feedback CHECK to include `'save'`
   (live CHECK confirmed `like`/`dislike` only); migrate route now accepts `'save'`. Deploy-safe.
-- RESUME AT: **SEC-C1**
+  Commit: c2e3036.
+- **SEC-C1** → DONE: owner email moved to `OWNER_EMAIL` env (server) + client fetch; removed from
+  source and client bundle (verified by clean rebuild+grep). `.env.example` documents it + Vercel
+  password protection. **Kyle: set `OWNER_EMAIL` in Vercel + enable password protection.**
+- RESUME AT: **SEC-H2**
