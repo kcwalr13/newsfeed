@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 function cleanDesc(text: string): string {
@@ -62,10 +62,15 @@ export default function ArchivePage() {
   // Network/server failure must not render as "No past issues yet." (FE-M6)
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const archiveAbortRef = useRef<AbortController | null>(null);
+
   const loadArchive = useCallback(() => {
+    archiveAbortRef.current?.abort();
+    const controller = new AbortController();
+    archiveAbortRef.current = controller;
     setLoading(true);
     setErrorMessage(null);
-    fetch('/api/archive')
+    fetch('/api/archive', { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`Server error (${r.status})`);
         return r.json();
@@ -75,6 +80,7 @@ export default function ArchivePage() {
         setLoading(false);
       })
       .catch((err: unknown) => {
+        if (controller.signal.aborted) return; // superseded or unmounted
         const offline = typeof navigator !== 'undefined' && !navigator.onLine;
         const network = err instanceof TypeError; // fetch rejects with TypeError on network failure
         setErrorMessage(
@@ -95,6 +101,7 @@ export default function ArchivePage() {
     setFeedback(map);
 
     loadArchive();
+    return () => archiveAbortRef.current?.abort();
   }, [loadArchive]);
 
   // Shelf: all articles across all batches with feedback === 'save'

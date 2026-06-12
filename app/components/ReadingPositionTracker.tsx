@@ -85,9 +85,14 @@ export default function ReadingPositionTracker({
   // ── Load saved position on mount ─────────────────────────────────────────
 
   useEffect(() => {
+    // Abort on unmount/article change: a slow response for the previous
+    // article must not fire onPositionLoaded against the new one (FE-M9).
+    const controller = new AbortController();
     void (async () => {
       try {
-        const res = await fetch(`/api/reading-position/${encodeURIComponent(articleId)}`);
+        const res = await fetch(`/api/reading-position/${encodeURIComponent(articleId)}`, {
+          signal: controller.signal,
+        });
         if (res.ok) {
           const data = (await res.json()) as {
             paragraph_index: number;
@@ -105,6 +110,7 @@ export default function ReadingPositionTracker({
         // No saved position — start fresh
       }
     })();
+    return () => controller.abort();
   }, [articleId, onPositionLoaded]);
 
   // ── IntersectionObserver: track the furthest-seen paragraph ──────────────

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import type { Article, FeedResponse } from '@/lib/types/article';
 import { initDeviceId } from '@/lib/identity/device';
@@ -70,15 +70,25 @@ export default function FeedPage() {
   const [issueMeta, setIssueMeta] = useState<DailyIssue | null>(null);
   const [issueMetaStatus, setIssueMetaStatus] = useState<IssueMetaStatus>('idle');
 
+  // Abort in-flight requests when superseded or on unmount so a slow stale
+  // response can't race a newer one into state (FE-M9).
+  const feedAbortRef = useRef<AbortController | null>(null);
+  const refreshAbortRef = useRef<AbortController | null>(null);
+  const metaAbortRef = useRef<AbortController | null>(null);
+
   const fetchFeed = useCallback(async () => {
+    feedAbortRef.current?.abort();
+    const controller = new AbortController();
+    feedAbortRef.current = controller;
     setStatus('loading');
     try {
-      const res = await fetch('/api/feed/today');
+      const res = await fetch('/api/feed/today', { signal: controller.signal });
       if (!res.ok) throw new Error(`Server error (${res.status})`);
       const json: FeedResponse = await res.json();
       setData(json);
       setStatus('success');
     } catch {
+      if (controller.signal.aborted) return; // superseded or unmounted
       setErrorMessage('Could not load your digest. Please check your connection.');
       setStatus('error');
     }
@@ -86,7 +96,17 @@ export default function FeedPage() {
 
   useEffect(() => {
     fetchFeed();
+    return () => feedAbortRef.current?.abort();
   }, [fetchFeed]);
+
+  // Unmount-only abort for the refresh + issue-meta requests
+  useEffect(
+    () => () => {
+      refreshAbortRef.current?.abort();
+      metaAbortRef.current?.abort();
+    },
+    []
+  );
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -112,15 +132,18 @@ export default function FeedPage() {
   }, []);
 
   const handleRefresh = useCallback(async () => {
+    refreshAbortRef.current?.abort();
+    const controller = new AbortController();
+    refreshAbortRef.current = controller;
     setIsRefreshing(true);
     try {
-      const res = await fetch('/api/feed/refresh', { method: 'POST' });
+      const res = await fetch('/api/feed/refresh', { method: 'POST', signal: controller.signal });
       if (!res.ok) throw new Error(`Refresh failed (${res.status})`);
       await fetchFeed();
     } catch {
       // silently ignore refresh errors — feed still shows
     } finally {
-      setIsRefreshing(false);
+      if (!controller.signal.aborted) setIsRefreshing(false);
     }
   }, [fetchFeed]);
 
@@ -140,15 +163,17 @@ export default function FeedPage() {
   useEffect(() => {
     if (status !== 'success' || issueMetaStatus !== 'idle') return;
     setIssueMetaStatus('loading');
+    const controller = new AbortController();
+    metaAbortRef.current = controller;
     void (async () => {
       try {
-        const res = await fetch('/api/issue/meta');
+        const res = await fetch('/api/issue/meta', { signal: controller.signal });
         if (res.ok) {
           const meta = (await res.json()) as DailyIssue;
           setIssueMeta(meta);
         }
       } catch { /* non-blocking */ } finally {
-        setIssueMetaStatus('ready');
+        if (!controller.signal.aborted) setIssueMetaStatus('ready');
       }
     })();
   }, [status, issueMetaStatus]);

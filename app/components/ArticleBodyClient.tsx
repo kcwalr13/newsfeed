@@ -26,6 +26,18 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
   const [showVictory, setShowVictory] = useState(false);
   const paragraphRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   const victoryRef = useRef<HTMLDivElement>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const victoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear pending timers on unmount — they otherwise fire against an
+  // unmounted article on fast navigation (FE-M9).
+  useEffect(
+    () => () => {
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      if (victoryTimerRef.current) clearTimeout(victoryTimerRef.current);
+    },
+    []
+  );
 
   const dismissVictory = useCallback(() => setShowVictory(false), []);
   useModalA11y(showVictory, victoryRef, dismissVictory);
@@ -39,7 +51,7 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
       setStoppedAt(index);
       // Scroll to a few paragraphs before the stop point so the reader sees context
       const scrollToIdx = Math.max(0, index - 1);
-      setTimeout(() => {
+      scrollTimerRef.current = setTimeout(() => {
         paragraphRefs.current[scrollToIdx]?.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
@@ -52,7 +64,7 @@ export default function ArticleBodyClient({ articleId, paragraphs }: Props) {
     setFinished(true);
     setStoppedAt(null);
     // Brief delay before showing the victory screen so the last paragraph is visible
-    setTimeout(() => setShowVictory(true), 800);
+    victoryTimerRef.current = setTimeout(() => setShowVictory(true), 800);
   }, []);
 
   // Dismiss stopped-here marker once user scrolls past it

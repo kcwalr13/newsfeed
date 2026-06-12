@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 50 · DEFERRED (multi-user): 4 · TODO: 24 · BLOCKED: 0
+- DONE/VERIFIED: 51 · DEFERRED (multi-user): 4 · TODO: 23 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M9**
+- Current branch: `main` · Last resume point: **FE-M10**
 
 ---
 
@@ -580,9 +580,15 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     for `remotePatterns`). Card images: `aspect-ratio: 16/9` (reserves the box pre-load) +
     `loading="lazy" decoding="async"`. Reader hero: `aspect-ratio` + `decoding="async"` but kept
     EAGER — it's above the fold and the likely LCP; lazy would hurt. Gate green.
-- [ ] **FE-M9** · 🟡 Medium · Fetches lack AbortController; results race on fast navigation
+- [x] **FE-M9** · 🟡 Medium · Fetches lack AbortController; results race on fast navigation
   - Fix: per-effect `AbortController`, pass `signal`, abort in cleanup; clear the ArticleBodyClient timers. (`app/page.tsx:71-151`, `archive/page.tsx:68-74`, `ReadingPositionTracker.tsx:80-101`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: AbortControllers (held in refs, abort-on-supersede +
+    abort-on-unmount, aborted-guard before state writes) added to: feed/today fetch, refresh
+    POST, issue-meta fetch (unmount-only abort to avoid the effect's own dep-driven re-run
+    cancelling it), archive fetch, and ReadingPositionTracker's load-position GET (per-article
+    cleanup). The tracker's savePosition POST keeps `keepalive` un-aborted by design (must
+    survive unload). ArticleBodyClient's two leaked timers (scroll-into-view 400ms, victory
+    800ms) now live in refs and clear on unmount. Gate green.
 - [ ] **FE-M10** · 🟡 Medium · Tap targets <44px on error/nav controls
   - Fix: `min-height:44px`/larger hit area on "Try again", "Run pipeline", archive tabs, header links, colophon links.
   - Status: TODO · Commit: — · Notes: —
@@ -800,5 +806,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-M6** → DONE: archive error state + retry (offline vs server copy); app/error.tsx;
   articles/[id]/loading.tsx. Commit: d8bafc5.
 - **FE-M8** → DONE: aspect-ratio + lazy/async on card images; aspect-ratio + async (eager LCP)
-  on reader hero. Commit: pending.
-- RESUME AT: **FE-M9**
+  on reader hero. Commit: a5cc6b7.
+- **FE-M9** → DONE: AbortControllers on all five client fetch sites + ArticleBodyClient timer
+  cleanup. Commit: pending.
+- RESUME AT: **FE-M10**
