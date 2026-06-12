@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 48 · DEFERRED (multi-user): 4 · TODO: 26 · BLOCKED: 0
+- DONE/VERIFIED: 49 · DEFERRED (multi-user): 4 · TODO: 25 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M6**
+- Current branch: `main` · Last resume point: **FE-M8**
 
 ---
 
@@ -565,9 +565,14 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     during evening hours west of UTC. The cited `articles/[id]/page.tsx:46` site no longer
     computes a "today" (it only formats `publishedAt`) — nothing to fix there. `BatchLabel.tsx`
     also UTC-slices but is a dead unimported component — left for FE-L1's deletion. Gate green.
-- [ ] **FE-M6** · 🟡 Medium · Archive conflates network error with empty; no global error/not-found/loading pages
+- [x] **FE-M6** · 🟡 Medium · Archive conflates network error with empty; no global error/not-found/loading pages
   - Fix: add error state + retry to archive; differentiate offline vs 500 copy; add `app/error.tsx`, `app/not-found.tsx`, `app/articles/[id]/loading.tsx`.
-  - Status: TODO · Commit: — · Notes: — (not-found overlaps DAT-H3)
+  - Status: DONE · Commit: pending · Notes: Archive now checks `res.ok`, tracks `errorMessage`,
+    and renders an error state + TRY AGAIN (re-runs `loadArchive`) instead of "No past issues
+    yet." on failure; copy differentiates offline/network (TypeError or `!navigator.onLine`)
+    from server error. Added editorial-styled `app/error.tsx` (global boundary with reset() +
+    offline-aware copy) and `app/articles/[id]/loading.tsx` (skeleton mirroring the reader
+    layout). `app/not-found.tsx` already existed from DAT-H3. Gate green.
 - [ ] **FE-M8** · 🟡 Medium · Raw `<img>` no dimensions → layout shift; eager, unoptimized
   - Fix: add `aspect-ratio` + `loading="lazy" decoding="async"`, or `next/image` w/ `remotePatterns`. (`ArticleCard.tsx:99-104`, `articles/[id]/page.tsx:125-130`)
   - Status: TODO · Commit: — · Notes: —
@@ -787,5 +792,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   Commit: 957f6d8.
 - **FE-M3** → DONE: feedbackReady gate on dot-strip seeding. Commit: b636403.
 - **FE-M5** → DONE: localTodayString util; archive TODAY/daysAgo + cover/letter daily keys now
-  local-timezone correct. Commit: pending.
-- RESUME AT: **FE-M6**
+  local-timezone correct. Commit: e316670.
+- **FE-M6** → DONE: archive error state + retry (offline vs server copy); app/error.tsx;
+  articles/[id]/loading.tsx. Commit: pending.
+- RESUME AT: **FE-M8**

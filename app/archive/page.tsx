@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 
 function cleanDesc(text: string): string {
@@ -59,6 +59,32 @@ export default function ArchivePage() {
   const [batches,  setBatches]  = useState<BatchSummary[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  // Network/server failure must not render as "No past issues yet." (FE-M6)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadArchive = useCallback(() => {
+    setLoading(true);
+    setErrorMessage(null);
+    fetch('/api/archive')
+      .then((r) => {
+        if (!r.ok) throw new Error(`Server error (${r.status})`);
+        return r.json();
+      })
+      .then((data: BatchSummary[]) => {
+        setBatches(data);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        const offline = typeof navigator !== 'undefined' && !navigator.onLine;
+        const network = err instanceof TypeError; // fetch rejects with TypeError on network failure
+        setErrorMessage(
+          offline || network
+            ? 'Could not reach the archive. Check your connection and try again.'
+            : 'The archive could not be loaded right now. Please try again.'
+        );
+        setLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
     const fb = getAllFeedback();
@@ -68,14 +94,8 @@ export default function ArchivePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFeedback(map);
 
-    fetch('/api/archive')
-      .then((r) => r.json())
-      .then((data: BatchSummary[]) => {
-        setBatches(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+    loadArchive();
+  }, [loadArchive]);
 
   // Shelf: all articles across all batches with feedback === 'save'
   const shelfItems = batches.flatMap((b) =>
@@ -160,8 +180,27 @@ export default function ArchivePage() {
           </div>
         )}
 
+        {/* ERROR STATE */}
+        {!loading && errorMessage && (
+          <div className="py-16 text-center">
+            <p
+              className="ql-serif"
+              style={{ fontSize: '18px', fontStyle: 'italic', color: 'var(--muted)', marginBottom: '16px' }}
+            >
+              {errorMessage}
+            </p>
+            <button
+              onClick={loadArchive}
+              className="ql-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+              style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.14em', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px', padding: '12px 16px' }}
+            >
+              TRY AGAIN
+            </button>
+          </div>
+        )}
+
         {/* ISSUES TAB */}
-        {!loading && tab === 'issues' && (
+        {!loading && !errorMessage && tab === 'issues' && (
           <>
             {batches.length === 0 ? (
               <div className="py-16 text-center">
@@ -255,7 +294,7 @@ export default function ArchivePage() {
         )}
 
         {/* SHELF TAB */}
-        {!loading && tab === 'shelf' && (
+        {!loading && !errorMessage && tab === 'shelf' && (
           <>
             {shelfItems.length === 0 ? (
               <div className="py-16 text-center">
