@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 33 · DEFERRED (multi-user): 4 · TODO: 10 · BLOCKED: 0
+- DONE/VERIFIED: 34 · DEFERRED (multi-user): 4 · TODO: 9 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M9**
+- Current branch: `main` · Last resume point: **DAT-H5**
 
 ---
 
@@ -501,9 +501,14 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     `deleteConceptNodesByIds` (edge delete + node delete — no more orphaned edges on partial
     failure) and `associateFeedbackToUser` (merge-newer + claim-unclaimed). The stale comment
     claiming the driver lacks transaction support was removed. Gate green.
-- [ ] **DAT-M9** · 🟡 Medium · `data/sources.json` runtime read may not be traced into the Vercel bundle
+- [x] **DAT-M9** · 🟡 Medium · `data/sources.json` runtime read may not be traced into the Vercel bundle
   - Fix: add `outputFileTracingIncludes` for `data/sources.json` + `query_banks.default.json` in `next.config.ts`, or move sources to DB. (`lib/pipeline/config.ts:38-42`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `next.config.ts` now sets `outputFileTracingIncludes`
+    for `/api/pipeline/run` and `/api/feed/refresh` (the two routes whose handlers
+    `fs.readFileSync` at request time) covering `data/sources.json` + `data/query_banks*.json`.
+    Verified post-build: both routes' `.nft.json` trace manifests include sources.json and
+    query_banks.default.json. Gate green. (Side observation: the legacy `data/batches/*.json` +
+    `pipeline.log` also get traced into the bundle — DAT-L7's deletion will slim that.)
 - [ ] **DAT-H5** · 🟠 High · `/api/feed/refresh` unauthenticated + in-memory cooldown (cost / clobber)
   - Fix: require session/secret; persist cooldown in Postgres atomically; take an advisory lock before running. (`app/api/feed/refresh/route.ts:9-15`, `lib/pipeline/cooldown.ts:5`) Overlaps SEC-H2 / PIPE-M3.
   - Status: TODO · Commit: — · Notes: —
@@ -736,5 +741,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-M7** → DONE: migrate upserts atomic via sql.transaction; 500-record cap; timestamp
   validation in route. Commit: 6cb4a68.
 - **DAT-M8** → DONE: concept node+edge delete and associateFeedbackToUser wrapped in
-  sql.transaction. Commit: pending.
-- RESUME AT: **DAT-M9**
+  sql.transaction. Commit: 75480e0.
+- **DAT-M9** → DONE: outputFileTracingIncludes for the two pipeline routes; .nft.json manifests
+  verified to include the data files. Commit: pending.
+- RESUME AT: **DAT-H5**
