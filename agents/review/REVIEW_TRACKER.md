@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 26 · DEFERRED (multi-user): 4 · TODO: 17 · BLOCKED: 0
+- DONE/VERIFIED: 27 · DEFERRED (multi-user): 4 · TODO: 16 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M2**
+- Current branch: `main` · Last resume point: **DAT-M3**
 
 ---
 
@@ -450,9 +450,14 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     "generate at pipeline time" half is unnecessary once persistence works: rationale generation
     is already incremental (`generateMissingRationales` no-ops when set) and the patch — which
     previously never landed in prod, causing the per-load recompute — now persists. Gate green.
-- [ ] **DAT-M2** · 🟡 Medium · `patchBatchArticleFields` read-modify-write can clobber a refreshed batch
+- [x] **DAT-M2** · 🟡 Medium · `patchBatchArticleFields` read-modify-write can clobber a refreshed batch
   - Fix: single-statement `jsonb_set` update, or guard `WHERE generated_at = ...`. (`lib/pipeline/storage.ts:74-98`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Took the guard option (smaller diff than a per-article
+    `jsonb_set` chain): the UPDATE now requires `generated_at = <value seen at read>` so a batch
+    regenerated between read and write is left untouched and the stale patch is dropped (patching
+    is best-effort; the next feed load recomputes). Verified read-only against live Neon that
+    `generated_at::text` round-trips to an equal timestamptz, so the guard matches when no
+    concurrent regen occurred. Gate green.
 - [ ] **DAT-M3** · 🟡 Medium · `/api/issue/meta` no try/catch; unvalidated `date` param
   - Fix: wrap in try/catch → JSON 500; validate `^\d{4}-\d{2}-\d{2}$`. (`app/api/issue/meta/route.ts:17-57`)
   - Status: TODO · Commit: — · Notes: —
@@ -692,4 +697,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   `.claude/settings.local.json`) so `git add -A` can't scoop up session artifacts.
 - **DAT-M1** → DONE: `after()` (next/server) wraps the feedback-route concept-extraction job and
   the feed/today rationale batch patch; background work now survives the response. Gate green.
-- RESUME AT: **DAT-M2**
+- **DAT-M2** → DONE: `patchBatchArticleFields` UPDATE guarded on the read-time `generated_at`
+  (optimistic concurrency; stale patch dropped if the batch was regenerated). Round-trip equality
+  verified read-only on live Neon. Commit: ac60a5d was DAT-M1; this one pending.
+- RESUME AT: **DAT-M3**

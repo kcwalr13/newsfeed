@@ -123,6 +123,11 @@ export async function findArticleAcrossBatches(id: string): Promise<{
  *
  * Takes a Map of articleId → partial Article fields to merge.
  * No-op if the batch doesn't exist.
+ *
+ * The UPDATE is guarded on the generated_at value seen at read time, so a
+ * batch regenerated concurrently (e.g. by a refresh) is never clobbered with
+ * the stale merged copy — the patch is simply dropped (it's best-effort and
+ * regenerated batches recompute these fields on the next feed load).
  */
 export async function patchBatchArticleFields(
   batchDate: string,
@@ -147,6 +152,7 @@ export async function patchBatchArticleFields(
     UPDATE article_batches
     SET articles = ${JSON.stringify(updated)}::jsonb
     WHERE batch_date = ${batchDate}
+      AND generated_at = ${existing.generatedAt}::timestamptz
   `;
 }
 
