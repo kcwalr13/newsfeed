@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 49 · DEFERRED (multi-user): 4 · TODO: 25 · BLOCKED: 0
+- DONE/VERIFIED: 50 · DEFERRED (multi-user): 4 · TODO: 24 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M8**
+- Current branch: `main` · Last resume point: **FE-M9**
 
 ---
 
@@ -573,9 +573,13 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     from server error. Added editorial-styled `app/error.tsx` (global boundary with reset() +
     offline-aware copy) and `app/articles/[id]/loading.tsx` (skeleton mirroring the reader
     layout). `app/not-found.tsx` already existed from DAT-H3. Gate green.
-- [ ] **FE-M8** · 🟡 Medium · Raw `<img>` no dimensions → layout shift; eager, unoptimized
+- [x] **FE-M8** · 🟡 Medium · Raw `<img>` no dimensions → layout shift; eager, unoptimized
   - Fix: add `aspect-ratio` + `loading="lazy" decoding="async"`, or `next/image` w/ `remotePatterns`. (`ArticleCard.tsx:99-104`, `articles/[id]/page.tsx:125-130`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Took the CSS option (the Article type carries no
+    image dimensions, so `next/image` width/height isn't available; remote hosts are unbounded
+    for `remotePatterns`). Card images: `aspect-ratio: 16/9` (reserves the box pre-load) +
+    `loading="lazy" decoding="async"`. Reader hero: `aspect-ratio` + `decoding="async"` but kept
+    EAGER — it's above the fold and the likely LCP; lazy would hurt. Gate green.
 - [ ] **FE-M9** · 🟡 Medium · Fetches lack AbortController; results race on fast navigation
   - Fix: per-effect `AbortController`, pass `signal`, abort in cleanup; clear the ArticleBodyClient timers. (`app/page.tsx:71-151`, `archive/page.tsx:68-74`, `ReadingPositionTracker.tsx:80-101`)
   - Status: TODO · Commit: — · Notes: —
@@ -794,5 +798,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-M5** → DONE: localTodayString util; archive TODAY/daysAgo + cover/letter daily keys now
   local-timezone correct. Commit: e316670.
 - **FE-M6** → DONE: archive error state + retry (offline vs server copy); app/error.tsx;
-  articles/[id]/loading.tsx. Commit: pending.
-- RESUME AT: **FE-M8**
+  articles/[id]/loading.tsx. Commit: d8bafc5.
+- **FE-M8** → DONE: aspect-ratio + lazy/async on card images; aspect-ratio + async (eager LCP)
+  on reader hero. Commit: pending.
+- RESUME AT: **FE-M9**

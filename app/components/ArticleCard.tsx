@@ -98,11 +98,16 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
             aria-label={`Read: ${article.title}`}
           >
             <div className="ql-duotone-wrapper rounded-sm overflow-hidden" style={{ maxHeight: '220px' }}>
+              {/* aspect-ratio reserves the slot before the image loads (no
+                  layout shift); the Article type carries no dimensions, so a
+                  fixed editorial ratio capped at 220px stands in. */}
               <img
                 src={article.imageUrl}
                 alt=""
                 className="w-full object-cover"
-                style={{ maxHeight: '220px' }}
+                loading="lazy"
+                decoding="async"
+                style={{ aspectRatio: '16 / 9', maxHeight: '220px' }}
               />
               <div className="ql-duotone-shadow" />
               <div className="ql-duotone-highlight" />

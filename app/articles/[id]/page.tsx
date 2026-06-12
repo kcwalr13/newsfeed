@@ -119,11 +119,14 @@ export default async function ArticlePage({ params, searchParams }: Props) {
               className="ql-duotone-wrapper rounded-sm overflow-hidden mb-6"
               style={{ maxHeight: '280px' }}
             >
+              {/* Above the fold (likely LCP) — keep eager, but reserve the
+                  box via aspect-ratio and decode off the main thread. */}
               <img
                 src={article.imageUrl}
                 alt=""
                 className="w-full object-cover"
-                style={{ maxHeight: '280px' }}
+                decoding="async"
+                style={{ aspectRatio: '16 / 9', maxHeight: '280px' }}
               />
               <div className="ql-duotone-shadow" />
               <div className="ql-duotone-highlight" />
