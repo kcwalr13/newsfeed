@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 4 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 41
-- Current branch expected: `main` · Last resume point: PIPE-Q1
+- DONE: 5 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 40
+- Current branch expected: `main` · Last resume point: PIPE-Q2
 
 ---
 
@@ -156,11 +156,21 @@ npm run dev           # for manual/browser spot-checks
 
 ## TIER 2 — NEXT (quality & correctness)
 
-- [ ] **PIPE-Q1** · 🟠 High (UX-validated) · Body-extraction noise pollutes the reader
+- [x] **PIPE-Q1** · 🟠 High (UX-validated) · Body-extraction noise pollutes the reader
   - Where: `lib/discovery/bodyExtractor.ts`, `lib/pipeline/adapters/rssAdapter.ts`
   - Fix: strip page chrome from extracted bodies — repeated title/byline/timestamp, `Share on Facebook/X/Reddit/Email/Bluesky`, "Featured Video", and trailing related-article lists. Prefer main-content extraction; drop boilerplate blocks before storing `bodyText`.
   - Verify: open today's lead article → real prose starts at paragraph 1, no share-bar/related junk.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New shared `lib/utils/bodyClean.ts`
+    (`cleanBodyParagraphs`): drops share/action-bar lines (token-set match: Share on X / Save
+    Article / Read Later / Copy link…), "Featured Video", repeated title + byline + dateline +
+    short label/credit lines in the top window, truncates at related-content headings, and
+    tail-trims trailing topic tags / Title-Case next-article headlines / dates. Wired into both
+    `bodyExtractor` (plus ~20 new DOM noise selectors: .share*, .related*, .newsletter*,
+    .author-bio, etc., and og:title for title-echo detection) and `rssAdapter.htmlToPlainText`.
+    Also fixed `types/node-html-parser.d.ts` stub (was shadowing real package types and missing
+    `getAttribute`/`text`). Verified live on 3 articles from the 2026-06-12 batch: prose starts
+    at paragraph 1, Save Article/Read Later/Next-article junk gone. Note: stored batches keep old
+    bodyText until next pipeline run. Gate green.
 
 - [ ] **PIPE-Q2** · 🟠 High (UX-validated) · Quality gate lets housekeeping/video posts into the curated feed
   - Where: `lib/discovery/qualityGate.ts`, fixed-RSS path in `lib/pipeline/run.ts` (fixed sources bypass the LLM eval)
@@ -439,5 +449,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   270s wall-clock budget with 120s post-discovery reserve (skip / cut-short discovery, always
   write the batch). Commit: f500760.
 - **PIPE-H1** → DONE: lazy key-guarded LLM clients; total-LLM-failure detection → degraded
-  batch + 500 from both routes; verified by missing-key simulation.
-- RESUME AT: **PIPE-Q1**
+  batch + 500 from both routes; verified by missing-key simulation. Commit: f4cf7a9.
+- **PIPE-Q1** → DONE: shared `cleanBodyParagraphs` chrome-stripper in both extraction paths
+  (+ DOM noise selectors, og:title echo removal, tail trim); fixed shadowing
+  `types/node-html-parser.d.ts` stub. Live-verified on 3 articles.
+- RESUME AT: **PIPE-Q2**

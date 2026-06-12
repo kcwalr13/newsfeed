@@ -1,5 +1,6 @@
 import Parser from 'rss-parser';
 import type { Article, Source } from '../../types/article';
+import { cleanBodyParagraphs } from '@/lib/utils/bodyClean';
 
 type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
 
@@ -26,8 +27,8 @@ function decodeEntities(str: string): string {
  * paragraph structure. Block-level closing tags become newlines so the article
  * reader can split on '\n' to render individual paragraphs.
  */
-function htmlToPlainText(html: string): string {
-  return decodeEntities(
+function htmlToPlainText(html: string, title?: string): string {
+  const text = decodeEntities(
     html
       // Block-level closing tags → paragraph break
       .replace(/<\/(?:p|li|blockquote|pre|div|section|article|h[1-6]|td|th)>/gi, '\n')
@@ -43,6 +44,8 @@ function htmlToPlainText(html: string): string {
       .join('\n')
       .trim()
   );
+  // Strip share bars, repeated title/byline, and trailing related-post blocks
+  return cleanBodyParagraphs(text.split('\n'), title).join('\n');
 }
 
 /**
@@ -82,12 +85,13 @@ export async function fetchRssArticles(source: Source): Promise<PartialArticle[]
       const contentEncoded = anyItem['contentEncoded'] as string | undefined;
       const bodyCandidate = contentEncoded || item.content;
       const rawBody = bodyCandidate && bodyCandidate.length > 200 ? bodyCandidate : undefined;
-      const bodyText = rawBody ? htmlToPlainText(rawBody) : undefined;
+      const decodedTitle = decodeEntities((item.title ?? '').trim());
+      const bodyText = rawBody ? htmlToPlainText(rawBody, decodedTitle) : undefined;
       const summary = anyItem['summary'] as string | undefined;
       const rawDescription = item.contentSnippet || summary;
 
       return {
-        title: decodeEntities((item.title ?? '').trim()),
+        title: decodedTitle,
         articleUrl: item.link ?? '',
         publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : now,
         fetchedAt: now,

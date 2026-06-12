@@ -15,6 +15,9 @@ declare module 'node-html-parser' {
     querySelector(selector: string): HTMLElement | null;
     remove(): void;
     get textContent(): string;
+    /** Unescaped text value of this node and its children. */
+    get text(): string;
+    getAttribute(key: string): string | undefined;
   }
 
   export function parse(html: string): HTMLElement;

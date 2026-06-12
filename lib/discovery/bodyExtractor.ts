@@ -1,6 +1,7 @@
 // SERVER-SIDE ONLY — never import in browser bundles.
 
 import { parse } from 'node-html-parser';
+import { cleanBodyParagraphs } from '@/lib/utils/bodyClean';
 
 export type ExtractionFailureReason =
   | 'fetch_timeout'
@@ -65,6 +66,16 @@ export function extractBodyTextFromHtml(html: string, _url: string): ExtractionR
     'aside', 'form', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
     '.sidebar', '.nav', '.menu', '.advertisement', '.ad', '.social-share',
     '.comments', '#comments',
+    // Share bars / social chrome
+    '.share', '.share-buttons', '.share-bar', '.sharing', '.sharedaddy',
+    '.social', '.social-links', '.social-media',
+    // Related-article / recirculation blocks
+    '.related', '.related-posts', '.related-articles', '.jp-relatedposts',
+    '.recirculation', '.post-navigation', '.pagination',
+    // Newsletter / subscription prompts and misc chrome
+    '.newsletter', '.newsletter-signup', '.subscribe', '.subscription',
+    '.breadcrumb', '.breadcrumbs', '.tags', '.post-tags',
+    '.author-bio', '.author-box', '.byline',
   ];
   for (const sel of noiseSelectors) {
     try {
@@ -147,7 +158,15 @@ export function extractBodyTextFromHtml(html: string, _url: string): ExtractionR
     .map((line) => line.replace(/\s+/g, ' ').trim())
     .filter((line) => line.split(/\s+/).filter(Boolean).length >= 2);
 
-  const plainText = paragraphs.join('\n');
+  // Strip page chrome the DOM pass missed: repeated title/byline/dateline at
+  // the top, share-bar lines, trailing related-article lists.
+  const docTitle =
+    root.querySelector('meta[property="og:title"]')?.getAttribute('content') ??
+    root.querySelector('title')?.text ??
+    undefined;
+  const cleaned = cleanBodyParagraphs(paragraphs, docTitle);
+
+  const plainText = cleaned.join('\n');
   const wordCount = plainText.split(/\s+/).filter(Boolean).length;
   if (wordCount < 300) {
     return { success: false, reason: 'below_minimum_length' };
