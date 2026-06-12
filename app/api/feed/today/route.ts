@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     console.error('[feed/today] identity/feedback/aesthetic fetch failed, returning unranked:', err);
     const publicBatchArticles = batch.articles.map(article => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, ...rest } = article;
+      const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, bodyText: _bt, ...rest } = article;
       return rest;
     });
     return NextResponse.json(
@@ -128,10 +128,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Strip internal fields before sending to client; keep explorationSlotType + rationale for display
+  // Strip internal fields before sending to client; keep explorationSlotType + rationale for
+  // display. bodyText is stripped too — the feed renders cards only; the reader page loads the
+  // body server-side via findArticleAcrossBatches.
   const publicArticles = rankedArticles.map(article => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, ...rest } = article;
+    const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, bodyText: _bt, ...rest } = article;
     return rest;
   });
 

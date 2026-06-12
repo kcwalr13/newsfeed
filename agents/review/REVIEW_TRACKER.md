@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 30 · DEFERRED (multi-user): 4 · TODO: 13 · BLOCKED: 0
+- DONE/VERIFIED: 31 · DEFERRED (multi-user): 4 · TODO: 12 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M6**
+- Current branch: `main` · Last resume point: **DAT-M7**
 
 ---
 
@@ -480,9 +480,13 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     (probeInfo) and the after() concept-extraction job (bodyText), and skips the read entirely
     for dwell-only beacons (value null). Verified live (read-only): projection returns the right
     element with bodyText; missing id → empty. Gate green.
-- [ ] **DAT-M6** · 🟡 Medium · Oversized payloads: feed ships full `bodyText`; archive pulls 30 full batches
+- [x] **DAT-M6** · 🟡 Medium · Oversized payloads: feed ships full `bodyText`; archive pulls 30 full batches
   - Fix: project fields in SQL (`jsonb_build_object` over `jsonb_array_elements`); strip `bodyText` from `/api/feed/today`. (`app/api/archive/route.ts:28-33`, `app/api/feed/today/route.ts:130-134`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Archive half was already resolved (route maps each
+    article to display fields only — no bodyText in the response; verified by sweep + grep).
+    Feed half fixed: `bodyText` added to the stripped fields on BOTH feed/today response paths
+    (ranked + unranked fallback). Safe: no client code under app/ reads bodyText from the feed
+    API; the reader page loads it server-side via `findArticleAcrossBatches`. Gate green.
 - [ ] **DAT-M7** · 🟡 Medium · `migrateFeedbackRecords`: unbounded parallel writes, unvalidated timestamps, no txn
   - Fix: cap `records.length` (~500), validate timestamps, chunk sequentially or `sql.transaction`. (`lib/db/feedback.ts:119-133`)
   - Status: TODO · Commit: — · Notes: —
@@ -718,5 +722,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-M4** → DONE: numeric/timestamp validation on reading-position POST (400s) +
   `Number.isFinite` dwell guard in feedback POST. Commit: dd82b0e.
 - **DAT-M5** → DONE: single SQL-side JSONB projection per feedback POST (was 2 full-batch
-  reads); beacons skip the read. Live-verified projection query. Commit: pending.
-- RESUME AT: **DAT-M6**
+  reads); beacons skip the read. Live-verified projection query. Commit: 7ddcbad.
+- **DAT-M6** → DONE: bodyText stripped from both feed/today response paths (archive half was
+  already fixed). Commit: pending.
+- RESUME AT: **DAT-M7**
