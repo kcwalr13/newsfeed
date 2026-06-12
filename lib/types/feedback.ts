@@ -5,6 +5,8 @@ export interface QueuedWrite {
   value: 'like' | 'dislike' | 'save' | 'cleared';
   /** ISO-8601 timestamp when the action was taken client-side */
   timestamp: string;
+  /** Failed drain attempts so far (absent = 0). Items are dropped after a cap. */
+  attempts?: number;
 }
 
 /** Shape returned by GET /api/feedback */

@@ -84,6 +84,17 @@ export const MIGRATION_FLAG_KEY  = 'dd_feedback_migrated';
 // Concurrency guard — prevents overlapping drain runs
 let isDraining = false;
 
+// Retry policy (FE-M2): only transient failures are worth retrying. A 4xx
+// (except 429) is a poison pill — the server has rejected the payload and
+// will keep rejecting it forever.
+const MAX_QUEUE_ATTEMPTS = 8;
+const QUEUE_ITEM_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/** Transient = worth retrying: network error (status undefined), 5xx, or 429. */
+function isTransientStatus(status: number | undefined): boolean {
+  return status === undefined || status >= 500 || status === 429;
+}
+
 function readQueue(): QueuedWrite[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -115,6 +126,7 @@ async function serverSetFeedback(
   value: 'like' | 'dislike' | 'save',
   dwellSeconds?: number
 ): Promise<void> {
+  let status: number | undefined;
   try {
     const body: Record<string, unknown> = { articleId, value };
     if (dwellSeconds !== undefined) body.dwellSeconds = dwellSeconds;
@@ -123,8 +135,15 @@ async function serverSetFeedback(
       headers: { 'Content-Type': 'application/json', ...getDeviceHeaders() },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (res.ok) return;
+    status = res.status;
+    throw new Error(`HTTP ${res.status}`);
   } catch (err) {
+    if (!isTransientStatus(status)) {
+      // 4xx: the server rejected this payload — retrying can never succeed.
+      console.error('[feedback] server rejected write, dropping:', err);
+      return;
+    }
     console.error('[feedback] server write failed, queuing:', err);
     enqueue({ articleId, value, timestamp: new Date().toISOString() });
   }
@@ -136,22 +155,53 @@ async function serverSetFeedback(
  * Fire-and-forget — not exported.
  */
 async function serverClearFeedback(articleId: string): Promise<void> {
+  let status: number | undefined;
   try {
     const res = await fetch(`/api/feedback/${encodeURIComponent(articleId)}`, {
       method: 'DELETE',
       headers: { ...getDeviceHeaders() },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (res.ok) return;
+    status = res.status;
+    throw new Error(`HTTP ${res.status}`);
   } catch (err) {
+    if (!isTransientStatus(status)) {
+      console.error('[feedback] server rejected delete, dropping:', err);
+      return;
+    }
     console.error('[feedback] server delete failed, queuing:', err);
     enqueue({ articleId, value: 'cleared', timestamp: new Date().toISOString() });
   }
 }
 
 /**
+ * Removes one item (matched by identity) from a FRESH read of the queue, so
+ * an enqueue() that happened during an in-flight await is never clobbered by
+ * writing back a stale snapshot. Optionally mutates the matched item instead
+ * of removing it.
+ */
+function updateQueueItem(item: QueuedWrite, mutate?: (q: QueuedWrite) => void): void {
+  const current = readQueue();
+  const idx = current.findIndex(
+    (q) =>
+      q.articleId === item.articleId &&
+      q.value === item.value &&
+      q.timestamp === item.timestamp
+  );
+  if (idx === -1) return;
+  if (mutate) {
+    mutate(current[idx]);
+  } else {
+    current.splice(idx, 1);
+  }
+  writeQueue(current);
+}
+
+/**
  * Drains the offline retry queue. Processes items oldest-first.
- * Removes each item only after a 2xx response.
- * Stops on first failure. Safe to call concurrently (guarded by isDraining).
+ * Removes each item after a 2xx response, a non-retryable 4xx (poison pill),
+ * attempt-cap exhaustion, or TTL expiry. Stops on the first transient failure
+ * (likely offline). Safe to call concurrently (guarded by isDraining).
  */
 export async function drainQueue(): Promise<void> {
   if (typeof window === 'undefined' || isDraining) return;
@@ -162,6 +212,14 @@ export async function drainQueue(): Promise<void> {
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
+
+      const age = Date.now() - Date.parse(item.timestamp);
+      if (Number.isFinite(age) && age > QUEUE_ITEM_TTL_MS) {
+        updateQueueItem(item); // expired — drop
+        continue;
+      }
+
+      let status: number | undefined;
       try {
         let res: Response;
         if (item.value === 'cleared') {
@@ -176,23 +234,32 @@ export async function drainQueue(): Promise<void> {
             body: JSON.stringify({ articleId: item.articleId, value: item.value }),
           });
         }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        // Remove the completed item from a FRESH read: an enqueue() that
-        // happened during the await above must not be clobbered by writing
-        // back a stale snapshot of the queue.
-        const current = readQueue();
-        const idx = current.findIndex(
-          (q) =>
-            q.articleId === item.articleId &&
-            q.value === item.value &&
-            q.timestamp === item.timestamp
-        );
-        if (idx !== -1) {
-          current.splice(idx, 1);
-          writeQueue(current);
+        if (!res.ok) {
+          status = res.status;
+          throw new Error(`HTTP ${res.status}`);
         }
+        updateQueueItem(item); // sent — remove
       } catch {
-        break;
+        if (!isTransientStatus(status)) {
+          // Poison pill: the server will never accept this item — drop it so
+          // it can't wedge the queue forever.
+          console.error(
+            `[feedback] dropping poison queue item (HTTP ${status}):`,
+            item.articleId
+          );
+          updateQueueItem(item);
+          continue;
+        }
+        const attempts = (item.attempts ?? 0) + 1;
+        if (attempts >= MAX_QUEUE_ATTEMPTS) {
+          console.error('[feedback] dropping queue item after max retries:', item.articleId);
+          updateQueueItem(item);
+          continue;
+        }
+        updateQueueItem(item, (q) => {
+          q.attempts = attempts;
+        });
+        break; // transient failure — likely offline; retry the rest later
       }
     }
   } finally {

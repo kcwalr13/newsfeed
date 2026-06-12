@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 45 · DEFERRED (multi-user): 4 · TODO: 29 · BLOCKED: 0
+- DONE/VERIFIED: 46 · DEFERRED (multi-user): 4 · TODO: 28 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M2**
+- Current branch: `main` · Last resume point: **FE-M3**
 
 ---
 
@@ -542,9 +542,13 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     from localStorage in a `[articleId]` effect after mount, so server markup and first client
     render agree. Justified eslint-disable for set-state-in-effect (same pattern as the lint
     baseline's other hydration syncs). Gate green.
-- [ ] **FE-M2** · 🟡 Medium · Feedback retry queue wedged by a 4xx poison-pill; retried forever
+- [x] **FE-M2** · 🟡 Medium · Feedback retry queue wedged by a 4xx poison-pill; retried forever
   - Fix: only enqueue on network/5xx/429; drop on 4xx; add max-attempts/TTL. (`lib/feedback/store.ts:126-190`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `isTransientStatus` (network/5xx/429) gates both
+    enqueue paths — 4xx rejections are logged and dropped, never queued. `drainQueue` now drops
+    poison 4xx items and continues; transient failures bump a persisted `attempts` counter
+    (dropped at 8) and stop the drain; items older than 7 days are TTL-dropped. All queue writes
+    go through `updateQueueItem` (fresh-read removal/mutation, keeps the DAT-L9 fix). Gate green.
 - [ ] **FE-M3** · 🟡 Medium · New-device feedback sync race: dot-strip seeded before server feedback loads
   - Fix: set a `feedbackReady` state after `loadFromServer`; include in the seeding effect deps. (`app/page.tsx:89-134`)
   - Status: TODO · Commit: — · Notes: —
@@ -768,5 +772,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   on scratch rows. Commit: e0f5c67.
 - **DAT-L3** → DONE: EMA blend moved into a single atomic upsert (pgvector element-wise math);
   concurrent-update loss verified fixed on scratch rows. Commit: d23d560.
-- **FE-M1** → DONE: hydration-safe feedback state init (null + post-mount sync). Commit: pending.
-- RESUME AT: **FE-M2**
+- **FE-M1** → DONE: hydration-safe feedback state init (null + post-mount sync). Commit: c492d20.
+- **FE-M2** → DONE: transient-only enqueue, poison-pill drop, attempts cap (8), 7-day TTL.
+  Commit: pending.
+- RESUME AT: **FE-M3**
