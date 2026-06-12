@@ -7,8 +7,10 @@ type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
  * Rules applied in order:
  * 1. Discard articles with empty/falsy title.
  * 2. Discard articles with empty/falsy articleUrl.
- * 3. Deduplicate by articleUrl (first occurrence wins).
- * 4. Trim to limit items.
+ * 3. Discard articles whose URL is not http(s) — scraped feeds could otherwise
+ *    inject javascript:/data: URLs that the UI renders as links (FE-L6).
+ * 4. Deduplicate by articleUrl (first occurrence wins).
+ * 5. Trim to limit items.
  */
 export function validateAndTrim(
   candidates: PartialArticle[],
@@ -20,6 +22,7 @@ export function validateAndTrim(
   for (const article of candidates) {
     if (!article.title || article.title.trim() === '') continue;
     if (!article.articleUrl || article.articleUrl.trim() === '') continue;
+    if (!/^https?:\/\//i.test(article.articleUrl.trim())) continue;
     if (seen.has(article.articleUrl)) continue;
 
     seen.add(article.articleUrl);

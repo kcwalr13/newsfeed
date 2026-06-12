@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 58 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 15 · BLOCKED: 0
+- DONE/VERIFIED: 59 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 14 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-L6**
+- Current branch: `main` · Last resume point: **FE-L7**
 
 ---
 
@@ -607,7 +607,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **FE-L3** · 🟢 · Service worker registration-only (no offline). Add versioned cache + network-first for `/api/*` when ready. (`public/sw.js`) — SKIPPED (deliberate defer, per the finding's own "when ready"): sw.js explicitly documents offline caching as a future milestone; shipping a cache layer before the offline UX is designed risks silently serving stale issues. Revisit alongside a real offline reading feature. No code change.
 - [x] **FE-L4** · 🟢 · `export const dynamic='force-dynamic'` in a client component is ignored; remove. (`app/auth/page.tsx:3`) — DONE: removed (page is 'use client'; the route segment option only applies to server components, so this was a no-op). Commit: fix(FE-L4).
 - [x] **FE-L5** · 🟢 · Entity decoding double-applied + astral-unsafe + wrong order. Use `fromCodePoint`, decode `&amp;` last. (`articles/[id]/page.tsx:17-33`) (≈PIPE-M7) — DONE (one commit with PIPE-M7, as the tracker pairs them): both the display decoder and the rssAdapter ingest decoder now delegate to a single shared `lib/utils/htmlEntities.ts` — named entities first (amp excluded), numeric dec/hex via `String.fromCodePoint` (astral-safe, try/catch passthrough on invalid code points), `&amp;` strictly last (kills the `&amp;#8217;` double-decode). 8 test vectors pass (incl. double-decode guard, emoji, invalid code point). Commit: fix(PIPE-M7).
-- [ ] **FE-L6** · 🟢 · `articleUrl` scheme never validated → guard `^https?:` at ingest (blocks `javascript:`/`data:`). (`validator.ts:22-25`)
+- [x] **FE-L6** · 🟢 · `articleUrl` scheme never validated → guard `^https?:` at ingest (blocks `javascript:`/`data:`). (`validator.ts:22-25`) — DONE: `validateAndTrim` (the shared validation point for all fixed-source adapters) now discards any candidate whose URL doesn't match `^https?://`. Discovery candidates originate from Brave web results (https by construction). Commit: fix(FE-L6).
 - [ ] **FE-L7** · 🟢 · Empty-feed shows 7-dot strip + "0/7"; `?pos=abc` → "№ NaN"; dot strips lack aria-label. (`app/page.tsx:156`, `articles/[id]/page.tsx:57-58`)
 - [ ] **FE-L8** · 🟢 · Trim font families/weights (Inter Tight barely used). (`app/layout.tsx:7-27`)
 - [x] **FE-L9** · 🟢 · RefreshButton cooldown effect churn (dead component; fix only if revived). — DONE via FE-L1: RefreshButton.tsx deleted (never imported), so there is no effect to fix.
@@ -832,5 +832,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   "when ready"); logged in Decisions Log. Commit: 3479100.
 - **FE-L4** → DONE: dead force-dynamic export removed from client auth page. Commit: 8eb05cd.
 - **FE-L5 + PIPE-M7** → DONE: shared astral-safe, order-correct entity decoder for ingest +
-  display; 8 vectors verified. Commit: pending.
-- RESUME AT: **FE-L6**
+  display; 8 vectors verified. Commit: 5298212.
+- **FE-L6** → DONE: https?-only scheme guard in validateAndTrim. Commit: pending.
+- RESUME AT: **FE-L7**
