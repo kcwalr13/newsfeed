@@ -10,9 +10,11 @@
  *
  * Edge cases:
  *   - If either vector has magnitude 0 (all-zeros), returns 0.0 rather than NaN.
- *   - Vectors must be the same length; behavior with mismatched lengths is undefined.
+ *   - Mismatched lengths or empty vectors return 0.0 (no signal) instead of
+ *     silently truncating to the shorter vector (PIPE-L1).
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0.0;
   let dot = 0;
   let magA = 0;
   let magB = 0;

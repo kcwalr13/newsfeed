@@ -17,7 +17,10 @@ import {
  * into a number[]. Neon returns vector columns as strings.
  */
 function parseVectorString(s: string): number[] {
-  return s.replace(/^\[|\]$/g, '').split(',').map(Number);
+  // Non-finite entries (malformed DB strings → NaN) are dropped so downstream
+  // math can't silently propagate NaN; a short vector then fails the
+  // cosineSimilarity length guard instead (PIPE-L1).
+  return s.replace(/^\[|\]$/g, '').split(',').map(Number).filter(Number.isFinite);
 }
 
 /**
