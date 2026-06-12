@@ -16,7 +16,7 @@
   /* Typography */
   --font-serif:  "EB Garamond", Georgia, serif;
   --font-mono:   "JetBrains Mono", "Courier New", monospace;
-  --font-sans:   "Inter Tight", system-ui, sans-serif;
+  --font-sans:   system-ui, sans-serif; /* UI chrome only — content uses serif/mono (FE-L8) */
 }
 
 /* Dark theme */

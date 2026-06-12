@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { EB_Garamond, JetBrains_Mono, Inter_Tight } from "next/font/google";
+import { EB_Garamond, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegistration from "./components/ServiceWorkerRegistration";
 import { AuthProvider } from "./components/AuthContext";
@@ -19,13 +19,6 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const interTight = Inter_Tight({
-  variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: "Tangent",
   description: "Seven pieces a day, in good type.",
@@ -39,7 +32,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${ebGaramond.variable} ${jetbrainsMono.variable} ${interTight.variable} h-full`}
+      className={`${ebGaramond.variable} ${jetbrainsMono.variable} h-full`}
     >
       <head>
         <link rel="manifest" href="/manifest.json" />

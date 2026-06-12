@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 60 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 13 · BLOCKED: 0
+- DONE/VERIFIED: 61 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 12 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-L8**
+- Current branch: `main` · Last resume point: **PIPE-M1**
 
 ---
 
@@ -609,7 +609,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **FE-L5** · 🟢 · Entity decoding double-applied + astral-unsafe + wrong order. Use `fromCodePoint`, decode `&amp;` last. (`articles/[id]/page.tsx:17-33`) (≈PIPE-M7) — DONE (one commit with PIPE-M7, as the tracker pairs them): both the display decoder and the rssAdapter ingest decoder now delegate to a single shared `lib/utils/htmlEntities.ts` — named entities first (amp excluded), numeric dec/hex via `String.fromCodePoint` (astral-safe, try/catch passthrough on invalid code points), `&amp;` strictly last (kills the `&amp;#8217;` double-decode). 8 test vectors pass (incl. double-decode guard, emoji, invalid code point). Commit: fix(PIPE-M7).
 - [x] **FE-L6** · 🟢 · `articleUrl` scheme never validated → guard `^https?:` at ingest (blocks `javascript:`/`data:`). (`validator.ts:22-25`) — DONE: `validateAndTrim` (the shared validation point for all fixed-source adapters) now discards any candidate whose URL doesn't match `^https?://`. Discovery candidates originate from Brave web results (https by construction). Commit: fix(FE-L6).
 - [x] **FE-L7** · 🟢 · Empty-feed shows 7-dot strip + "0/7"; `?pos=abc` → "№ NaN"; dot strips lack aria-label. (`app/page.tsx:156`, `articles/[id]/page.tsx:57-58`) — DONE: strip + read-count hidden when the feed is empty; `SevenDotStrip` gets `role="img"` + `aria-label="N of M articles read"` (dots aria-hidden); reader folio/total params parse through `Number.isInteger`+positive guards with batch-position fallback, so `?pos=abc` renders the real folio instead of "№ NaN". (Archive's only mini-dots are in the aria-irrelevant loading skeleton.) Commit: fix(FE-L7).
-- [ ] **FE-L8** · 🟢 · Trim font families/weights (Inter Tight barely used). (`app/layout.tsx:7-27`)
+- [x] **FE-L8** · 🟢 · Trim font families/weights (Inter Tight barely used). (`app/layout.tsx:7-27`) — DONE: removed the Inter Tight google-font load entirely (4 weights downloaded on every page; grep shows `--font-sans` only ever styled the body default — all rendered content uses `.ql-serif`/`.ql-mono`). `--font-sans` now resolves to `system-ui, sans-serif`; the unused-with-auth-off auth page falls back to system sans. EB Garamond + JetBrains Mono untouched. Commit: fix(FE-L8).
 - [x] **FE-L9** · 🟢 · RefreshButton cooldown effect churn (dead component; fix only if revived). — DONE via FE-L1: RefreshButton.tsx deleted (never imported), so there is no effect to fix.
 
 ### Pipeline — mediums
@@ -835,5 +835,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   display; 8 vectors verified. Commit: 5298212.
 - **FE-L6** → DONE: https?-only scheme guard in validateAndTrim. Commit: 65af7fa.
 - **FE-L7** → DONE: empty-feed strip hidden; aria-label on dot strip; NaN-proof folio params.
-  Commit: pending.
-- RESUME AT: **FE-L8**
+  Commit: 3daaed6.
+- **FE-L8** → DONE: Inter Tight removed; --font-sans → system-ui. Commit: pending.
+- RESUME AT: **PIPE-M1** (FE lows complete; FE-L9 closed via FE-L1)
