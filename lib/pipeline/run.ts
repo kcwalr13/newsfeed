@@ -5,6 +5,7 @@ import {
   PIPELINE_WALL_CLOCK_BUDGET_MS,
   PIPELINE_POST_DISCOVERY_RESERVE_MS,
   PIPELINE_LLM_CONCURRENCY,
+  MAX_LLM_EVALS_PER_RUN,
 } from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
 import { writeBatch, readBatch, readLatestBatchBefore, appendLog } from './storage';
@@ -31,7 +32,7 @@ import { fetchNewsApiArticles } from './adapters/newsApiAdapter';
 import { validateAndTrim } from './validator';
 import { classifyLowValuePost } from '@/lib/discovery/qualityGate';
 import { scoreAesthetic, AestheticScoringError } from '@/lib/discovery/aestheticScorer';
-import { upsertArticleAestheticScore } from '@/lib/db/aesthetics';
+import { upsertArticleAestheticScore, getArticleAestheticScores } from '@/lib/db/aesthetics';
 import { AESTHETIC_BODY_MIN_CHARS, AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
 import { extractConcepts } from '@/lib/discovery/conceptExtractor';
 import { extractBodyText } from '@/lib/discovery/bodyExtractor';
@@ -171,14 +172,54 @@ function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle
  * Failures are isolated per-article: an error for article N does not affect N+1.
  * A scoring failure never removes the article from the batch.
  */
+/** Per-run LLM call budget (PIPE-M5). */
+interface LlmBudget {
+  used: number;
+  exhaustedLogged: boolean;
+}
+
+function tryConsumeLlm(budget: LlmBudget): boolean {
+  if (budget.used >= MAX_LLM_EVALS_PER_RUN) {
+    if (!budget.exhaustedLogged) {
+      appendLog(
+        `[pipeline] LLM budget exhausted (${MAX_LLM_EVALS_PER_RUN} calls) — ` +
+          `remaining articles skip enrichment this run`
+      );
+      budget.exhaustedLogged = true;
+    }
+    return false;
+  }
+  budget.used++;
+  return true;
+}
+
 async function scoreArticlesAesthetic(
-  articles: Article[]
-): Promise<{ scored: number; skipped: number }> {
+  articles: Article[],
+  budget: LlmBudget
+): Promise<{ scored: number; skipped: number; alreadyScored: number }> {
   const startMs = Date.now();
   let scored = 0;
   let skipped = 0;
+  let alreadyScored = 0;
+
+  // Skip articles that already have a score row — forceOverwrite refreshes
+  // previously re-scored (and re-billed) every article for identical text.
+  let existingScores: Map<string, unknown>;
+  try {
+    existingScores = await getArticleAestheticScores(articles.map((a) => a.id));
+  } catch {
+    existingScores = new Map();
+  }
 
   await forEachWithConcurrency(articles, PIPELINE_LLM_CONCURRENCY, async (article) => {
+    if (existingScores.has(article.id)) {
+      alreadyScored++;
+      return;
+    }
+    if (!tryConsumeLlm(budget)) {
+      skipped++;
+      return;
+    }
     // Prepare input text: prefer bodyText if long enough, else title + description
     let inputText: string;
     if (article.bodyText && article.bodyText.length >= AESTHETIC_BODY_MIN_CHARS) {
@@ -205,9 +246,9 @@ async function scoreArticlesAesthetic(
 
   const totalMs = Date.now() - startMs;
   appendLog(
-    `[aesthetic] Run complete: scored=${scored} skipped=${skipped} totalMs=${totalMs}`
+    `[aesthetic] Run complete: scored=${scored} alreadyScored=${alreadyScored} skipped=${skipped} totalMs=${totalMs}`
   );
-  return { scored, skipped };
+  return { scored, skipped, alreadyScored };
 }
 
 /**
@@ -461,13 +502,19 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     // Must run before aesthetic scoring so the scorer gets the full text.
     await fetchMissingBodyText(articles);
 
-    // Score all articles aesthetically before writing the batch
-    const { scored } = await scoreArticlesAesthetic(articles);
+    // Score all articles aesthetically before writing the batch.
+    // One shared LLM budget covers scoring + concept extraction (PIPE-M5).
+    const llmBudget: LlmBudget = { used: 0, exhaustedLogged: false };
+    const { scored, alreadyScored } = await scoreArticlesAesthetic(articles, llmBudget);
 
     // Phase 4: Extract concepts for all articles before writing the batch.
     // Bounded concurrency to respect Anthropic API rate limits.
     let conceptsExtracted = 0;
     await forEachWithConcurrency(articles, PIPELINE_LLM_CONCURRENCY, async (article) => {
+      if (!tryConsumeLlm(llmBudget)) {
+        article.extractedConcepts = [];
+        return;
+      }
       try {
         const text = article.bodyText?.trim()
           ? article.bodyText
@@ -492,7 +539,8 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
 
     // Total LLM failure must not masquerade as a healthy run: flag the batch
     // degraded (it is ranked by source score only) so the route can surface it.
-    const degraded = articles.length > 0 && scored === 0 && conceptsExtracted === 0;
+    const degraded =
+      articles.length > 0 && scored + alreadyScored === 0 && conceptsExtracted === 0;
     if (degraded) {
       console.error(
         `[pipeline] DEGRADED RUN: LLM enrichment failed for all ${articles.length} articles ` +

@@ -69,3 +69,11 @@ export const PIPELINE_POST_DISCOVERY_RESERVE_MS = 120_000;
 
 /** Max concurrent Anthropic calls in the per-article scoring/concept loops. */
 export const PIPELINE_LLM_CONCURRENCY = 4;
+
+/**
+ * Hard cap on per-article LLM calls (aesthetic scoring + concept extraction)
+ * in a single pipeline run — a cost backstop if a feed explosion or retry
+ * loop ever inflates the article pool (PIPE-M5). A normal run uses well
+ * under half of this.
+ */
+export const MAX_LLM_EVALS_PER_RUN = 120;
