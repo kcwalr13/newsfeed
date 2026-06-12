@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserByEmail, deleteTokensForUser, createToken } from '@/lib/db/auth';
 import { sendPasswordResetEmail } from '@/lib/email/send';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const limited = await enforceRateLimit(req, { name: 'auth:forgot-password', limit: 5, windowSeconds: 900 });
+  if (limited) return limited;
+
   let body: unknown;
   try {
     body = await req.json();

@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 17 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 4 · BLOCKED: 0 · TODO: 26
-- Current branch expected: `main` · Last resume point: SEC-H2
+- DONE: 17 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 25
+- Current branch expected: `main` · Last resume point: SEC-H1
 
 ---
 
@@ -347,9 +347,17 @@ npm run dev           # for manual/browser spot-checks
     client bundle — verified by a clean `rm -rf .next` rebuild + grep (`removed from client
     bundle ✓`). Added `OWNER_EMAIL` to `.env.example` with a note that the deployment should sit
     behind Vercel password protection while auth is off. Auth left off but coherent. Gate green.
-- [ ] **SEC-H2** · 🟠 High · No rate limiting on auth / feedback / refresh (cost + email-bomb)
+- [x] **SEC-H2** · 🟠 High · No rate limiting on auth / feedback / refresh (cost + email-bomb)
   - Fix: add IP+account rate limiting (e.g. Upstash) on auth routes, `POST /api/feedback` (LLM-triggering), and `/api/feed/refresh`. Adds a dependency — log in Decisions Log.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Built a Postgres-backed fixed-window
+    limiter (`lib/rateLimit.ts`, migration `019_rate_limits.sql`) instead of adding Upstash — no
+    new external dependency/credentials for a single-user app. `enforceRateLimit(req, rule,
+    extraIdentity?)` keys on client IP (+ device for feedback) via an atomic `ON CONFLICT`
+    increment; **fails open** on any DB error incl. the missing table, so it's deploy-safe before
+    019 lands (verified live: pre-migration check returns allowed=true). Applied to all 6 auth
+    routes (login/reset 20·5m; register/forgot/resend 5·15m; verify-email 30·5m), `POST
+    /api/feedback` (60·1m per IP+device), and `/api/feed/refresh` (10·1h, on top of the cooldown).
+    Gate green. Rate limiting becomes ACTIVE once migration 019 is applied.
 - [ ] **SEC-H1** · 🟠 High · Data routes trust client-supplied `deviceId` as identity
   - Where: `lib/auth/session.ts:57-59` + feedback/reading-position/migrate routes
   - Fix: treat `X-Device-ID`/`dd_device_id` as untrusted; bind device→identity server-side or key off session. (Limited impact while single-user; document.)
@@ -491,6 +499,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 |------|---------|----------|-----------|
 | 2026-06-12 | (infra) | Added `.claude/**` to eslint `globalIgnores` and fixed 8 pre-existing lint errors (5 unescaped JSX entities escaped properly; 2 `set-state-in-effect` + 1 `react-hooks/purity` silenced with justified `eslint-disable-next-line`) in a separate `chore(lint)` commit | `npm run lint` had never been green: it scanned stale `.claude/worktrees/*/.next` build artifacts (1951 errors) and 8 real pre-existing errors. The campaign's verification gate requires lint green before every push, so this baseline was a prerequisite. The three disabled sites are mount-time localStorage reads / a mount timestamp ref — legit patterns; the components get properly reworked later by FE-M3/FE-M4/FE-H1. |
 | 2026-06-12 | DAT-C1 | Rotation cursor table `query_rotation_state` is global (keyed by `topic_id` only), not per-user | Matches the semantics of the JSON file it replaces; app is single-user. Re-key by identity later if multi-user needs it. |
+| 2026-06-12 | SEC-H2 | Postgres-backed rate limiter (reusing Neon) instead of the report's Upstash suggestion; fail-open | Avoids a new external dependency and credentials for a single-user app. Fail-open means an infra hiccup or the not-yet-applied migration never locks the owner out — it degrades to today's behavior (no limiting) rather than breaking the app. |
 | 2026-06-12 | SEC-C1 | Sourced owner email from `OWNER_EMAIL` env (server) + client fetch of `/api/auth/me`, rather than a `NEXT_PUBLIC_` build-time inline | `NEXT_PUBLIC_` would remove the literal from source but still inline it into the client bundle. Fetching keeps it out of the bundle entirely (verified by rebuild+grep). **Kyle: set `OWNER_EMAIL` in Vercel env and enable Vercel password protection while the auth system is off.** |
 | 2026-06-12 | FE-H3 | Darkened the `--dim` token in all 4 themes (not just the cited light theme; not the "move labels to --muted" alternative). Real target values computed (report's #857B66 = 3.74:1, not 4.5:1) | `--dim` is one shared token driving the same failing functional labels in every theme; fixing only light would leave sepia/paper/dark failing the next audit. Darkening the token is a 4-line diff vs. auditing every `--dim` usage to re-route functional vs. ornamental. dim stays visually below muted, preserving the hierarchy. |
 | 2026-06-12 | PIPE-H3 | Wired the prober (report default) rather than deleting; cron identity falls back to the most-recently-active feedback identity | Wiring was moderate, not large, so the fallback option didn't trigger. The probe is the core Phase-4 "engineered serendipity" feature — worth keeping. Cron has no session, and the app is single-user, so the latest feedback identity is the correct target. |
@@ -508,6 +517,7 @@ _List each new migration file + the exact apply step. Code must NOT apply these 
 | `lib/db/migrations/015_query_rotation_state.sql` | DAT-C1 | Run the file's SQL against Neon (psql or console). Idempotent (`CREATE TABLE IF NOT EXISTS`). Until applied, discovery works but the query-rotation cursor resets each run (logged as a warning, non-fatal). After applying, flip DAT-C1 to DONE. |
 | `lib/db/migrations/016_nulls_not_distinct_unique.sql` | DAT-C2 | Requires PG ≥ 15 (`SHOW server_version` to confirm; Neon qualifies). Runs in one transaction: de-dups the five identity tables, then swaps the unique constraints to `UNIQUE NULLS NOT DISTINCT`. Idempotent — safe to re-run. Until applied, anonymous upserts keep duplicating (current prod behavior, no worse). After applying, verify: repeat a like → `SELECT COUNT(*) FROM user_aesthetic_profiles WHERE user_id IS NULL` stays constant and `feedback_count` increments; then flip DAT-C2 to DONE. |
 | `lib/db/migrations/017_article_batches_gin.sql` | DAT-H3 (perf only) | Optional/low-urgency: GIN index for the cross-batch article lookup. The feature works without it; apply whenever convenient. Idempotent. |
+| `lib/db/migrations/019_rate_limits.sql` | SEC-H2 | Creates the `rate_limits` table that backs `lib/rateLimit.ts`. Idempotent. Until applied, rate limiting is inactive (fails open — no behavior change). Apply via `npm run db:migrate`. Then flip SEC-H2 to DONE. |
 | `lib/db/migrations/018_feedback_value_save.sql` | DAT-H4 | Recreates the `feedback_value_check` CHECK to include `'save'`. Idempotent. Until applied, every server-side save/"Read later" 500s at the DB. Apply via `npm run db:migrate` (the runner picks it up) or run the file directly. Then flip DAT-H4 to DONE. |
 | `lib/db/migrations/001`–`006` + `scripts/migrate.mjs` | DAT-H1 | Run `npm run db:migrate:status` to preview, then `npm run db:migrate` (needs `DATABASE_URL`; reads `.env.local`). This creates `schema_migrations` and records 001–017 as applied. All backfilled/earlier migrations are idempotent (`IF [NOT] EXISTS`) so re-applying against the already-provisioned prod DB is a safe no-op; only 016 (DAT-C2) does real de-dup/constraint work, so apply that one's note first or let the runner handle it (it's self-transactional). After a clean run, flip DAT-H1 (and ideally DAT-C1/C2 once 015/016 land) to DONE. |
 
@@ -579,5 +589,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   Commit: c2e3036.
 - **SEC-C1** → DONE: owner email moved to `OWNER_EMAIL` env (server) + client fetch; removed from
   source and client bundle (verified by clean rebuild+grep). `.env.example` documents it + Vercel
-  password protection. **Kyle: set `OWNER_EMAIL` in Vercel + enable password protection.**
-- RESUME AT: **SEC-H2**
+  password protection. **Kyle: set `OWNER_EMAIL` in Vercel + enable password protection.** Commit: 7b03ac5.
+- **SEC-H2** → BLOCKED-ON-APPLY: Postgres rate limiter (`lib/rateLimit.ts` + migration 019),
+  fail-open, applied to 6 auth routes + feedback + refresh. Active once 019 applied.
+- RESUME AT: **SEC-H1**

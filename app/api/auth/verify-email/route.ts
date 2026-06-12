@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken, setEmailVerified, deleteToken } from '@/lib/db/auth';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  const limited = await enforceRateLimit(req, { name: 'auth:verify-email', limit: 30, windowSeconds: 300 });
+  if (limited) return limited;
+
   const token = req.nextUrl.searchParams.get('token');
 
   if (!token) {

@@ -3,10 +3,14 @@ import bcrypt from 'bcryptjs';
 import { getUserByEmail, createSession } from '@/lib/db/auth';
 import { buildSessionCookie, extractDeviceId, SESSION_MAX_AGE_SECONDS } from '@/lib/auth/session';
 import { associateFeedbackToUser } from '@/lib/db/feedback';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const limited = await enforceRateLimit(req, { name: 'auth:login', limit: 20, windowSeconds: 300 });
+  if (limited) return limited;
+
   let body: unknown;
   try {
     body = await req.json();

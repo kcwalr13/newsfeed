@@ -3,6 +3,7 @@ import { resolveSession } from '@/lib/auth/session';
 import { runPipeline } from '@/lib/pipeline/run';
 import { checkCooldown, recordRefresh } from '@/lib/pipeline/cooldown';
 import { appendLog } from '@/lib/pipeline/storage';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 // Manual refresh runs the full pipeline; same timeout needs as /api/pipeline/run.
@@ -12,6 +13,11 @@ export const maxDuration = 300;
 const SOLO_USER_ID = 'solo';
 
 export async function POST(req: NextRequest) {
+  // Defense in depth on top of the per-user cooldown: cap refreshes per IP
+  // (each runs the full, expensive pipeline).
+  const limited = await enforceRateLimit(req, { name: 'feed:refresh', limit: 10, windowSeconds: 3600 });
+  if (limited) return limited;
+
   const tempRes = new NextResponse();
   const session = await resolveSession(req, tempRes);
   const userId = session?.userId ?? SOLO_USER_ID;

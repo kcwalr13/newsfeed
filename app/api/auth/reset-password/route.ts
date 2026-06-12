@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getToken, updatePassword, deleteToken, deleteAllSessionsForUser } from '@/lib/db/auth';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const limited = await enforceRateLimit(req, { name: 'auth:reset-password', limit: 20, windowSeconds: 300 });
+  if (limited) return limited;
+
   let body: unknown;
   try {
     body = await req.json();

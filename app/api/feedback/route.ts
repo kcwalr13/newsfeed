@@ -31,6 +31,7 @@ import {
   WEIGHT_SAVE_WITH_LIKE,
   WEIGHT_SAVE_NO_LIKE,
 } from '@/lib/config/aesthetic';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -152,6 +153,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!deviceId) {
     return NextResponse.json({ error: 'Device ID required' }, { status: 400 });
   }
+
+  // Feedback POSTs can trigger LLM calls (concept extraction); rate-limit per
+  // device + IP.
+  const limited = await enforceRateLimit(
+    req,
+    { name: 'feedback', limit: 60, windowSeconds: 60 },
+    deviceId
+  );
+  if (limited) return limited;
 
   let body: unknown;
   try {
