@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 16 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 29
-- Current branch expected: `main` · Last resume point: DAT-H1
+- DONE: 16 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 3 · BLOCKED: 0 · TODO: 28
+- Current branch expected: `main` · Last resume point: DAT-H4
 
 ---
 
@@ -305,11 +305,20 @@ npm run dev           # for manual/browser spot-checks
     paused; on show it restarts `dwellStartRef`. Gate green; behavior to spot-check on deploy
     (hide tab across several articles → one POST with sane dwell).
 
-- [ ] **DAT-H1** · 🟠 High · Migrations 001–006 missing; no migration runner
+- [x] **DAT-H1** · 🟠 High · Migrations 001–006 missing; no migration runner
   - Where: `lib/db/migrations/` (starts at 007); DDL only in `agents/architect/*` docs
   - Fix: backfill `001`–`006` `.sql` from the architecture docs (DDL for `users`, `sessions`, `verification_tokens`, `feedback`, `discovery_topic_weights`, etc.); add `scripts/migrate.ts` applying files in order and recording in a `schema_migrations` table; add an npm script. ⚠️ Don't run against prod — mark `BLOCKED-ON-APPLY` for Kyle to run.
   - Verify: runner applies cleanly to a fresh local DB; idempotent on re-run.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: BLOCKED-ON-APPLY · Commit: pending · Notes: Backfilled 001–006 (feedback,
+    discovery_topic_weights, users, sessions, verification_tokens, reading_positions) from the
+    architect docs + `lib/db/readingPositions.ts`; all `CREATE TABLE IF NOT EXISTS` (idempotent,
+    no-ops on the live DB). Added `scripts/migrate.mjs` (Node ESM, zero new deps — neon `Pool` +
+    Node-24 global WebSocket): creates `schema_migrations`, applies pending `NNN_*.sql` in numeric
+    order, records each, `--status` lists without applying. npm scripts `db:migrate` /
+    `db:migrate:status`. Verified WITHOUT writing to prod (guardrail): runner syntax (`node
+    --check`), file ordering (001→017), and **read-only information_schema introspection** confirms
+    all 6 backfilled tables already exist in prod with columns matching the DDL exactly. Gate green.
+    Deploy-safe (runner is a manual tool, not imported at runtime). **Apply step for Kyle below.**
 
 - [ ] **DAT-H4** · 🟠 High · `feedback.value='save'` likely violates original CHECK; migrate route rejects 'save' forever
   - Where: `app/api/feedback/route.ts:168`, `app/api/feedback/migrate/route.ts:31`, `lib/feedback/store.ts:233-237`
@@ -486,6 +495,7 @@ _List each new migration file + the exact apply step. Code must NOT apply these 
 | `lib/db/migrations/015_query_rotation_state.sql` | DAT-C1 | Run the file's SQL against Neon (psql or console). Idempotent (`CREATE TABLE IF NOT EXISTS`). Until applied, discovery works but the query-rotation cursor resets each run (logged as a warning, non-fatal). After applying, flip DAT-C1 to DONE. |
 | `lib/db/migrations/016_nulls_not_distinct_unique.sql` | DAT-C2 | Requires PG ≥ 15 (`SHOW server_version` to confirm; Neon qualifies). Runs in one transaction: de-dups the five identity tables, then swaps the unique constraints to `UNIQUE NULLS NOT DISTINCT`. Idempotent — safe to re-run. Until applied, anonymous upserts keep duplicating (current prod behavior, no worse). After applying, verify: repeat a like → `SELECT COUNT(*) FROM user_aesthetic_profiles WHERE user_id IS NULL` stays constant and `feedback_count` increments; then flip DAT-C2 to DONE. |
 | `lib/db/migrations/017_article_batches_gin.sql` | DAT-H3 (perf only) | Optional/low-urgency: GIN index for the cross-batch article lookup. The feature works without it; apply whenever convenient. Idempotent. |
+| `lib/db/migrations/001`–`006` + `scripts/migrate.mjs` | DAT-H1 | Run `npm run db:migrate:status` to preview, then `npm run db:migrate` (needs `DATABASE_URL`; reads `.env.local`). This creates `schema_migrations` and records 001–017 as applied. All backfilled/earlier migrations are idempotent (`IF [NOT] EXISTS`) so re-applying against the already-provisioned prod DB is a safe no-op; only 016 (DAT-C2) does real de-dup/constraint work, so apply that one's note first or let the runner handle it (it's self-transactional). After a clean run, flip DAT-H1 (and ideally DAT-C1/C2 once 015/016 land) to DONE. |
 
 ---
 
@@ -546,5 +556,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-M7** → DONE: card navigation regions are Next `<Link>`s (ArticleCard `href` prop +
   archive shelf card); verb controls stay buttons; removed two unused `useRouter`s. Commit: 5e34ee9.
 - **FE-H1** → DONE: named/cleaned `visibilitychange` handler; cleared debounce on unmount;
-  dwell clock pauses while tab hidden.
-- RESUME AT: **DAT-H1**
+  dwell clock pauses while tab hidden. Commit: a1a310c.
+- **DAT-H1** → BLOCKED-ON-APPLY: backfilled migrations 001–006 + `scripts/migrate.mjs` runner
+  + `schema_migrations` tracking + npm scripts. Verified read-only (schema introspection matches);
+  Kyle runs `npm run db:migrate` to establish the baseline.
+- RESUME AT: **DAT-H4**
