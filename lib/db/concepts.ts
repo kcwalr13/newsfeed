@@ -63,7 +63,7 @@ export async function getTopConceptNodes(
            created_at::text AS created_at
     FROM user_concepts
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
     ORDER BY engagement_weight DESC
     LIMIT ${n}
   `;
@@ -81,7 +81,7 @@ export async function countConceptNodes(
     SELECT COUNT(*)::int AS count
     FROM user_concepts
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
   `;
   return (rows[0] as { count: number }).count;
 }
@@ -100,7 +100,7 @@ export async function getConceptNodesBatch(
            created_at::text AS created_at
     FROM user_concepts
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
   `;
   return rows as UserConcept[];
 }
@@ -132,7 +132,7 @@ export async function deleteConceptNodesByIds(
   await sql`
     DELETE FROM user_concept_edges
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND (concept_a = ANY(${labels}) OR concept_b = ANY(${labels}))
   `;
   await sql`
@@ -155,7 +155,7 @@ export async function getAllConceptLabels(
     SELECT label
     FROM user_concepts
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
   `;
   return new Set((rows as Array<{ label: string }>).map(r => r.label));
 }
@@ -172,7 +172,7 @@ export async function getAllConceptEdges(
     SELECT concept_a, concept_b
     FROM user_concept_edges
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
   `;
   return (rows as Array<{ concept_a: string; concept_b: string }>).map(
     r => [r.concept_a, r.concept_b]

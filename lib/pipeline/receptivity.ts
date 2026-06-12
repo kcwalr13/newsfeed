@@ -32,7 +32,7 @@ export async function computeDiversityScore(
     SELECT article_id, updated_at::text AS updated_at
     FROM feedback
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND value = 'like'
       AND updated_at >= NOW() - INTERVAL '7 days'
   `;
@@ -88,7 +88,7 @@ export async function computeProbeAcceptanceRate(
     SELECT article_id, value, updated_at::text AS updated_at
     FROM feedback
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND updated_at >= NOW() - INTERVAL '14 days'
   `;
 
@@ -137,7 +137,7 @@ export async function computeDwellRatio(
            updated_at::text AS updated_at
     FROM feedback
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND dwell_seconds IS NOT NULL
       AND updated_at >= NOW() - INTERVAL '14 days'
   `;

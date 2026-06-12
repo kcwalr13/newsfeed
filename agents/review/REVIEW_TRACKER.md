@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 11 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 34
-- Current branch expected: `main` · Last resume point: PIPE-H3
+- DONE: 12 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 33
+- Current branch expected: `main` · Last resume point: FE-H3
 
 ---
 
@@ -236,11 +236,25 @@ npm run dev           # for manual/browser spot-checks
     no concept data found. Previously `distinct/likes` always exceeded 1 (5–8 concepts per
     article) and clamped to 1.0. Doc comment updated. Gate green.
 
-- [ ] **PIPE-H3** · 🟠 High · Blind-spot prober is dead code (never imported)
+- [x] **PIPE-H3** · 🟠 High · Blind-spot prober is dead code (never imported)
   - Where: `lib/pipeline/blindSpotProber.ts` (no importers)
   - Decision (report default): **wire it up.** Call `identifyBlindSpotClusters` + `selectProbeArticle` in `runPipeline` after concept extraction, and `processPriorDayProbeIgnores` at run start. (If wiring proves large, fall back to deleting the module + its probe-slot allocation and document that choice.)
   - Verify: feed shows a blind-spot (◐) slot type; `probeInfo` populated; probe-acceptance no longer pinned at 0.5.
-  - Status: TODO · Commit: — · Notes: — (log decision in Decisions Log)
+  - Status: DONE · Commit: pending · Notes: Wired (report default). New `runBlindSpotProbe`
+    helper in `runPipeline` (after concept extraction, before batch write): resolves identity
+    (session, else most-recent-feedback fallback for cron via new
+    `getMostRecentFeedbackIdentity`), runs `processPriorDayProbeIgnores` against the most-recent
+    prior batch (new `readLatestBatchBefore`), classifies concepts, calls
+    `identifyBlindSpotClusters` + `selectProbeArticle`, and `upsertCluster`s the chosen cluster.
+    `probeInfo` is set in-memory → lands in batch JSON → consumed by ranker (◐ slot) and the
+    feedback route (promote/suppress). Made `blindSpotProber` client lazy/key-guarded.
+    **Side fixes:** `identifyBlindSpotClusters` capped labels at 100 + max_tokens 1024→2048 (a
+    full batch's 130+ unknown concepts truncated the tool JSON → unparseable); fixed
+    `could not determine data type of parameter` by adding `::text` to all 20 `${userId} IS NULL`
+    checks in concepts/aesthetics/blindSpots/receptivity (latent bug that crashed any null-user
+    DB read under Neon's parameterized protocol). Live-verified: full path runs, LLM returns 19
+    clusters; probe fires only when a theme spans ≥3 articles (module's original threshold —
+    selective by design, "engineered serendipity"). Gate green.
 
 - [ ] **FE-H3** · 🟠 High · `--dim` functional text fails contrast (~2.47:1) at 8–9px
   - Where: `app/globals.css:10` (`--dim:#A49B88` on `--bg:#F6F2EA`)
@@ -431,6 +445,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 |------|---------|----------|-----------|
 | 2026-06-12 | (infra) | Added `.claude/**` to eslint `globalIgnores` and fixed 8 pre-existing lint errors (5 unescaped JSX entities escaped properly; 2 `set-state-in-effect` + 1 `react-hooks/purity` silenced with justified `eslint-disable-next-line`) in a separate `chore(lint)` commit | `npm run lint` had never been green: it scanned stale `.claude/worktrees/*/.next` build artifacts (1951 errors) and 8 real pre-existing errors. The campaign's verification gate requires lint green before every push, so this baseline was a prerequisite. The three disabled sites are mount-time localStorage reads / a mount timestamp ref — legit patterns; the components get properly reworked later by FE-M3/FE-M4/FE-H1. |
 | 2026-06-12 | DAT-C1 | Rotation cursor table `query_rotation_state` is global (keyed by `topic_id` only), not per-user | Matches the semantics of the JSON file it replaces; app is single-user. Re-key by identity later if multi-user needs it. |
+| 2026-06-12 | PIPE-H3 | Wired the prober (report default) rather than deleting; cron identity falls back to the most-recently-active feedback identity | Wiring was moderate, not large, so the fallback option didn't trigger. The probe is the core Phase-4 "engineered serendipity" feature — worth keeping. Cron has no session, and the app is single-user, so the latest feedback identity is the correct target. |
 | 2026-06-12 | PIPE-H2 | Aesthetic proximity stays raw centered cosine ∈ [−1,1] (no re-mapping to [0,1]); unscored articles get 0; `DRIFT_THRESHOLD` 0.25 → 0.5 | 0 = orthogonal = "no signal" makes the unscored fallback genuinely neutral; a [0,1] re-map would have made unscored (0) read as "maximally opposite". 0.5 ≈ 60° divergence between short/long-term centroids — a real taste shift, reachable but not noisy. |
 | 2026-06-12 | PIPE-H1 | Degraded run = write the batch + flag `degraded:true` + return 500 (rather than refusing to write); degraded refresh does not consume the cooldown | Articles are still readable when unranked, so readers keep a feed; the 500 makes cron/manual callers alert. Cooldown skip lets Kyle retry immediately after fixing the API key, and a fully-failed run made zero billable LLM calls anyway. |
 | 2026-06-12 | DAT-C2 | Chose `UNIQUE NULLS NOT DISTINCT` (not the `user_id=''` sentinel); de-dup strategy per table: keep-newest for `user_aesthetic_profiles`/`discovery_topic_weights`, SUM-merge for `user_concepts`/`user_concept_edges`, keep-oldest + `probe_count = duplicates − 1` for `blind_spot_clusters` | Sentinel would require touching every read/write path. De-dup mirrors each upsert's write style: full-state rewrites → newest row is truth; increment-style upserts scattered +1s across duplicate rows → SUM restores accumulated taste data; blind-spot status UPDATEs matched all duplicates so the oldest row saw every update, and the on-conflict probe increment never fired so row-count reconstructs it. |
@@ -493,4 +508,9 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-H2** → DONE: centered cosine ((v−3)/2) in ranker + drift score; DRIFT_THRESHOLD 0.5.
   Numerically verified (opposite profiles −1.0 vs inert 0.718). Commit: c5c8530.
 - **PIPE-H4** → DONE: diversity = distinct/totalConceptOccurrences; neutral 0.5 on no data.
-- RESUME AT: **PIPE-H3**
+  Commit: 708ffad.
+- **PIPE-H3** → DONE: blind-spot prober wired into runPipeline (probeInfo in batch JSON);
+  cron identity fallback; lazy LLM client; +fixed a latent `${userId} IS NULL` Neon param-type
+  crash across 4 files (20 sites) and a label-cap/token truncation in cluster grouping.
+  Live-verified end-to-end.
+- RESUME AT: **FE-H3**

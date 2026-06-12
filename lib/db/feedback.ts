@@ -16,6 +16,25 @@ export async function getFeedbackForDevice(deviceId: string): Promise<DbFeedback
   return rows as DbFeedbackRow[];
 }
 
+/**
+ * Returns the identity of the most recent feedback row, or null when no
+ * feedback exists. Used by pipeline-time personalization (e.g. blind-spot
+ * probing) on cron runs, which carry no session (single-user app).
+ */
+export async function getMostRecentFeedbackIdentity(): Promise<
+  { userId: string | null; deviceId: string } | null
+> {
+  const rows = await sql`
+    SELECT user_id, device_id
+    FROM feedback
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `;
+  if (rows.length === 0) return null;
+  const r = rows[0] as { user_id: string | null; device_id: string };
+  return { userId: r.user_id, deviceId: r.device_id };
+}
+
 /** Returns deduplicated feedback for an authenticated user (most-recent per article). */
 export async function getFeedbackForUser(userId: string): Promise<DbFeedbackRow[]> {
   const rows = await sql`

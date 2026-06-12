@@ -5,7 +5,16 @@ import type { Article } from '@/lib/types/article';
 import type { BlindSpotCluster } from '@/lib/db/blindSpots';
 import { recordProbeClusterIgnore } from '@/lib/db/blindSpots';
 
-const anthropic = new Anthropic();
+// Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
+// and doing that at module load would crash every importer of this module.
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not set');
+  }
+  if (!_client) _client = new Anthropic();
+  return _client;
+}
 
 interface BlindSpotClusterResult {
   clusterLabel:       string;
@@ -36,7 +45,11 @@ export async function identifyBlindSpotClusters(
     }
   }
 
-  const uniqueLabels = Array.from(allUnknown.keys());
+  // Cap the labels sent to the LLM so the clusters JSON fits in max_tokens
+  // (a full batch can carry 130+ unknown concepts; truncated tool output
+  // parses as a malformed input and the whole call is wasted).
+  const MAX_LABELS_FOR_CLUSTERING = 100;
+  const uniqueLabels = Array.from(allUnknown.keys()).slice(0, MAX_LABELS_FOR_CLUSTERING);
   if (uniqueLabels.length < 3) {
     return [];
   }
@@ -66,9 +79,9 @@ export async function identifyBlindSpotClusters(
   let rawClusters: Array<{ cluster_label: string; member_concepts: string[] }>;
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await getClient().messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system:
         'You are a concept taxonomy assistant. Group the following concept labels into ' +
         'broad thematic clusters of 2-8 words each. Assign each label to exactly one cluster. ' +

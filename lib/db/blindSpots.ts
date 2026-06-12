@@ -34,7 +34,7 @@ export async function expireClusterTimers(
         suppress_until = NULL,
         promote_until  = NULL
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND (
         (status = 'suppressed' AND suppress_until <= NOW())
         OR
@@ -62,7 +62,7 @@ export async function getEligibleClusters(
            created_at::text     AS created_at
     FROM blind_spot_clusters
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND status != 'suppressed'
     ORDER BY created_at ASC
   `;
@@ -105,7 +105,7 @@ export async function recordProbeClusterPromotion(
         suppress_until = NULL,
         like_count     = blind_spot_clusters.like_count + 1
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND cluster_label = ${clusterLabel}
   `;
 }
@@ -126,7 +126,7 @@ export async function recordProbeClusterSuppression(
         suppress_until = NOW() + INTERVAL '30 days',
         dislike_count  = blind_spot_clusters.dislike_count + 1
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND cluster_label = ${clusterLabel}
   `;
 }
@@ -154,7 +154,7 @@ export async function recordProbeClusterIgnore(
         ELSE blind_spot_clusters.suppress_until
       END
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND cluster_label = ${clusterLabel}
   `;
 }

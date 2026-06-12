@@ -7,7 +7,25 @@ import {
   PIPELINE_LLM_CONCURRENCY,
 } from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
-import { writeBatch, readBatch, appendLog } from './storage';
+import { writeBatch, readBatch, readLatestBatchBefore, appendLog } from './storage';
+import {
+  identifyBlindSpotClusters,
+  selectProbeArticle,
+  processPriorDayProbeIgnores,
+} from './blindSpotProber';
+import { getEligibleClusters, upsertCluster } from '@/lib/db/blindSpots';
+import { getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
+import {
+  getFeedbackForUser,
+  getFeedbackForDevice,
+  getMostRecentFeedbackIdentity,
+} from '@/lib/db/feedback';
+import {
+  classifyConceptDistance,
+  computeRawSurprise,
+  normalizeQualityWeight,
+  computeSerendipityScore,
+} from './serendipityScorer';
 import { fetchRssArticles } from './adapters/rssAdapter';
 import { fetchNewsApiArticles } from './adapters/newsApiAdapter';
 import { validateAndTrim } from './validator';
@@ -193,6 +211,97 @@ async function scoreArticlesAesthetic(
 }
 
 /**
+ * Phase 4: blind-spot probe selection. Classifies today's article concepts
+ * against the user's concept graph, identifies blind-spot clusters via the
+ * LLM, and marks one article with probeInfo (in-memory, so it lands in the
+ * batch JSON; the ranker and feedback route consume it from there). Also
+ * processes ignores for probes shown in the most recent prior batch.
+ * Never throws — failures are logged and the pipeline continues.
+ */
+async function runBlindSpotProbe(
+  articles: Article[],
+  userIdOpt: string | null,
+  deviceIdOpt: string | null,
+  today: string
+): Promise<void> {
+  try {
+    // Resolve identity. Cron runs carry no session; fall back to the most
+    // recently active feedback identity (single-user app).
+    let userId = userIdOpt;
+    let deviceId = deviceIdOpt;
+    if (!deviceId) {
+      const recent = await getMostRecentFeedbackIdentity();
+      if (!recent) {
+        appendLog('[blindspot] No feedback identity yet; skipping probe selection.');
+        return;
+      }
+      userId = recent.userId;
+      deviceId = recent.deviceId;
+    }
+
+    // Probes shown in the most recent prior batch with no like/dislike count
+    // as ignored (two consecutive ignores suppress the cluster for 14 days).
+    const priorBatch = await readLatestBatchBefore(today);
+    if (priorBatch) {
+      const fbRows = userId
+        ? await getFeedbackForUser(userId)
+        : await getFeedbackForDevice(deviceId);
+      await processPriorDayProbeIgnores(userId, deviceId, priorBatch.articles, fbRows);
+    }
+
+    const [labels, edges, eligibleClusters] = await Promise.all([
+      getAllConceptLabels(userId, deviceId),
+      getAllConceptEdges(userId, deviceId),
+      getEligibleClusters(userId, deviceId),
+    ]);
+    if (labels.size === 0) {
+      appendLog('[blindspot] Concept graph empty; skipping probe selection.');
+      return;
+    }
+
+    const unknownByArticle = new Map<string, string[]>();
+    const serendipityScores = new Map<string, number>();
+    for (const article of articles) {
+      const classifications = classifyConceptDistance(
+        article.extractedConcepts ?? [],
+        labels,
+        edges
+      );
+      unknownByArticle.set(
+        article.id,
+        classifications.filter((c) => c.distance === 'unknown').map((c) => c.label)
+      );
+      serendipityScores.set(
+        article.id,
+        computeSerendipityScore(
+          computeRawSurprise(classifications),
+          normalizeQualityWeight(article.llmScore)
+        )
+      );
+    }
+
+    const clusters = await identifyBlindSpotClusters(unknownByArticle, serendipityScores);
+    if (clusters.length === 0) {
+      appendLog('[blindspot] No blind-spot clusters identified this run.');
+      return;
+    }
+
+    const selection = selectProbeArticle(clusters, eligibleClusters, serendipityScores, articles);
+    if (selection) {
+      await upsertCluster(userId, deviceId, selection.clusterLabel);
+      appendLog(
+        `[blindspot] Probe selected: cluster "${selection.clusterLabel}" → article ${selection.article.id}`
+      );
+    } else {
+      appendLog('[blindspot] All candidate clusters suppressed; no probe today.');
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    appendLog(`[blindspot] Probe selection failed (non-fatal): ${msg}`);
+  }
+}
+
+/**
  * Runs the full content pipeline: fetches from all active sources, validates,
  * deduplicates, applies per-source cap, checks diversity, and writes the batch.
  *
@@ -371,6 +480,15 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
         article.extractedConcepts = [];
       }
     });
+
+    // Phase 4: blind-spot probe selection (wires lib/pipeline/blindSpotProber.ts;
+    // sets probeInfo on at most one article before the batch is written).
+    await runBlindSpotProbe(
+      articles,
+      options.userId ?? null,
+      options.deviceId ?? null,
+      today
+    );
 
     // Total LLM failure must not masquerade as a healthy run: flag the batch
     // degraded (it is ranked by source score only) so the route can surface it.

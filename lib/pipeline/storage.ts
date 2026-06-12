@@ -65,6 +65,27 @@ export async function readLatestBatch(): Promise<ArticleBatch | null> {
 }
 
 /**
+ * Returns the most recent batch with batch_date strictly before the given
+ * date, or null if none exists. Used for prior-day probe-ignore processing.
+ */
+export async function readLatestBatchBefore(date: string): Promise<ArticleBatch | null> {
+  const rows = await sql`
+    SELECT batch_date, generated_at::text AS generated_at, articles
+    FROM article_batches
+    WHERE batch_date < ${date}
+    ORDER BY batch_date DESC
+    LIMIT 1
+  `;
+  if (rows.length === 0) return null;
+  const row = rows[0] as { batch_date: string; generated_at: string; articles: unknown };
+  return {
+    batchDate: row.batch_date,
+    generatedAt: row.generated_at,
+    articles: row.articles as ArticleBatch['articles'],
+  };
+}
+
+/**
  * Finds an article by id across all stored batches, newest batch first.
  * Returns the article plus its position in the containing batch, or null.
  * Uses JSONB containment (@>) so older shelf/archive links keep resolving

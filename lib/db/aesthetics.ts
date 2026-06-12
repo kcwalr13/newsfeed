@@ -214,7 +214,7 @@ export async function recomputeShortTermCentroid(
   // Row creation is the Phase 2 EMA path's responsibility.
   const profileRows = await sql`
     SELECT id FROM user_aesthetic_profiles
-    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND device_id = ${deviceId}
     LIMIT 1
   `;
@@ -231,7 +231,7 @@ export async function recomputeShortTermCentroid(
     FROM feedback f
     JOIN article_aesthetic_scores s ON s.article_id = f.article_id
     WHERE f.device_id = ${deviceId}
-      AND (f.user_id = ${userId} OR (f.user_id IS NULL AND ${userId} IS NULL))
+      AND (f.user_id = ${userId} OR (f.user_id IS NULL AND ${userId}::text IS NULL))
       AND f.value IN ('like', 'dislike')
       AND f.updated_at >= ${cutoff.toISOString()}
     ORDER BY f.updated_at ASC
@@ -246,7 +246,7 @@ export async function recomputeShortTermCentroid(
       SET short_term_centroid       = NULL,
           short_term_feedback_count = ${count},
           short_term_window_start   = NULL
-      WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
         AND device_id = ${deviceId}
     `;
     return;
@@ -270,7 +270,7 @@ export async function recomputeShortTermCentroid(
     SET short_term_centroid       = ${vecStr2}::vector,
         short_term_feedback_count = ${count},
         short_term_window_start   = ${oldestTs}
-    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND device_id = ${deviceId}
   `;
 }
@@ -291,7 +291,7 @@ export async function updateReceptivity(
     SET receptivity_score  = ${receptivityScore},
         exploration_budget = ${explorationBudget}
     WHERE device_id = ${deviceId}
-      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+      AND (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
   `;
 }
 
@@ -318,7 +318,7 @@ export async function updateDriftState(
         WHEN is_drifting = FALSE AND ${driftScore} >= ${DRIFT_THRESHOLD} THEN NOW()
         ELSE drift_detected_at
       END
-    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId} IS NULL))
+    WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))
       AND device_id = ${deviceId}
   `;
 }
