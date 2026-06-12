@@ -37,6 +37,7 @@ export default function ReadingPositionTracker({
   const finishedRef      = useRef<boolean>(false);
   const saveTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedIndexRef    = useRef<number>(-1);   // last value successfully POSTed
+  const pausedRef        = useRef<boolean>(false); // true while the tab is hidden
 
   // ── Persist position ─────────────────────────────────────────────────────
 
@@ -45,7 +46,11 @@ export default function ReadingPositionTracker({
       const idx = currentIndexRef.current;
       if (!force && idx === savedIndexRef.current) return;  // nothing new
 
-      const dwell = dwellTotalRef.current + Math.floor((Date.now() - dwellStartRef.current) / 1000);
+      // While the tab is hidden the dwell clock is paused, so don't add the
+      // elapsed-since-checkpoint interval (it was accrued at pause time).
+      const dwell = pausedRef.current
+        ? dwellTotalRef.current
+        : dwellTotalRef.current + Math.floor((Date.now() - dwellStartRef.current) / 1000);
 
       try {
         const body: Record<string, unknown> = {
@@ -136,18 +141,36 @@ export default function ReadingPositionTracker({
   useEffect(() => {
     const handleBlur   = () => void savePosition(true);
     const handleUnload = () => void savePosition(true);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        // Checkpoint accrued dwell, pause the clock, and persist.
+        dwellTotalRef.current += Math.floor((Date.now() - dwellStartRef.current) / 1000);
+        pausedRef.current = true;
+        void savePosition(true);
+      } else {
+        // Resume: restart the dwell clock from now.
+        dwellStartRef.current = Date.now();
+        pausedRef.current = false;
+      }
+    };
 
-    window.addEventListener('blur',           handleBlur);
-    window.addEventListener('beforeunload',   handleUnload);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') void savePosition(true);
-    });
+    window.addEventListener('blur',                handleBlur);
+    window.addEventListener('beforeunload',        handleUnload);
+    document.addEventListener('visibilitychange',  handleVisibility);
 
     return () => {
-      window.removeEventListener('blur',         handleBlur);
-      window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('blur',                handleBlur);
+      window.removeEventListener('beforeunload',        handleUnload);
+      document.removeEventListener('visibilitychange',  handleVisibility);
     };
   }, [savePosition]);
+
+  // ── Clear any pending debounced save on unmount ──────────────────────────
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   return null;   // renders nothing
 }

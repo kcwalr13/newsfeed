@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 15 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 30
-- Current branch expected: `main` · Last resume point: FE-H1
+- DONE: 16 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 29
+- Current branch expected: `main` · Last resume point: DAT-H1
 
 ---
 
@@ -293,11 +293,17 @@ npm run dev           # for manual/browser spot-checks
     `useRouter`. Archive shelf card (`app/archive/page.tsx`) converted from `<button onClick=
     router.push>` to `<Link>`, also dropping `useRouter`. Gate green.
 
-- [ ] **FE-H1** · 🟠 High · ReadingPositionTracker leaks a `visibilitychange` listener per article; inflates dwell
+- [x] **FE-H1** · 🟠 High · ReadingPositionTracker leaks a `visibilitychange` listener per article; inflates dwell
   - Where: `app/components/ReadingPositionTracker.tsx:134-148` (+ uncleared `saveTimerRef`)
   - Fix: hoist the handler to a named function and remove it in cleanup; clear the debounce timer on unmount; pause the dwell timer while the tab is hidden.
   - Verify: navigating across several articles then hiding the tab POSTs one position with sane dwell, not one per prior article.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `visibilitychange` is now a named `handleVisibility`
+    removed in cleanup (was an anonymous inline listener that leaked one per article on
+    `document`, each firing a stale `savePosition` on hide → inflated dwell). Added an unmount
+    effect clearing `saveTimerRef`. Dwell clock now pauses while hidden: on hide it checkpoints
+    elapsed into `dwellTotalRef` and sets `pausedRef`; `savePosition` skips live accrual while
+    paused; on show it restarts `dwellStartRef`. Gate green; behavior to spot-check on deploy
+    (hide tab across several articles → one POST with sane dwell).
 
 - [ ] **DAT-H1** · 🟠 High · Migrations 001–006 missing; no migration runner
   - Where: `lib/db/migrations/` (starts at 007); DDL only in `agents/architect/*` docs
@@ -538,5 +544,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-M4** → DONE: shared `useModalA11y` hook (focus trap/Escape/restore/scroll-lock) on all
   three overlays; IssueCover Space key; cover→letter sequencing via custom event. Commit: 0364e3b.
 - **FE-M7** → DONE: card navigation regions are Next `<Link>`s (ArticleCard `href` prop +
-  archive shelf card); verb controls stay buttons; removed two unused `useRouter`s.
-- RESUME AT: **FE-H1**
+  archive shelf card); verb controls stay buttons; removed two unused `useRouter`s. Commit: 5e34ee9.
+- **FE-H1** → DONE: named/cleaned `visibilitychange` handler; cleared debounce on unmount;
+  dwell clock pauses while tab hidden.
+- RESUME AT: **DAT-H1**
