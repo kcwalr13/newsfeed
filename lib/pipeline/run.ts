@@ -11,6 +11,7 @@ import { writeBatch, readBatch, appendLog } from './storage';
 import { fetchRssArticles } from './adapters/rssAdapter';
 import { fetchNewsApiArticles } from './adapters/newsApiAdapter';
 import { validateAndTrim } from './validator';
+import { classifyLowValuePost } from '@/lib/discovery/qualityGate';
 import { scoreAesthetic, AestheticScoringError } from '@/lib/discovery/aestheticScorer';
 import { upsertArticleAestheticScore } from '@/lib/db/aesthetics';
 import { AESTHETIC_BODY_MIN_CHARS, AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
@@ -232,8 +233,18 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       return true;
     });
 
+    // Screen out housekeeping/announcement posts and pure-video items.
+    // Fixed sources bypass the LLM eval, so this is their only content gate.
+    const editorial = deduped.filter((a) => {
+      const lowValue = classifyLowValuePost(a.title, a.articleUrl);
+      if (lowValue) {
+        appendLog(`[pipeline] FILTERED ${lowValue}: "${a.title.slice(0, 70)}" (${a.sourceName})`);
+      }
+      return !lowValue;
+    });
+
     // Per-source article cap (applied after dedup, per PM requirement)
-    const capped = applySourceCap(deduped, MAX_ARTICLES_PER_SOURCE);
+    const capped = applySourceCap(editorial, MAX_ARTICLES_PER_SOURCE);
 
     // Diversity check — log warning if below minimum (do not abort)
     const contributingSourceNames = new Set(capped.map((a) => a.sourceName));

@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 5 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 40
-- Current branch expected: `main` · Last resume point: PIPE-Q2
+- DONE: 6 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 39
+- Current branch expected: `main` · Last resume point: PIPE-Q3
 
 ---
 
@@ -172,11 +172,18 @@ npm run dev           # for manual/browser spot-checks
     at paragraph 1, Save Article/Read Later/Next-article junk gone. Note: stored batches keep old
     bodyText until next pipeline run. Gate green.
 
-- [ ] **PIPE-Q2** · 🟠 High (UX-validated) · Quality gate lets housekeeping/video posts into the curated feed
+- [x] **PIPE-Q2** · 🟠 High (UX-validated) · Quality gate lets housekeeping/video posts into the curated feed
   - Where: `lib/discovery/qualityGate.ts`, fixed-RSS path in `lib/pipeline/run.ts` (fixed sources bypass the LLM eval)
   - Fix: screen fixed-RSS items through the quality gate too; filter housekeeping/announcement posts ("Open Thread", "Hidden Open Thread", "Meetup", "Links for…") and pure-video items, or down-rank them out of the displayed 7.
   - Verify: feed no longer surfaces "Open Thread 437" / "Berkeley Meetup" / 1-min Aeon videos.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New `classifyLowValuePost(title, url)` in
+    `qualityGate.ts` — housekeeping regexes (open/hidden/weekly threads, links-for roundups,
+    announcements, classifieds, subscriber threads, short meetup titles) + pure-video detection
+    (`Video:`/`Watch:` prefix or `/video(s)/` URL path). Applied as Gate 4 in
+    `evaluateCandidate` (discovery) and as a filter on the fixed-RSS path in `runPipeline`
+    (after dedup, before source cap, with FILTERED logging). 11-case unit test incl. negatives
+    ("Watch repair as…", "Why Meetup Culture Died…") all pass. Gate green. Live verify: next
+    batch should carry no Open Thread/meetup/video items.
 
 - [ ] **PIPE-Q3** · 🟡 Medium (UX-validated) · Read-time collapses to "1 MIN" for most pieces
   - Where: read-time computation (downstream of `bodyText` length)
@@ -452,5 +459,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   batch + 500 from both routes; verified by missing-key simulation. Commit: f4cf7a9.
 - **PIPE-Q1** → DONE: shared `cleanBodyParagraphs` chrome-stripper in both extraction paths
   (+ DOM noise selectors, og:title echo removal, tail trim); fixed shadowing
-  `types/node-html-parser.d.ts` stub. Live-verified on 3 articles.
-- RESUME AT: **PIPE-Q2**
+  `types/node-html-parser.d.ts` stub. Live-verified on 3 articles. Commit: 607926f.
+- **PIPE-Q2** → DONE: `classifyLowValuePost` housekeeping/video gate on both the discovery and
+  fixed-RSS paths; 11-case test pass.
+- RESUME AT: **PIPE-Q3**

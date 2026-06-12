@@ -60,7 +60,59 @@ export function evaluateCandidate(
     return { pass: false, reason: `BLOCKLISTED_DOMAIN:${domain}` };
   }
 
+  // Gate 4: Housekeeping/announcement posts and pure-video items
+  const lowValue = classifyLowValuePost(candidate.title, candidate.url);
+  if (lowValue) {
+    return { pass: false, reason: lowValue };
+  }
+
   return { pass: true };
+}
+
+/**
+ * Housekeeping/announcement post patterns: community threads, meetup
+ * announcements, link roundups — valid blog output, but not editorial content
+ * for a curated feed.
+ */
+const HOUSEKEEPING_RES = [
+  /^(hidden\s+)?open\s+thread\b/i,           // "Open Thread 437", "Hidden Open Thread"
+  /\bopen\s+thread\s*#?\d*$/i,
+  /^(weekly|monthly)\s+(open\s+)?thread\b/i,
+  /^links?\s+(for|roundup|post|dump)\b/i,    // "Links for June", "Link roundup"
+  /^monthly\s+(links|roundup)\b/i,
+  /^housekeeping\b/i,
+  /^announcements?\b/i,
+  /^programming\s+note\b/i,
+  /^classifieds?\s+thread\b/i,
+  /^subscriber\s+(thread|drive)\b/i,
+];
+
+/** Short announcement-style titles mentioning a meetup ("Berkeley Meetup"). */
+const MEETUP_RE = /\bmeetups?\b/i;
+const MEETUP_TITLE_MAX = 60;
+
+/** Pure-video items: explicit title prefix or a /video(s)/ URL path. */
+const VIDEO_TITLE_RE = /^(video|watch)\s*[:\-–]/i;
+const VIDEO_PATH_RE = /^\/videos?\//i;
+
+/**
+ * Classifies a post as low-value for a curated feed.
+ * Returns 'HOUSEKEEPING', 'PURE_VIDEO', or null when the post looks editorial.
+ * Used for discovery candidates AND fixed-RSS items (which bypass the LLM eval).
+ */
+export function classifyLowValuePost(title: string, url?: string): string | null {
+  const t = title.trim();
+  if (HOUSEKEEPING_RES.some((re) => re.test(t))) return 'HOUSEKEEPING';
+  if (t.length <= MEETUP_TITLE_MAX && MEETUP_RE.test(t)) return 'HOUSEKEEPING';
+  if (VIDEO_TITLE_RE.test(t)) return 'PURE_VIDEO';
+  if (url) {
+    try {
+      if (VIDEO_PATH_RE.test(new URL(url).pathname)) return 'PURE_VIDEO';
+    } catch {
+      // unparseable URL — other gates handle it
+    }
+  }
+  return null;
 }
 
 function extractDomain(url: string): string {
