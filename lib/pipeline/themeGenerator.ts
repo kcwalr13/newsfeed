@@ -10,6 +10,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Article, DailyIssue, SourceCredit } from '@/lib/types/article';
 import { appendLog } from '@/lib/pipeline/storage';
+import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -31,16 +32,18 @@ async function generateTheme(articles: Article[]): Promise<ThemeResult> {
     .map((a, i) => `${i + 1}. "${a.title}" (${a.sourceName})`)
     .join('\n');
 
-  const prompt =
-    `You are an editor assembling a daily intellectual reading digest. ` +
-    `Here are today's seven articles:\n${titles}\n\n` +
+  const system =
+    `You are an editor assembling a daily intellectual reading digest. The user message ` +
+    `contains today's seven article titles. ` +
     `Respond with ONLY a JSON object in this exact shape — no markdown, no explanation:\n` +
-    `{"theme":"<two or three lowercase words>","themeNote":"<one sentence under 22 words>"}`;
+    `{"theme":"<two or three lowercase words>","themeNote":"<one sentence under 22 words>"}\n` +
+    UNTRUSTED_CONTENT_NOTICE;
 
   const msg = await getClient().messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 80,
-    messages: [{ role: 'user', content: prompt }],
+    system,
+    messages: [{ role: 'user', content: wrapUntrusted(titles) }],
   });
 
   const block = msg.content[0];
@@ -56,8 +59,8 @@ async function generateTheme(articles: Article[]): Promise<ThemeResult> {
   }
 
   return {
-    theme: parsed.theme.toLowerCase().trim(),
-    themeNote: parsed.themeNote.trim(),
+    theme: parsed.theme.toLowerCase().trim().slice(0, 60),
+    themeNote: parsed.themeNote.trim().slice(0, 220),
   };
 }
 

@@ -2,6 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
+import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 
 // Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
 // and doing that at module load would crash every importer of this module.
@@ -54,13 +55,13 @@ export async function extractConcepts(bodyText: string): Promise<string[]> {
   const response = await getClient().messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 512,
-    system: CONCEPT_EXTRACTION_SYSTEM_PROMPT,
+    system: `${CONCEPT_EXTRACTION_SYSTEM_PROMPT}\n\n${UNTRUSTED_CONTENT_NOTICE}`,
     tools: [EXTRACT_CONCEPTS_TOOL],
     tool_choice: { type: 'any' },
     messages: [
       {
         role: 'user',
-        content: truncated,
+        content: wrapUntrusted(truncated),
       },
     ],
   });

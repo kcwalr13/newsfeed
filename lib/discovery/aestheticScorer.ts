@@ -3,6 +3,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AestheticScoreVector } from '@/lib/types/aesthetic';
 import { AESTHETIC_SCALE_MIN, AESTHETIC_SCALE_MAX } from '@/lib/config/aesthetic';
+import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 
 // Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
 // and doing that at module load would crash every importer of this module.
@@ -50,7 +51,7 @@ The six dimensions:
    Neutral: communicates information or argument with little emotional texture.
    Resonant: actively invites emotional engagement — wonder, melancholy, warmth.
 
-Score the piece as it actually reads, not as the genre or subject would suggest. A technical tutorial can be warmly personal. A political essay can be playfully written. Judge the text, not the category.`;
+Score the piece as it actually reads, not as the genre or subject would suggest. A technical tutorial can be warmly personal. A political essay can be playfully written. Judge the text, not the category.\n\n${UNTRUSTED_CONTENT_NOTICE}`;
 
 const SCORE_TOOL: Anthropic.Tool = {
   name: 'score_aesthetic',
@@ -95,7 +96,7 @@ export async function scoreAesthetic(input: string): Promise<AestheticScoreVecto
       system: SYSTEM_PROMPT,
       tools: [SCORE_TOOL],
       tool_choice: { type: 'any' },
-      messages: [{ role: 'user', content: input }],
+      messages: [{ role: 'user', content: wrapUntrusted(input) }],
     });
   } catch (err) {
     throw new AestheticScoringError(

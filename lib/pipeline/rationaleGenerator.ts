@@ -10,6 +10,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { Article } from '@/lib/types/article';
+import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 import { appendLog } from '@/lib/pipeline/storage';
 
 // Lazily initialised so the module can be imported in environments without the key set.
@@ -22,36 +23,30 @@ function getClient(): Anthropic {
 type SlotType = 'semantic_stretch' | 'blind_spot_probe' | 'wildcard';
 
 /**
- * Returns a one-sentence prompt asking Claude Haiku to explain why this article
- * belongs in the given exploration slot.
+ * Fixed instructions live in the system prompt; the scraped article fields are
+ * fenced in the user message (PIPE-M4).
  */
-function buildPrompt(article: Article, slotType: SlotType): string {
-  const title = article.title;
-  const source = article.sourceName;
-  const excerpt = article.description
-    ? ` It begins: "${article.description.slice(0, 120)}"`
-    : '';
+function buildSystemPrompt(slotType: SlotType): string {
+  const ask = {
+    semantic_stretch:
+      'explains why the article would intellectually stretch a curious reader beyond their ' +
+      'usual range. Start with a lowercase verb (e.g. "bridges", "draws", "connects").',
+    blind_spot_probe:
+      'explains why the article addresses an overlooked angle or perspective. ' +
+      'Start with a lowercase verb (e.g. "surfaces", "reframes", "challenges").',
+    wildcard:
+      'explains the surprising or unexpected value of the article. ' +
+      'Start with a lowercase verb (e.g. "arrives", "reveals", "offers").',
+  }[slotType];
+  return (
+    `Write one sentence under 18 words that ${ask} No quotes, no period at end. ` +
+    UNTRUSTED_CONTENT_NOTICE
+  );
+}
 
-  switch (slotType) {
-    case 'semantic_stretch':
-      return (
-        `Write one sentence under 18 words that explains why "${title}" (${source}) would ` +
-        `intellectually stretch a curious reader beyond their usual range.${excerpt} ` +
-        `Start with a lowercase verb (e.g. "bridges", "draws", "connects"). No quotes, no period at end.`
-      );
-    case 'blind_spot_probe':
-      return (
-        `Write one sentence under 18 words that explains why "${title}" (${source}) addresses ` +
-        `an overlooked angle or perspective.${excerpt} ` +
-        `Start with a lowercase verb (e.g. "surfaces", "reframes", "challenges"). No quotes, no period at end.`
-      );
-    case 'wildcard':
-      return (
-        `Write one sentence under 18 words that explains the surprising or unexpected value of ` +
-        `"${title}" (${source}).${excerpt} ` +
-        `Start with a lowercase verb (e.g. "arrives", "reveals", "offers"). No quotes, no period at end.`
-      );
-  }
+function buildUserPrompt(article: Article): string {
+  const excerpt = article.description ? `\nIt begins: ${article.description.slice(0, 120)}` : '';
+  return wrapUntrusted(`Title: ${article.title}\nSource: ${article.sourceName}${excerpt}`);
 }
 
 /**
@@ -65,17 +60,17 @@ export async function generateRationale(
   if (!process.env.ANTHROPIC_API_KEY) return null;
 
   try {
-    const prompt = buildPrompt(article, slotType);
     const msg = await getClient().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 64,
-      messages: [{ role: 'user', content: prompt }],
+      system: buildSystemPrompt(slotType),
+      messages: [{ role: 'user', content: buildUserPrompt(article) }],
     });
 
     const block = msg.content[0];
     if (!block || block.type !== 'text') return null;
-    // Trim punctuation artifacts and normalise whitespace
-    return block.text.replace(/\.$/, '').replace(/\s+/g, ' ').trim() || null;
+    // Trim punctuation artifacts, normalise whitespace, clamp runaway output
+    return block.text.replace(/\.$/, '').replace(/\s+/g, ' ').trim().slice(0, 200) || null;
   } catch (err) {
     appendLog(
       `[rationale] Failed for article ${article.id} (${slotType}): ` +

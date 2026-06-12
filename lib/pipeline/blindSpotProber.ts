@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Article } from '@/lib/types/article';
 import type { BlindSpotCluster } from '@/lib/db/blindSpots';
 import { recordProbeClusterIgnore } from '@/lib/db/blindSpots';
+import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 
 // Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
 // and doing that at module load would crash every importer of this module.
@@ -83,15 +84,16 @@ export async function identifyBlindSpotClusters(
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       system:
-        'You are a concept taxonomy assistant. Group the following concept labels into ' +
-        'broad thematic clusters of 2-8 words each. Assign each label to exactly one cluster. ' +
-        "Use a cluster labeled 'other' for labels that do not fit any clear theme.",
+        'You are a concept taxonomy assistant. Group the concept labels in the user message ' +
+        'into broad thematic clusters of 2-8 words each. Assign each label to exactly one cluster. ' +
+        "Use a cluster labeled 'other' for labels that do not fit any clear theme. " +
+        UNTRUSTED_CONTENT_NOTICE,
       tools: [GROUP_CONCEPTS_TOOL],
       tool_choice: { type: 'any' },
       messages: [
         {
           role: 'user',
-          content: uniqueLabels.join('\n'),
+          content: wrapUntrusted(uniqueLabels.join('\n')),
         },
       ],
     });

@@ -1,6 +1,7 @@
 // SERVER-SIDE ONLY — never import in browser bundles.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 
 /** Model used for content evaluation. Do not hardcode inline; use this constant. */
 const LLM_EVAL_MODEL = 'claude-haiku-4-5-20251001';
@@ -57,7 +58,9 @@ Dimensions:
 - evergreen_durability: Will this piece still be worth reading in a year? Is it anchored to a transient news event, or does it address something foundational?
 - writing_quality: Is the prose clear, precise, and crafted with care? Is it worth reading for the writing itself, not just the information?
 
-Score as a thoughtful, widely-read editor — not as a classifier pattern-matching on surface signals. A 5 means genuinely exceptional. A 3 means adequate but unremarkable. A 1 means generic, poorly written, or purely informational without insight.`,
+Score as a thoughtful, widely-read editor — not as a classifier pattern-matching on surface signals. A 5 means genuinely exceptional. A 3 means adequate but unremarkable. A 1 means generic, poorly written, or purely informational without insight.
+
+${UNTRUSTED_CONTENT_NOTICE}`,
       tools: [{
         name: 'score_article',
         description: 'Return quality scores for the article.',
@@ -79,7 +82,9 @@ Score as a thoughtful, widely-read editor — not as a classifier pattern-matchi
       tool_choice: { type: 'tool', name: 'score_article' },
       messages: [{
         role: 'user',
-        content: `Title: ${title}\nDescription: ${description}\nBody (first 3000 characters):\n${bodyText.slice(0, 3000)}`,
+        content: wrapUntrusted(
+          `Title: ${title}\nDescription: ${description}\nBody (first 3000 characters):\n${bodyText.slice(0, 3000)}`
+        ),
       }],
     });
 
