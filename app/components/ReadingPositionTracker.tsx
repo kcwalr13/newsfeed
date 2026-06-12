@@ -30,6 +30,8 @@ export default function ReadingPositionTracker({
   onFinished,
 }: Props) {
   const currentIndexRef  = useRef<number>(0);
+  // Mount timestamp: the initializer's value is kept only on first render
+  // eslint-disable-next-line react-hooks/purity
   const dwellStartRef    = useRef<number>(Date.now());
   const dwellTotalRef    = useRef<number>(0);
   const finishedRef      = useRef<boolean>(false);

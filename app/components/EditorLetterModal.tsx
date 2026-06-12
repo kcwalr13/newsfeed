@@ -9,6 +9,8 @@ export default function EditorLetterModal() {
 
   useEffect(() => {
     const dismissed = localStorage.getItem(STORAGE_KEY);
+    // localStorage is only readable after mount; runs once
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!dismissed) setVisible(true);
   }, []);
 
@@ -66,7 +68,7 @@ export default function EditorLetterModal() {
             mathematics. The juxtaposition is intentional.
           </p>
           <p>
-            Each piece is numbered. Read in order, skip what doesn't hold you,
+            Each piece is numbered. Read in order, skip what doesn&rsquo;t hold you,
             return to what does. The seven-dot strip at the top of the page marks
             your progress. It resets each morning.
           </p>
@@ -99,7 +101,7 @@ export default function EditorLetterModal() {
               cursor: 'pointer',
             }}
           >
-            Open today's issue →
+            Open today&rsquo;s issue →
           </button>
         </div>
       </div>

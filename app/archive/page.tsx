@@ -63,6 +63,8 @@ export default function ArchivePage() {
     const fb = getAllFeedback();
     const map: Record<string, string> = {};
     for (const [id, rec] of Object.entries(fb)) map[id] = rec.value;
+    // localStorage is only readable after mount; seeded once here
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFeedback(map);
 
     fetch('/api/archive')
@@ -266,7 +268,7 @@ export default function ArchivePage() {
                   className="ql-serif"
                   style={{ fontSize: '15px', fontStyle: 'italic', color: 'var(--dim)' }}
                 >
-                  Mark pieces "Read later" from any issue and they'll appear here.
+                  Mark pieces &ldquo;Read later&rdquo; from any issue and they&rsquo;ll appear here.
                 </p>
               </div>
             ) : (
