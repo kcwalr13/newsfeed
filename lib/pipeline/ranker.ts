@@ -7,6 +7,7 @@ import type { DbFeedbackRow } from '@/lib/db/feedback';
 import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthetic';
 import {
   vectorToArray,
+  centerAestheticArray,
   AESTHETIC_WEIGHT,
   SOURCE_SCORE_WEIGHT,
   SHORT_TERM_WEIGHT,
@@ -210,10 +211,14 @@ export function rankFeed(
     sourceScores.set(slug, { slug, ...raw, score, suppressed });
   }
 
-  // Precompute the blended centroid as a number[] for cosineSimilarity calls.
+  // Precompute the blended centroid as a CENTERED number[] for cosine calls.
+  // Raw 1–5 vectors are all in the positive orthant, which made cosine nearly
+  // constant; centering to [-1,1] lets opposite tastes actually score low.
   // null when no profile exists — collapses the aesthetic term to 0.0.
   const blendedCentroid = aestheticProfile ? blendCentroids(aestheticProfile) : null;
-  const centroidArray: number[] | null = blendedCentroid ? vectorToArray(blendedCentroid) : null;
+  const centroidArray: number[] | null = blendedCentroid
+    ? centerAestheticArray(vectorToArray(blendedCentroid))
+    : null;
 
   // Returns the blended rank score for an article.
   // When aestheticProfile is absent, collapses to source score only.
@@ -221,9 +226,11 @@ export function rankFeed(
     const ss = sourceScores.get(slugify(article.sourceName))!.score;
     if (!centroidArray) return ss;
 
+    // Centered cosine ∈ [-1, 1]: matched taste → +1, orthogonal/neutral → 0,
+    // opposite → -1. Unscored articles get 0 (no signal, not a penalty).
     const scoreVec = aestheticScoreMap?.get(article.id);
     const aestheticProximity = scoreVec
-      ? cosineSimilarity(centroidArray, vectorToArray(scoreVec))
+      ? cosineSimilarity(centroidArray, centerAestheticArray(vectorToArray(scoreVec)))
       : 0.0;
 
     return SOURCE_SCORE_WEIGHT * ss + AESTHETIC_WEIGHT * aestheticProximity;

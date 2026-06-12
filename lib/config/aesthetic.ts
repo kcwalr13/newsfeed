@@ -66,8 +66,12 @@ if (Math.abs(DRIFT_SHORT_TERM_WEIGHT + DRIFT_LONG_TERM_WEIGHT - 1.0) > 1e-10) {
   );
 }
 
-/** Cosine distance threshold above which the system enters a drift period. */
-export const DRIFT_THRESHOLD         = 0.25;
+/** Cosine distance threshold above which the system enters a drift period.
+ *  Tuned for CENTERED vectors (see centerAestheticArray): distance is in
+ *  [0, 2]; 0.5 corresponds to ~60° divergence between short- and long-term
+ *  taste. (Was 0.25 against raw 1–5 vectors, where distance rarely exceeded
+ *  ~0.05 and drift was unreachable.) */
+export const DRIFT_THRESHOLD         = 0.5;
 /** Trailing days for the short-term preference window. */
 export const SHORT_TERM_WINDOW_DAYS  = 21;
 /** Minimum qualifying feedback events before short-term centroid is trusted. */
@@ -112,6 +116,17 @@ export const DIMENSION_KEYS: Array<keyof AestheticScoreVector> = [
  */
 export function vectorToArray(v: AestheticScoreVector): number[] {
   return DIMENSION_KEYS.map(k => v[k]);
+}
+
+/**
+ * Centers a positional aesthetic array from the [1,5] scale to [-1,1] via
+ * (v - 3) / 2. Raw 1–5 vectors all live in the positive orthant, so cosine
+ * similarity between any two of them is nearly constant (always > ~0.7);
+ * centering restores discriminating power (opposite tastes → negative
+ * similarity, neutral → 0).
+ */
+export function centerAestheticArray(arr: number[]): number[] {
+  return arr.map((v) => (v - 3) / 2);
 }
 
 /**

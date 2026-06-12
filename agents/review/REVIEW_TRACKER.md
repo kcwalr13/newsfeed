@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 9 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 36
-- Current branch expected: `main` · Last resume point: PIPE-H2
+- DONE: 10 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 35
+- Current branch expected: `main` · Last resume point: PIPE-H4
 
 ---
 
@@ -216,11 +216,16 @@ npm run dev           # for manual/browser spot-checks
     (3.0); 0% pass-rate now logs at error level instead of silently zeroing discovery.
     Live-verified: single Brave query returns 5 results in ~0.8s under new config. Gate green.
 
-- [ ] **PIPE-H2** · 🟠 High · Cosine on raw 1–5 vectors is inert; drift unreachable
+- [x] **PIPE-H2** · 🟠 High · Cosine on raw 1–5 vectors is inert; drift unreachable
   - Where: `lib/pipeline/ranker.ts:224-229`, `lib/utils/driftScore.ts:25`, `lib/config/aesthetic.ts:70`
   - Fix: center each dimension to [-1,1] via `(v-3)/2` before cosine (or scaled Euclidean). Re-tune `DRIFT_THRESHOLD` afterward.
   - Verify: opposite profiles produce low similarity; likes visibly reorder the feed beyond source effects.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New `centerAestheticArray` ((v−3)/2) in
+    `lib/config/aesthetic.ts`, applied in `ranker.blendedScore` (both centroid and article
+    vectors; proximity now ∈ [−1,1], unscored articles get neutral 0) and in
+    `computeDriftScore` (distance now ∈ [0,2]). `DRIFT_THRESHOLD` re-tuned 0.25 → 0.5 (~60°
+    divergence on centered vectors). Numeric verification: opposite profiles raw cosine 0.718 →
+    centered −1.000; similar profiles 0.943; drift distance reaches 2.0. Gate green.
 
 - [ ] **PIPE-H4** · 🟠 High · `computeDiversityScore` always saturates at 1.0
   - Where: `lib/pipeline/receptivity.ts:63`
@@ -423,6 +428,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 |------|---------|----------|-----------|
 | 2026-06-12 | (infra) | Added `.claude/**` to eslint `globalIgnores` and fixed 8 pre-existing lint errors (5 unescaped JSX entities escaped properly; 2 `set-state-in-effect` + 1 `react-hooks/purity` silenced with justified `eslint-disable-next-line`) in a separate `chore(lint)` commit | `npm run lint` had never been green: it scanned stale `.claude/worktrees/*/.next` build artifacts (1951 errors) and 8 real pre-existing errors. The campaign's verification gate requires lint green before every push, so this baseline was a prerequisite. The three disabled sites are mount-time localStorage reads / a mount timestamp ref — legit patterns; the components get properly reworked later by FE-M3/FE-M4/FE-H1. |
 | 2026-06-12 | DAT-C1 | Rotation cursor table `query_rotation_state` is global (keyed by `topic_id` only), not per-user | Matches the semantics of the JSON file it replaces; app is single-user. Re-key by identity later if multi-user needs it. |
+| 2026-06-12 | PIPE-H2 | Aesthetic proximity stays raw centered cosine ∈ [−1,1] (no re-mapping to [0,1]); unscored articles get 0; `DRIFT_THRESHOLD` 0.25 → 0.5 | 0 = orthogonal = "no signal" makes the unscored fallback genuinely neutral; a [0,1] re-map would have made unscored (0) read as "maximally opposite". 0.5 ≈ 60° divergence between short/long-term centroids — a real taste shift, reachable but not noisy. |
 | 2026-06-12 | PIPE-H1 | Degraded run = write the batch + flag `degraded:true` + return 500 (rather than refusing to write); degraded refresh does not consume the cooldown | Articles are still readable when unranked, so readers keep a feed; the 500 makes cron/manual callers alert. Cooldown skip lets Kyle retry immediately after fixing the API key, and a fully-failed run made zero billable LLM calls anyway. |
 | 2026-06-12 | DAT-C2 | Chose `UNIQUE NULLS NOT DISTINCT` (not the `user_id=''` sentinel); de-dup strategy per table: keep-newest for `user_aesthetic_profiles`/`discovery_topic_weights`, SUM-merge for `user_concepts`/`user_concept_edges`, keep-oldest + `probe_count = duplicates − 1` for `blind_spot_clusters` | Sentinel would require touching every read/write path. De-dup mirrors each upsert's write style: full-state rewrites → newest row is truth; increment-style upserts scattered +1s across duplicate rows → SUM restores accumulated taste data; blind-spot status UPDATEs matched all duplicates so the oldest row saw every update, and the on-conflict probe increment never fired so row-count reconstructs it. |
 
@@ -480,5 +486,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-H6** → DONE: RSS parser timeout/UA + pubDate guard; live RSS fetch verified.
   Commit: 5f195fb.
 - **PIPE-H5** → DONE: Brave timeout + 429 retry + serialized queries; adaptive LLM threshold
-  with floor 3.0 and loud 0%-pass logging.
-- RESUME AT: **PIPE-H2**
+  with floor 3.0 and loud 0%-pass logging. Commit: ad618b5.
+- **PIPE-H2** → DONE: centered cosine ((v−3)/2) in ranker + drift score; DRIFT_THRESHOLD 0.5.
+  Numerically verified (opposite profiles −1.0 vs inert 0.718).
+- RESUME AT: **PIPE-H4**
