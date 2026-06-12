@@ -44,7 +44,10 @@ Return a JSON array of exactly 5 strings and nothing else. No markdown, no expla
 
   const text = response.content.find((b) => b.type === 'text')?.text ?? '';
   try {
-    const parsed = JSON.parse(text.trim());
+    // Strip markdown code fences — a fenced reply otherwise fails JSON.parse
+    // and silently yields 0 queries for the topic (PIPE-L4).
+    const jsonStr = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const parsed = JSON.parse(jsonStr);
     if (Array.isArray(parsed) && parsed.length > 0) {
       return parsed.slice(0, 5).map(String);
     }
