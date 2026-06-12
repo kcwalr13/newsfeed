@@ -72,11 +72,12 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 72 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 1 · BLOCKED: 0
+- DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 0 · BLOCKED: 0
+- **🎉 CAMPAIGN COMPLETE: every tracked finding is DONE, VERIFIED, DEFERRED (multi-user), or deliberately SKIPPED.**
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **PIPE-L9**
+- Current branch: `main` · Last resume point: **— (campaign complete)**
 
 ---
 
@@ -675,7 +676,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **PIPE-L4** · 🟢 · `refresh-query-banks.ts` bare `JSON.parse` w/o fence-strip → 0 queries on fenced reply. — DONE: strips ```/```json fences before parsing (same idiom as themeGenerator). Commit: fix(PIPE-L4).
 - [x] **PIPE-L5** · 🟢 · `serendipityScorer` bidirectional substring over-matches short labels; require token-boundary/min length. (`:63-68`) — DONE: known-check is now exact-match OR whole-token-sequence containment with a 4-char fuzzy floor ("art" no longer matches "artificial intelligence", "urban" no longer matches "suburban planning"; "machine learning" still matches "applied machine learning"). Vectors verified. Commit: fix(PIPE-L5).
 - [x] **PIPE-L7** · 🟢 · `newsApiAdapter` puts API key in query string + no timeout; use `X-Api-Key` header. (currently moot — all RSS) — DONE: key moved to the `X-Api-Key` header; 10s `AbortSignal.timeout` added (matches the RSS parser). Adapter remains dormant (no active newsapi sources) but is no longer a footgun if one is activated. Commit: fix(PIPE-L7).
-- [ ] **PIPE-L9** · 🟢 · Centralize the hardcoded model name `claude-haiku-4-5-20251001` (7 files) into one `LLM_MODEL` constant.
+- [x] **PIPE-L9** · 🟢 · Centralize the hardcoded model name `claude-haiku-4-5-20251001` (7 files) into one `LLM_MODEL` constant. — DONE: new `lib/config/llm.ts` exports `LLM_MODEL`; all 7 files (themeGenerator, blindSpotProber, rationaleGenerator, llmEvaluator, conceptExtractor, aestheticScorer, refresh-query-banks script — the script via a relative import, since ts-node doesn't resolve the `@/` alias) now import it; grep confirms zero literals outside the config. Commit: fix(PIPE-L9).
 
 ---
 
@@ -888,5 +889,9 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-L4** → DONE: fence-strip before JSON.parse in refresh-query-banks. Commit: 959fd58.
 - **PIPE-L5** → DONE: token-boundary concept matching with 4-char fuzzy floor. Commit: 74d161d.
 - **PIPE-L7** → DONE: X-Api-Key header + 10s timeout on the dormant NewsAPI adapter.
-  Commit: pending.
-- RESUME AT: **PIPE-L9**
+  Commit: f1738be.
+- **PIPE-L9** → DONE: LLM_MODEL constant in lib/config/llm.ts; 7 files migrated. Commit: pending.
+- **CAMPAIGN COMPLETE** — no TODO findings remain. RESUME AT: — (nothing to resume; next session
+  should live-validate on the Vercel deploy: focus rings, modal a11y, tap targets, dot-strip
+  seeding on a fresh device, and the next cron run's logs for the budget/lock/canonicalizer
+  log lines).

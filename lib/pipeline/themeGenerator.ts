@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Article, DailyIssue, SourceCredit } from '@/lib/types/article';
 import { appendLog } from '@/lib/pipeline/storage';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
+import { LLM_MODEL } from '@/lib/config/llm';
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -40,7 +41,7 @@ async function generateTheme(articles: Article[]): Promise<ThemeResult> {
     UNTRUSTED_CONTENT_NOTICE;
 
   const msg = await getClient().messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: LLM_MODEL,
     // 160: the JSON envelope + a 22-word note can exceed 80 tokens, truncating
     // mid-string and failing JSON.parse → fallback theme (PIPE-L3).
     max_tokens: 160,

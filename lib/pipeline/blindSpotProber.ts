@@ -5,6 +5,7 @@ import type { Article } from '@/lib/types/article';
 import type { BlindSpotCluster } from '@/lib/db/blindSpots';
 import { recordProbeClusterIgnore } from '@/lib/db/blindSpots';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
+import { LLM_MODEL } from '@/lib/config/llm';
 
 // Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
 // and doing that at module load would crash every importer of this module.
@@ -81,7 +82,7 @@ export async function identifyBlindSpotClusters(
 
   try {
     const response = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: LLM_MODEL,
       max_tokens: 2048,
       system:
         'You are a concept taxonomy assistant. Group the concept labels in the user message ' +

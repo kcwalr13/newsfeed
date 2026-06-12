@@ -2,9 +2,10 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
+import { LLM_MODEL } from '@/lib/config/llm';
 
 /** Model used for content evaluation. Do not hardcode inline; use this constant. */
-const LLM_EVAL_MODEL = 'claude-haiku-4-5-20251001';
+const LLM_EVAL_MODEL = LLM_MODEL;
 
 export interface LLMScores {
   intellectual_substance: number;

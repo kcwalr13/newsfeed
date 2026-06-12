@@ -11,12 +11,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
 import { DISCOVERY_TOPICS } from '../lib/discovery/topics';
+import { LLM_MODEL } from '../lib/config/llm';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const BANK_PATH = path.join(DATA_DIR, 'query_banks.json');
 const STATE_PATH = path.join(DATA_DIR, 'query_rotation_state.json');
 
-const GENERATION_MODEL = 'claude-haiku-4-5-20251001';
+const GENERATION_MODEL = LLM_MODEL;
 
 async function generateQueriesForTopic(
   client: Anthropic,

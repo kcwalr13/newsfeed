@@ -12,6 +12,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Article } from '@/lib/types/article';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 import { appendLog } from '@/lib/pipeline/storage';
+import { LLM_MODEL } from '@/lib/config/llm';
 
 // Lazily initialised so the module can be imported in environments without the key set.
 let _client: Anthropic | null = null;
@@ -61,7 +62,7 @@ export async function generateRationale(
 
   try {
     const msg = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: LLM_MODEL,
       max_tokens: 64,
       system: buildSystemPrompt(slotType),
       messages: [{ role: 'user', content: buildUserPrompt(article) }],

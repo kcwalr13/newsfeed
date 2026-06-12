@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { AestheticScoreVector } from '@/lib/types/aesthetic';
 import { AESTHETIC_SCALE_MIN, AESTHETIC_SCALE_MAX } from '@/lib/config/aesthetic';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
+import { LLM_MODEL } from '@/lib/config/llm';
 
 // Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
 // and doing that at module load would crash every importer of this module.
@@ -16,7 +17,7 @@ function getClient(): Anthropic {
   return _client;
 }
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = LLM_MODEL;
 
 const SYSTEM_PROMPT = `You are a thoughtful literary editor with wide reading experience across all genres and disciplines. Your task is to score a piece of writing on six aesthetic dimensions that describe how the writing *feels* to read — not what it is about or whether it is good.
 
