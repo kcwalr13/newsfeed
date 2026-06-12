@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 44 · DEFERRED (multi-user): 4 · TODO: 30 · BLOCKED: 0
+- DONE/VERIFIED: 45 · DEFERRED (multi-user): 4 · TODO: 29 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M1**
+- Current branch: `main` · Last resume point: **FE-M2**
 
 ---
 
@@ -536,9 +536,12 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 - [x] **DAT-L9** · 🟢 · `drainQueue` lost-write race (client, rare). (`store.ts:163-186`) — DONE: after each successful send, the item is now removed from a FRESH `readQueue()` (matched by articleId+value+timestamp) instead of writing back a drain-start snapshot, so an `enqueue()` during the in-flight await is never clobbered. Commit: chore(DAT-L).
 
 ### Frontend — mediums
-- [ ] **FE-M1** · 🟡 Medium · Hydration mismatch: localStorage read in `useState` initializer on SSR'd page
+- [x] **FE-M1** · 🟡 Medium · Hydration mismatch: localStorage read in `useState` initializer on SSR'd page
   - Fix: init to null, sync in `useEffect`. (`app/components/ArticleInteractions.tsx:54-56`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `feedback` state now initializes to null and syncs
+    from localStorage in a `[articleId]` effect after mount, so server markup and first client
+    render agree. Justified eslint-disable for set-state-in-effect (same pattern as the lint
+    baseline's other hydration syncs). Gate green.
 - [ ] **FE-M2** · 🟡 Medium · Feedback retry queue wedged by a 4xx poison-pill; retried forever
   - Fix: only enqueue on network/5xx/429; drop on 4xx; add max-attempts/TTL. (`lib/feedback/store.ts:126-190`)
   - Status: TODO · Commit: — · Notes: —
@@ -764,5 +767,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-L2** → DONE: unnest-batched node/edge upserts (2 statements per extraction); live-tested
   on scratch rows. Commit: e0f5c67.
 - **DAT-L3** → DONE: EMA blend moved into a single atomic upsert (pgvector element-wise math);
-  concurrent-update loss verified fixed on scratch rows. Commit: pending.
-- RESUME AT: **FE-M1**
+  concurrent-update loss verified fixed on scratch rows. Commit: d23d560.
+- **FE-M1** → DONE: hydration-safe feedback state init (null + post-mount sync). Commit: pending.
+- RESUME AT: **FE-M2**

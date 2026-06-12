@@ -51,12 +51,18 @@ function useDwellTimer(): () => number {
 }
 
 export default function ArticleInteractions({ articleId }: Props) {
-  const [feedback, setFeedbackState] = useState<Verb>(
-    () => getFeedback(articleId) ?? null
-  );
+  // Init to null and sync from localStorage after mount: reading it in the
+  // useState initializer runs during hydration of this SSR'd page, and any
+  // stored value would mismatch the server-rendered markup (FE-M1).
+  const [feedback, setFeedbackState] = useState<Verb>(null);
   const [confirmed, setConfirmed] = useState<Verb>(null);
   const feedbackGivenRef = useRef(false);
   const getDwellSeconds = useDwellTimer();
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe localStorage sync must run post-mount
+    setFeedbackState(getFeedback(articleId) ?? null);
+  }, [articleId]);
 
   // Passive beacon: send dwell time when user leaves without explicit feedback
   useEffect(() => {
