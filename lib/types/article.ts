@@ -109,6 +109,11 @@ export interface ArticleBatch {
   generatedAt: string;
   /** The articles in this batch. */
   articles: Article[];
+  /**
+   * True when LLM enrichment (aesthetic scoring / concept extraction) failed
+   * for every article, so the batch is ranked by source score only.
+   */
+  degraded?: boolean;
 }
 
 /** A content source entry from data/sources.json. */

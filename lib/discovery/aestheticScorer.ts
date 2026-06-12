@@ -4,7 +4,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { AestheticScoreVector } from '@/lib/types/aesthetic';
 import { AESTHETIC_SCALE_MIN, AESTHETIC_SCALE_MAX } from '@/lib/config/aesthetic';
 
-const client = new Anthropic();
+// Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
+// and doing that at module load would crash every importer of this module.
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new AestheticScoringError('ANTHROPIC_API_KEY is not set');
+  }
+  if (!_client) _client = new Anthropic();
+  return _client;
+}
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -80,7 +89,7 @@ export class AestheticScoringError extends Error {
 export async function scoreAesthetic(input: string): Promise<AestheticScoreVector> {
   let response: Anthropic.Message;
   try {
-    response = await client.messages.create({
+    response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 256,
       system: SYSTEM_PROMPT,

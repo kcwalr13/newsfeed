@@ -36,6 +36,24 @@ export async function POST(req: NextRequest) {
   try {
     const result = await runPipeline({ forceOverwrite: true, userId, deviceId });
 
+    if (result.degraded) {
+      // Batch written but every LLM call failed. Don't consume the cooldown so
+      // the user can retry once the cause (e.g. API key) is fixed.
+      appendLog(
+        `[refresh] Degraded refresh. userId=${userId} batchDate=${result.batchDate}`
+      );
+      return NextResponse.json(
+        {
+          ok: false,
+          degraded: true,
+          error: 'LLM enrichment failed for all articles; batch written unranked',
+          batchDate: result.batchDate,
+          count: result.count,
+        },
+        { status: 500 }
+      );
+    }
+
     // Record cooldown ONLY after success — failed refresh does not consume cooldown
     recordRefresh(userId);
 

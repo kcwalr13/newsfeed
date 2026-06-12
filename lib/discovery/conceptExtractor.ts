@@ -3,7 +3,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
 
-const anthropic = new Anthropic();
+// Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
+// and doing that at module load would crash every importer of this module.
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not set');
+  }
+  if (!_client) _client = new Anthropic();
+  return _client;
+}
 
 const CONCEPT_EXTRACTION_SYSTEM_PROMPT = `You extract the specific intellectual concepts, ideas, and themes that an article engages with. A concept label is 2–5 words and names a specific idea, not a broad category. Extract 5–8 concepts per article.
 
@@ -42,7 +51,7 @@ const EXTRACT_CONCEPTS_TOOL: Anthropic.Tool = {
 export async function extractConcepts(bodyText: string): Promise<string[]> {
   const truncated = bodyText.slice(0, AESTHETIC_BODY_MAX_CHARS);
 
-  const response = await anthropic.messages.create({
+  const response = await getClient().messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 512,
     system: CONCEPT_EXTRACTION_SYSTEM_PROMPT,

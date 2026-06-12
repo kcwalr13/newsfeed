@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 3 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 42
-- Current branch expected: `main` · Last resume point: PIPE-H1
+- DONE: 4 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 41
+- Current branch expected: `main` · Last resume point: PIPE-Q1
 
 ---
 
@@ -139,11 +139,18 @@ npm run dev           # for manual/browser spot-checks
     longer be starved by slow discovery. Gate green. Live verify after deploy: cron run completes
     and writes `article_batches`.
 
-- [ ] **PIPE-H1** · 🟠 High · Total LLM failure degrades silently into a junk batch (`ok:true`)
+- [x] **PIPE-H1** · 🟠 High · Total LLM failure degrades silently into a junk batch (`ok:true`)
   - Where: `lib/pipeline/run.ts`; evidence in `data/pipeline.log` (04-17→04-20: `scored=0 skipped=20`, auth failures)
   - Fix: use the failure counts already computed; if `skipped === articles.length` or api-error count exceeds a threshold, fail the run (so the cron surfaces it) and/or flag the batch `degraded:true` and log at error level. Make `aestheticScorer.ts:7` / `conceptExtractor.ts:6` guard a missing `ANTHROPIC_API_KEY` like the lazy modules do.
   - Verify: simulate a missing key locally → run fails loudly / marks degraded instead of returning success.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `aestheticScorer.ts` + `conceptExtractor.ts` now use
+    lazy clients with an explicit key guard (module-load `new Anthropic()` crashed every importer
+    when the key was missing). `scoreArticlesAesthetic` returns counts; concept extraction counts
+    successes; `scored===0 && concepts===0 && articles>0` → batch written with `degraded:true`
+    (still readable, ranked by source score), error-level logs, and **both routes return 500**
+    with `{ok:false, degraded:true}` so cron alerting fires. Degraded refresh does not consume
+    the cooldown. Verified by simulation: with ANTHROPIC_API_KEY unset, import succeeds and the
+    call throws `AestheticScoringError: ANTHROPIC_API_KEY is not set` per article. Gate green.
 
 ---
 
@@ -386,6 +393,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 |------|---------|----------|-----------|
 | 2026-06-12 | (infra) | Added `.claude/**` to eslint `globalIgnores` and fixed 8 pre-existing lint errors (5 unescaped JSX entities escaped properly; 2 `set-state-in-effect` + 1 `react-hooks/purity` silenced with justified `eslint-disable-next-line`) in a separate `chore(lint)` commit | `npm run lint` had never been green: it scanned stale `.claude/worktrees/*/.next` build artifacts (1951 errors) and 8 real pre-existing errors. The campaign's verification gate requires lint green before every push, so this baseline was a prerequisite. The three disabled sites are mount-time localStorage reads / a mount timestamp ref — legit patterns; the components get properly reworked later by FE-M3/FE-M4/FE-H1. |
 | 2026-06-12 | DAT-C1 | Rotation cursor table `query_rotation_state` is global (keyed by `topic_id` only), not per-user | Matches the semantics of the JSON file it replaces; app is single-user. Re-key by identity later if multi-user needs it. |
+| 2026-06-12 | PIPE-H1 | Degraded run = write the batch + flag `degraded:true` + return 500 (rather than refusing to write); degraded refresh does not consume the cooldown | Articles are still readable when unranked, so readers keep a feed; the 500 makes cron/manual callers alert. Cooldown skip lets Kyle retry immediately after fixing the API key, and a fully-failed run made zero billable LLM calls anyway. |
 | 2026-06-12 | DAT-C2 | Chose `UNIQUE NULLS NOT DISTINCT` (not the `user_id=''` sentinel); de-dup strategy per table: keep-newest for `user_aesthetic_profiles`/`discovery_topic_weights`, SUM-merge for `user_concepts`/`user_concept_edges`, keep-oldest + `probe_count = duplicates − 1` for `blind_spot_clusters` | Sentinel would require touching every read/write path. De-dup mirrors each upsert's write style: full-state rewrites → newest row is truth; increment-style upserts scattered +1s across duplicate rows → SUM restores accumulated taste data; blind-spot status UPDATEs matched all duplicates so the oldest row saw every update, and the on-conflict probe increment never fired so row-count reconstructs it. |
 
 ---
@@ -429,5 +437,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   color rule confirmed in built CSS. Commit: 597b1e1.
 - **DAT-H2** → DONE: maxDuration=300 on both pipeline routes; LLM loops at concurrency 4;
   270s wall-clock budget with 120s post-discovery reserve (skip / cut-short discovery, always
-  write the batch).
-- RESUME AT: **PIPE-H1**
+  write the batch). Commit: f500760.
+- **PIPE-H1** → DONE: lazy key-guarded LLM clients; total-LLM-failure detection → degraded
+  batch + 500 from both routes; verified by missing-key simulation.
+- RESUME AT: **PIPE-Q1**

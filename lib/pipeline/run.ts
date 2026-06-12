@@ -31,6 +31,8 @@ export interface RunResult {
   batchDate: string;
   count: number;
   alreadyExists: boolean;
+  /** True when LLM enrichment failed for every article (batch written unranked). */
+  degraded?: boolean;
 }
 
 function todayUTC(): string {
@@ -148,7 +150,9 @@ function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle
  * Failures are isolated per-article: an error for article N does not affect N+1.
  * A scoring failure never removes the article from the batch.
  */
-async function scoreArticlesAesthetic(articles: Article[]): Promise<void> {
+async function scoreArticlesAesthetic(
+  articles: Article[]
+): Promise<{ scored: number; skipped: number }> {
   const startMs = Date.now();
   let scored = 0;
   let skipped = 0;
@@ -182,6 +186,7 @@ async function scoreArticlesAesthetic(articles: Article[]): Promise<void> {
   appendLog(
     `[aesthetic] Run complete: scored=${scored} skipped=${skipped} totalMs=${totalMs}`
   );
+  return { scored, skipped };
 }
 
 /**
@@ -335,10 +340,11 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     await fetchMissingBodyText(articles);
 
     // Score all articles aesthetically before writing the batch
-    await scoreArticlesAesthetic(articles);
+    const { scored } = await scoreArticlesAesthetic(articles);
 
     // Phase 4: Extract concepts for all articles before writing the batch.
     // Bounded concurrency to respect Anthropic API rate limits.
+    let conceptsExtracted = 0;
     await forEachWithConcurrency(articles, PIPELINE_LLM_CONCURRENCY, async (article) => {
       try {
         const text = article.bodyText?.trim()
@@ -346,22 +352,37 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
           : `${article.title} ${article.description ?? ''}`;
         const concepts = await extractConcepts(text);
         article.extractedConcepts = concepts;
+        conceptsExtracted++;
       } catch (err) {
         console.error(`[pipeline] concept extraction failed for ${article.id}:`, err);
         article.extractedConcepts = [];
       }
     });
 
+    // Total LLM failure must not masquerade as a healthy run: flag the batch
+    // degraded (it is ranked by source score only) so the route can surface it.
+    const degraded = articles.length > 0 && scored === 0 && conceptsExtracted === 0;
+    if (degraded) {
+      console.error(
+        `[pipeline] DEGRADED RUN: LLM enrichment failed for all ${articles.length} articles ` +
+          `(aesthetic scored=0, concepts=0). Check ANTHROPIC_API_KEY / API status.`
+      );
+      appendLog(
+        `[pipeline] DEGRADED RUN: writing unranked batch for ${today}; all LLM calls failed.`
+      );
+    }
+
     const batch: ArticleBatch = {
       batchDate: today,
       generatedAt: new Date().toISOString(),
       articles,
+      ...(degraded ? { degraded: true } : {}),
     };
 
     await writeBatch(batch, options.forceOverwrite ?? false);
     appendLog(`[pipeline] Run complete. batchDate=${today} count=${articles.length}`);
 
-    return { batchDate: today, count: articles.length, alreadyExists: false };
+    return { batchDate: today, count: articles.length, alreadyExists: false, degraded };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     appendLog(`[pipeline] Run failed: ${message}`);

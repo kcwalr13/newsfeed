@@ -24,6 +24,21 @@ async function handleRun() {
       );
     }
 
+    if (result.degraded) {
+      // Batch was written but every LLM call failed — fail the response so the
+      // cron's failure alerting surfaces it instead of reporting success.
+      return NextResponse.json(
+        {
+          ok: false,
+          degraded: true,
+          error: 'LLM enrichment failed for all articles; batch written unranked',
+          batchDate: result.batchDate,
+          count: result.count,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ ok: true, batchDate: result.batchDate, count: result.count });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
