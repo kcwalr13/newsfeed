@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 65 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 8 · BLOCKED: 0
+- DONE/VERIFIED: 66 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 7 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **PIPE-M6**
+- Current branch: `main` · Last resume point: **PIPE-L group**
 
 ---
 
@@ -651,9 +651,16 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     label-keyed), so they're covered by the budget only. Degraded-run detection updated to
     count alreadyScored as enrichment success (a refresh where everything was pre-scored is
     not a degraded run). Gate green.
-- [ ] **PIPE-M6** · 🟡 Medium · URL dedup inconsistency; no utm/tracking normalization (orphans feedback)
+- [x] **PIPE-M6** · 🟡 Medium · URL dedup inconsistency; no utm/tracking normalization (orphans feedback)
   - Fix: shared canonicalizer (origin+pathname, strip `utm_*`/`at_*`) used by both dedup passes and the id hash. (`run.ts:204-208`, `discovery/run.ts:55-62`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New shared `lib/utils/url.ts`
+    `canonicalizeUrlForDedup` (drops fragment + tracking params utm_*/at_*/fbclid/gclid/ref/…,
+    keeps meaningful query params sorted — WordPress `?p=` permalinks stay distinct — trims
+    trailing slash). Used by all three dedup passes: pipeline cross-source dedup (was raw URL),
+    the fixed-vs-discovery URL set, and discovery's local canonicalizer (now an alias, so both
+    sides of that comparison stay consistent). Deliberately NOT applied to the `makeId` hash —
+    changing id derivation would orphan every existing feedback/reading-position row (see
+    Decisions Log). Vectors verified (utm stripped, ?p= kept, non-URL passthrough). Gate green.
 - [x] **PIPE-M7** · 🟡 Medium · HTML entity decoding: order + astral + missing named entities → garbled text
   - Fix: decode `&amp;` last; `String.fromCodePoint`; add common named entities. (`rssAdapter.ts:13-22`) (≈FE-L5 — do together)
   - Status: DONE · Commit: pending · Notes: See FE-L5 — shared `lib/utils/htmlEntities.ts` decoder
@@ -689,6 +696,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-12 | DAT-H5 | Kept `/api/feed/refresh` unauthenticated; cooldown + run lock reuse the `rate_limits` table instead of a new table/advisory locks | Single-user app with auth off: the in-app button must call the route, so a secret would ship to the client. pg advisory locks don't survive the neon HTTP driver's per-statement sessions; a TTL'd atomic claim row does. Reusing rate_limits avoids a migration entirely. |
 | 2026-06-12 | FE-L1 | Kept the sepia/paper/dark theme CSS blocks despite "unused themes" in the finding | FE-H3 deliberately darkened `--dim` in all four themes one session earlier; the blocks are inert without a data-theme setter (no clash risk) and deleting them would undo that accessibility work the moment a theme switcher ships. |
 | 2026-06-12 | FE-L3 | Skipped adding SW offline caching (kept registration-only sw.js) | The finding is conditioned on "when ready"; no offline UX is designed, and a network-first cache shipped blind can silently serve stale issues — worse than no offline. Revisit with a real offline reading feature. |
+| 2026-06-12 | PIPE-M6 | Canonicalizer applied to dedup passes only, NOT the article id hash (report suggested both) | Article ids key feedback + reading-position rows; rehashing canonicalized URLs would orphan all existing user data for any article whose URL carries query params. Dedup-only captures the user-facing win (no duplicate articles in a batch) at zero migration cost. |
 | 2026-06-12 | (scope) | Deferred remaining security hardening (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to a new *Future state — multi-user rollout* section; not enabling Vercel password protection | Kyle confirmed Tangent is private/single-user. These defend multi-user/abuse threat models that don't apply yet; production password protection is a ~$150/mo Vercel Pro feature. Revisit at multi-user rollout. |
 
 ---
@@ -870,5 +878,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-M4** → DONE: untrusted-content fencing + system-prompt notice on all 6 LLM call
   sites; live adversarial test passed. Commit: 3aa74d3.
 - **PIPE-M5** → DONE: 120-call per-run LLM budget; aesthetic skip-if-scored (refresh no longer
-  re-bills). Commit: pending.
-- RESUME AT: **PIPE-M6**
+  re-bills). Commit: a1c6848.
+- **PIPE-M6** → DONE: shared dedup canonicalizer across all three passes; id hash untouched.
+  Commit: pending.
+- RESUME AT: **PIPE-L group** (PIPE-M7 done earlier with FE-L5)

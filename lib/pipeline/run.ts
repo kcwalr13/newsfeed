@@ -8,6 +8,7 @@ import {
   MAX_LLM_EVALS_PER_RUN,
 } from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
+import { canonicalizeUrlForDedup } from '@/lib/utils/url';
 import { writeBatch, readBatch, readLatestBatchBefore, appendLog } from './storage';
 import {
   identifyBlindSpotClusters,
@@ -377,11 +378,14 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
 
     const candidates = results.flat();
 
-    // Cross-source URL deduplication (first occurrence wins)
+    // Cross-source URL deduplication (first occurrence wins), canonicalized
+    // so tracking params / trailing slashes can't smuggle in duplicates.
     const seenUrls = new Set<string>();
     const deduped = candidates.filter((a) => {
-      if (!a.articleUrl || seenUrls.has(a.articleUrl)) return false;
-      seenUrls.add(a.articleUrl);
+      if (!a.articleUrl) return false;
+      const canonical = canonicalizeUrlForDedup(a.articleUrl);
+      if (seenUrls.has(canonical)) return false;
+      seenUrls.add(canonical);
       return true;
     });
 
@@ -417,13 +421,8 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     // We keep up to ARTICLES_PER_DAY so that if discovery yields 0, fixed sources can fill all 20 slots.
     const validated = validateAndTrim(capped, ARTICLES_PER_DAY);
 
-    // Build URL set for deduplication (canonical: origin + pathname).
-    const fixedArticleUrls = new Set(
-      validated.map((a) => {
-        try { const u = new URL(a.articleUrl); return u.origin + u.pathname; }
-        catch { return a.articleUrl; }
-      })
-    );
+    // Build URL set for discovery-vs-fixed deduplication (shared canonicalizer).
+    const fixedArticleUrls = new Set(validated.map((a) => canonicalizeUrlForDedup(a.articleUrl)));
 
     // Wall-clock budget: discovery only gets what's left after reserving time
     // for body fetch, scoring, concept extraction, and the batch write. A slow

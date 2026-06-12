@@ -15,6 +15,7 @@ import type { LLMScores } from './llmEvaluator';
 import { loadQueryBanks, loadRotationState, saveRotationState, selectNextTwoQueries } from './queryBank';
 import { runSmallWebCrawl } from './smallWeb/crawler';
 import { appendLog, readLatestBatch } from '@/lib/pipeline/storage';
+import { canonicalizeUrlForDedup } from '@/lib/utils/url';
 import {
   getTopicWeightsForUser,
   getAllTopicWeightsAveraged,
@@ -52,14 +53,9 @@ function makeId(sourceName: string, articleUrl: string): string {
   return `${slug}-${hash}`;
 }
 
-function canonicalizeUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return u.origin + u.pathname;
-  } catch {
-    return url;
-  }
-}
+// Shared canonicalizer (PIPE-M6) — must match the fixed-source side so the
+// discovery-vs-fixed dedup compares like with like.
+const canonicalizeUrl = canonicalizeUrlForDedup;
 
 function selectTopics(
   topics: DiscoveryTopic[],
