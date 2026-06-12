@@ -62,6 +62,10 @@ export default function FeedPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Track feedback state locally so the seven-dot strip updates live
   const [feedbackSnapshot, setFeedbackSnapshot] = useState<Record<string, string>>({});
+  // True once server feedback has merged into localStorage (loadFromServer) —
+  // seeding the dot strip before that reads stale/empty local state on a new
+  // device (FE-M3).
+  const [feedbackReady, setFeedbackReady] = useState(false);
   // Issue metadata for cover + colophon
   const [issueMeta, setIssueMeta] = useState<DailyIssue | null>(null);
   const [issueMetaStatus, setIssueMetaStatus] = useState<IssueMetaStatus>('idle');
@@ -95,7 +99,8 @@ export default function FeedPage() {
       document.addEventListener('visibilitychange', handleVisibilityChange);
       window.addEventListener('focus', handleFocus);
       await runMigrationIfNeeded();
-      await loadFromServer();
+      await loadFromServer(); // falls back to localStorage on error — always resolves
+      setFeedbackReady(true);
     }
 
     void initFeedback();
@@ -119,9 +124,9 @@ export default function FeedPage() {
     }
   }, [fetchFeed]);
 
-  // Seed feedback snapshot when data loads
+  // Seed feedback snapshot once data AND the server feedback merge are ready
   useEffect(() => {
-    if (data) {
+    if (data && feedbackReady) {
       const fb: Record<string, string> = {};
       for (const a of data.articles) {
         const v = getFeedback(a.id);
@@ -129,7 +134,7 @@ export default function FeedPage() {
       }
       setFeedbackSnapshot(fb);
     }
-  }, [data]);
+  }, [data, feedbackReady]);
 
   // Fetch issue metadata once feed data is ready
   useEffect(() => {

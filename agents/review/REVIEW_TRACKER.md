@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 46 · DEFERRED (multi-user): 4 · TODO: 28 · BLOCKED: 0
+- DONE/VERIFIED: 47 · DEFERRED (multi-user): 4 · TODO: 27 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-M3**
+- Current branch: `main` · Last resume point: **FE-M5**
 
 ---
 
@@ -549,9 +549,13 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     poison 4xx items and continues; transient failures bump a persisted `attempts` counter
     (dropped at 8) and stop the drain; items older than 7 days are TTL-dropped. All queue writes
     go through `updateQueueItem` (fresh-read removal/mutation, keeps the DAT-L9 fix). Gate green.
-- [ ] **FE-M3** · 🟡 Medium · New-device feedback sync race: dot-strip seeded before server feedback loads
+- [x] **FE-M3** · 🟡 Medium · New-device feedback sync race: dot-strip seeded before server feedback loads
   - Fix: set a `feedbackReady` state after `loadFromServer`; include in the seeding effect deps. (`app/page.tsx:89-134`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `feedbackReady` flips true after
+    `runMigrationIfNeeded()` + `loadFromServer()` complete (loadFromServer always resolves —
+    falls back to localStorage on error); the snapshot-seeding effect now gates on
+    `data && feedbackReady` and re-runs when either changes, so a new device seeds dots from
+    merged server feedback, not the empty local store. Gate green.
 - [ ] **FE-M5** · 🟡 Medium · UTC/local date confusion mislabels "TODAY"/"days ago" west of UTC
   - Fix: derive `today` from local date parts; use the noon trick in `daysAgo`. (`app/archive/page.tsx:84,46-53`, `app/articles/[id]/page.tsx:46`)
   - Status: TODO · Commit: — · Notes: —
@@ -774,5 +778,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   concurrent-update loss verified fixed on scratch rows. Commit: d23d560.
 - **FE-M1** → DONE: hydration-safe feedback state init (null + post-mount sync). Commit: c492d20.
 - **FE-M2** → DONE: transient-only enqueue, poison-pill drop, attempts cap (8), 7-day TTL.
-  Commit: pending.
-- RESUME AT: **FE-M3**
+  Commit: 957f6d8.
+- **FE-M3** → DONE: feedbackReady gate on dot-strip seeding. Commit: pending.
+- RESUME AT: **FE-M5**
