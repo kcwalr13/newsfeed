@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { migrateFeedbackRecords } from '@/lib/db/feedback';
+import { migrateFeedbackRecords, MAX_MIGRATE_RECORDS } from '@/lib/db/feedback';
 import { extractDeviceId } from '@/lib/auth/session';
 import { enforceRateLimit } from '@/lib/rateLimit';
 
@@ -34,6 +34,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!Array.isArray(records)) {
     return NextResponse.json({ error: 'records must be an array' }, { status: 400 });
   }
+  if (records.length > MAX_MIGRATE_RECORDS) {
+    return NextResponse.json(
+      { error: `records exceeds the maximum of ${MAX_MIGRATE_RECORDS}` },
+      { status: 400 }
+    );
+  }
 
   for (let i = 0; i < records.length; i++) {
     const r = records[i] as Record<string, unknown>;
@@ -42,7 +48,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       typeof r.articleId !== 'string' ||
       (r.value !== 'like' && r.value !== 'dislike' && r.value !== 'save') ||
       !r.updatedAt ||
-      typeof r.updatedAt !== 'string'
+      typeof r.updatedAt !== 'string' ||
+      Number.isNaN(Date.parse(r.updatedAt))
     ) {
       return NextResponse.json({ error: `Invalid record at index ${i}` }, { status: 400 });
     }

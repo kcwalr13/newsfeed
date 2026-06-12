@@ -72,9 +72,9 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 31 · DEFERRED (multi-user): 4 · TODO: 12 · BLOCKED: 0
+- DONE/VERIFIED: 32 · DEFERRED (multi-user): 4 · TODO: 11 · BLOCKED: 0
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-M7**
+- Current branch: `main` · Last resume point: **DAT-M8**
 
 ---
 
@@ -487,9 +487,13 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
     Feed half fixed: `bodyText` added to the stripped fields on BOTH feed/today response paths
     (ranked + unranked fallback). Safe: no client code under app/ reads bodyText from the feed
     API; the reader page loads it server-side via `findArticleAcrossBatches`. Gate green.
-- [ ] **DAT-M7** · 🟡 Medium · `migrateFeedbackRecords`: unbounded parallel writes, unvalidated timestamps, no txn
+- [x] **DAT-M7** · 🟡 Medium · `migrateFeedbackRecords`: unbounded parallel writes, unvalidated timestamps, no txn
   - Fix: cap `records.length` (~500), validate timestamps, chunk sequentially or `sql.transaction`. (`lib/db/feedback.ts:119-133`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: `migrateFeedbackRecords` now runs all upserts in one
+    `sql.transaction([...])` (neon http driver v1.0.2 array form — single round trip, atomic)
+    with a defensive `MAX_MIGRATE_RECORDS = 500` slice. The migrate route 400s arrays over the
+    cap and rejects records whose `updatedAt` fails `Date.parse` (previously an unparseable
+    timestamp 500'd at the `::timestamptz` cast). Gate green.
 - [ ] **DAT-M8** · 🟡 Medium · "Transactions" that aren't (multi-statement invariants non-atomic)
   - Fix: use `sql.transaction([...])` for node+edge delete (`lib/db/concepts.ts:109-141`) and `associateFeedbackToUser` (`feedback.ts:82-107`).
   - Status: TODO · Commit: — · Notes: —
@@ -724,5 +728,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-M5** → DONE: single SQL-side JSONB projection per feedback POST (was 2 full-batch
   reads); beacons skip the read. Live-verified projection query. Commit: 7ddcbad.
 - **DAT-M6** → DONE: bodyText stripped from both feed/today response paths (archive half was
-  already fixed). Commit: pending.
-- RESUME AT: **DAT-M7**
+  already fixed). Commit: 443c1fb.
+- **DAT-M7** → DONE: migrate upserts atomic via sql.transaction; 500-record cap; timestamp
+  validation in route. Commit: pending.
+- RESUME AT: **DAT-M8**

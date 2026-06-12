@@ -125,19 +125,24 @@ export async function associateFeedbackToUser(
   `;
 }
 
+/** Max records accepted by a single localStorage-migration call (DAT-M7). */
+export const MAX_MIGRATE_RECORDS = 500;
+
 /**
  * Bulk upsert for one-time migration from localStorage.
  * Server record wins if its updated_at is newer than the incoming record.
- * Returns best-effort count of rows written.
+ * Runs as a single non-interactive transaction (one HTTP round trip, atomic —
+ * no unbounded parallel writes). Returns the count of rows written.
  */
 export async function migrateFeedbackRecords(
   deviceId: string,
   records: Array<{ articleId: string; value: 'like' | 'dislike' | 'save'; updatedAt: string }>
 ): Promise<number> {
-  let written = 0;
-  await Promise.all(
-    records.map(async (r) => {
-      const result = await sql`
+  if (records.length === 0) return 0;
+  const capped = records.slice(0, MAX_MIGRATE_RECORDS);
+  const results = await sql.transaction(
+    capped.map(
+      (r) => sql`
         INSERT INTO feedback (device_id, article_id, value, updated_at)
         VALUES (${deviceId}, ${r.articleId}, ${r.value}, ${r.updatedAt}::timestamptz)
         ON CONFLICT (device_id, article_id)
@@ -146,9 +151,8 @@ export async function migrateFeedbackRecords(
           updated_at = EXCLUDED.updated_at
         WHERE feedback.updated_at < EXCLUDED.updated_at
         RETURNING article_id
-      `;
-      if (result.length > 0) written++;
-    })
+      `
+    )
   );
-  return written;
+  return results.reduce((written, rows) => written + (rows.length > 0 ? 1 : 0), 0);
 }
