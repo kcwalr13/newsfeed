@@ -5,6 +5,8 @@ import { cleanBodyParagraphs } from '@/lib/utils/bodyClean';
 type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
 
 const parser = new Parser({
+  timeout: 10000,
+  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TangentBot/1.0)' },
   customFields: {
     item: [['content:encoded', 'contentEncoded']],
   },
@@ -90,10 +92,14 @@ export async function fetchRssArticles(source: Source): Promise<PartialArticle[]
       const summary = anyItem['summary'] as string | undefined;
       const rawDescription = item.contentSnippet || summary;
 
+      // Guard malformed pubDate: new Date(bad).toISOString() throws, which
+      // would drop every article from this source, not just the bad item.
+      const pubMs = item.pubDate ? new Date(item.pubDate).getTime() : NaN;
+
       return {
         title: decodedTitle,
         articleUrl: item.link ?? '',
-        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : now,
+        publishedAt: Number.isNaN(pubMs) ? now : new Date(pubMs).toISOString(),
         fetchedAt: now,
         sourceName: source.name,
         sourceUrl: source.url,

@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 7 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 38
-- Current branch expected: `main` · Last resume point: PIPE-H6
+- DONE: 8 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 2 · BLOCKED: 0 · TODO: 37
+- Current branch expected: `main` · Last resume point: PIPE-H5
 
 ---
 
@@ -195,11 +195,14 @@ npm run dev           # for manual/browser spot-checks
     already guards) instead of fabricating "1 min" from an excerpt-length body
     (< AESTHETIC_BODY_MIN_CHARS = 300 chars) or "2 min" from no body at all. Gate green.
 
-- [ ] **PIPE-H6** · 🟠 High · One bad RSS pubDate drops the whole source; no parser timeout/UA
+- [x] **PIPE-H6** · 🟠 High · One bad RSS pubDate drops the whole source; no parser timeout/UA
   - Where: `lib/pipeline/adapters/rssAdapter.ts:6-10,92`
   - Fix: guard the date (`const d=new Date(pubDate); isNaN(d)?now:d.toISOString()`), and construct the parser with `{ timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TangentBot/1.0)' } }`.
   - Verify: a feed with one malformed item still yields its other articles.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Parser constructed with 10s timeout + TangentBot UA;
+    malformed pubDate now falls back to fetch time (`Number.isNaN(getTime())` guard) instead of
+    throwing inside `.map` and zeroing the source. Live-verified: Quanta feed fetches 5 articles
+    with valid ISO publishedAt under the new parser config. Gate green.
 
 - [ ] **PIPE-H5** · 🟠 High · Brave: 12 concurrent queries, no timeout/429 handling; 100% eval-reject
   - Where: `lib/discovery/run.ts:188-200`, `lib/discovery/braveSearch.ts:39-53`, threshold `lib/config/feed.ts:41`
@@ -467,5 +470,6 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-Q2** → DONE: `classifyLowValuePost` housekeeping/video gate on both the discovery and
   fixed-RSS paths; 11-case test pass. Commit: c9db7c6.
 - **PIPE-Q3** → DONE: `estimateReadTime` returns undefined for excerpt-length/missing bodies
-  (UI hides label) instead of a fabricated 1-2 min.
-- RESUME AT: **PIPE-H6**
+  (UI hides label) instead of a fabricated 1-2 min. Commit: 2831b63.
+- **PIPE-H6** → DONE: RSS parser timeout/UA + pubDate guard; live RSS fetch verified.
+- RESUME AT: **PIPE-H5**
