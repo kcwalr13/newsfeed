@@ -69,8 +69,8 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE: 19 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 23
-- Current branch expected: `main` · Last resume point: SEC-M1
+- DONE: 20 · IN-PROGRESS: 0 · BLOCKED-ON-APPLY: 5 · BLOCKED: 0 · TODO: 22
+- Current branch expected: `main` · Last resume point: SEC-M2
 
 ---
 
@@ -377,9 +377,15 @@ npm run dev           # for manual/browser spot-checks
     is already device-scoped (writes only to the caller's own device id), so hardened it with a
     per-IP+device rate limit (10/hour) instead. Verified: constant-time auth accepts the correct
     token and rejects wrong/empty/no-secret. Gate green.
-- [ ] **SEC-M1** · 🟡 Medium · Email links built from `NEXTAUTH_URL` (open-redirect/phishing if it drifts)
+- [x] **SEC-M1** · 🟡 Medium · Email links built from `NEXTAUTH_URL` (open-redirect/phishing if it drifts)
   - Fix: derive base URL from an allowlisted constant or validate at startup. (`lib/email/send.ts:27,36`)
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: New `getValidatedBaseUrl()` parses `NEXTAUTH_URL` to a
+    bare origin and requires a valid absolute URL + https scheme (http only for localhost in dev) +
+    membership in `ALLOWED_BASE_URLS` when that env allowlist is set; throws otherwise (a
+    misconfiguration sends NO email rather than a phishing link). Both verification and reset links
+    now build from the validated origin and `encodeURIComponent` the token. `ALLOWED_BASE_URLS`
+    documented in `.env.example`. Verified: valid https / localhost pass; `http://evil.com` rejected
+    on scheme; off-allowlist origin rejected. Gate green.
 - [ ] **SEC-M2** · 🟡 Medium · No CSRF protection on cookie-authenticated writes
   - Fix: verify Origin/Referer against an allowlist (or double-submit token) on state-changing routes.
   - Status: TODO · Commit: — · Notes: —
@@ -607,5 +613,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **SEC-H1** → DONE: `extractDeviceId` validates UUID shape (rejects injected identities) + SECURITY
   doc block; reading-position routes routed through it. No multi-user binding (single-user). Commit: ba13874.
 - **SEC-H3** (+ DAT-L6) → DONE: constant-time CRON_SECRET compare; generic 500 (no err.message
-  leak); feedback/migrate rate-limited (session gate impossible with auth off).
-- RESUME AT: **SEC-M1**
+  leak); feedback/migrate rate-limited (session gate impossible with auth off). Commit: 4856814.
+- **SEC-M1** → DONE: `getValidatedBaseUrl()` validates `NEXTAUTH_URL` (absolute https + optional
+  `ALLOWED_BASE_URLS`) for email links; token encoded; fails closed.
+- RESUME AT: **SEC-M2**
