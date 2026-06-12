@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 54 · DEFERRED (multi-user): 4 · TODO: 20 · BLOCKED: 0
+- DONE/VERIFIED: 55 · DEFERRED (multi-user): 4 · TODO: 19 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-L2**
+- Current branch: `main` · Last resume point: **FE-L3**
 
 ---
 
@@ -603,7 +603,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 
 ### Frontend — lows
 - [x] **FE-L1** · 🟢 · Delete 8 dead components + dead `countRead`, `.ql-verb-btn.active`, unused themes. (clash risk) — DONE: deleted the 8 unimported components (AccountIcon, BatchLabel, ErrorState, FeedSkeleton (inline copy in page.tsx is the live one), FeedbackButtons, LastUpdatedLabel, RefreshButton, ViewSourceLink — verified zero importers by grep), the never-called `countRead` (+ its now-unused `Article` import), and the `.ql-verb-btn.active` rule (no code ever sets `active`). KEPT the 4 theme variable blocks in globals.css: FE-H3 deliberately retuned all of them for contrast, they're inert without a `data-theme` setter (no clash), and deleting them would undo that investment — see Decisions Log. Commit: fix(FE-L1).
-- [ ] **FE-L2** · 🟢 · Manifest brand mismatch: `background_color #fff`/`theme_color #111827` vs cream; add maskable icons + description. (`public/manifest.json`)
+- [x] **FE-L2** · 🟢 · Manifest brand mismatch: `background_color #fff`/`theme_color #111827` vs cream; add maskable icons + description. (`public/manifest.json`) — DONE: background/theme set to the cream `#F6F2EA` (matches layout.tsx's theme-color meta), description added, and real maskable variants GENERATED (icon-{192,512}-maskable.png — original art scaled to the 80% safe zone over its own #111827 background via PIL) and registered with `purpose: maskable`; originals marked `purpose: any`. Commit: fix(FE-L2).
 - [ ] **FE-L3** · 🟢 · Service worker registration-only (no offline). Add versioned cache + network-first for `/api/*` when ready. (`public/sw.js`)
 - [ ] **FE-L4** · 🟢 · `export const dynamic='force-dynamic'` in a client component is ignored; remove. (`app/auth/page.tsx:3`)
 - [ ] **FE-L5** · 🟢 · Entity decoding double-applied + astral-unsafe + wrong order. Use `fromCodePoint`, decode `&amp;` last. (`articles/[id]/page.tsx:17-33`) (≈PIPE-M7)
@@ -821,5 +821,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-M10** → DONE: 44px hit areas on error/nav controls (negative-margin trick for header
   links); colophon at AA 24px floor. Commit: e3fec18.
 - **FE-L1** (+FE-L9) → DONE: 8 dead components, countRead, .ql-verb-btn.active deleted; themes
-  kept (FE-H3 investment, inert). Commit: pending.
-- RESUME AT: **FE-L2**
+  kept (FE-H3 investment, inert). Commit: 269075a.
+- **FE-L2** → DONE: manifest cream colors + description + generated maskable icons.
+  Commit: pending.
+- RESUME AT: **FE-L3**
