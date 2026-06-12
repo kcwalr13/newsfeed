@@ -6,19 +6,23 @@ import type { UserConcept } from '@/lib/types/concepts';
 // ── Node operations ───────────────────────────────────────────────────────────
 
 /**
- * Upserts a concept node. On insert, sets extraction_count=1 and engagement_weight
- * to the provided value. On conflict (same user+device+label), increments count
- * and adds engagementWeight to existing weight.
+ * Batch-upserts concept nodes via unnest (one statement for all labels).
+ * On insert, sets extraction_count=1 and engagement_weight to the provided
+ * value. On conflict (same user+device+label), increments count and adds
+ * engagementWeight. Labels must be pre-deduplicated — ON CONFLICT cannot
+ * touch the same row twice within one statement.
  */
-export async function upsertConceptNode(
+async function upsertConceptNodes(
   userId: string | null,
   deviceId: string,
-  label: string,
+  labels: string[],
   engagementWeight: number
 ): Promise<void> {
+  if (labels.length === 0) return;
   await sql`
     INSERT INTO user_concepts (user_id, device_id, label, extraction_count, engagement_weight, last_seen_at, created_at)
-    VALUES (${userId}, ${deviceId}, ${label}, 1, ${engagementWeight}, NOW(), NOW())
+    SELECT ${userId}, ${deviceId}, label, 1, ${engagementWeight}, NOW(), NOW()
+    FROM unnest(${labels}::text[]) AS label
     ON CONFLICT (user_id, device_id, label)
     DO UPDATE SET
       extraction_count  = user_concepts.extraction_count + 1,
@@ -28,18 +32,22 @@ export async function upsertConceptNode(
 }
 
 /**
- * Upserts a co-occurrence edge. Labels are sorted alphabetically by the caller
- * before this function is invoked. On conflict, increments co_occurrence_count.
+ * Batch-upserts co-occurrence edges via unnest (one statement for all pairs).
+ * Pairs must be pre-sorted (a <= b) and deduplicated by the caller.
+ * On conflict, increments co_occurrence_count.
  */
-export async function upsertConceptEdge(
+async function upsertConceptEdges(
   userId: string | null,
   deviceId: string,
-  conceptA: string,  // must be <= conceptB lexicographically
-  conceptB: string
+  pairs: Array<[string, string]>
 ): Promise<void> {
+  if (pairs.length === 0) return;
+  const aSide = pairs.map(p => p[0]);
+  const bSide = pairs.map(p => p[1]);
   await sql`
     INSERT INTO user_concept_edges (user_id, device_id, concept_a, concept_b, co_occurrence_count, last_seen_at)
-    VALUES (${userId}, ${deviceId}, ${conceptA}, ${conceptB}, 1, NOW())
+    SELECT ${userId}, ${deviceId}, a, b, 1, NOW()
+    FROM unnest(${aSide}::text[], ${bSide}::text[]) AS t(a, b)
     ON CONFLICT (user_id, device_id, concept_a, concept_b)
     DO UPDATE SET
       co_occurrence_count = user_concept_edges.co_occurrence_count + 1,
@@ -235,17 +243,19 @@ export async function upsertConceptGraph(
     await pruneConceptGraph(userId, deviceId);
   }
 
-  // Upsert each node
-  for (const label of concepts) {
-    await upsertConceptNode(userId, deviceId, label, engagementWeight);
-  }
+  // Batch-upsert nodes, then edges for every unordered pair — two statements
+  // total instead of N + N·(N−1)/2 round trips (DAT-L2).
+  const labels = [...new Set(concepts)];
+  await upsertConceptNodes(userId, deviceId, labels, engagementWeight);
 
-  // Upsert edges for every unordered pair
-  for (let i = 0; i < concepts.length; i++) {
-    for (let j = i + 1; j < concepts.length; j++) {
-      const [a, b] = [concepts[i], concepts[j]].sort();
-      await upsertConceptEdge(userId, deviceId, a, b);
+  // labels are unique, so each sorted (i < j) pair is unique too
+  const pairs: Array<[string, string]> = [];
+  for (let i = 0; i < labels.length; i++) {
+    for (let j = i + 1; j < labels.length; j++) {
+      const [a, b] = [labels[i], labels[j]].sort() as [string, string];
+      pairs.push([a, b]);
     }
   }
+  await upsertConceptEdges(userId, deviceId, pairs);
 }
 

@@ -71,10 +71,12 @@ npm run dev           # for manual/browser spot-checks
 
 ## Progress summary
 
-- Total findings: 47 (+ cross-referenced duplicates noted inline)
-- DONE/VERIFIED: 41 · DEFERRED (multi-user): 4 · TODO: 2 · BLOCKED: 0
+- Tracked items (explicitly enumerated in this file, incl. all lows): 78
+- DONE/VERIFIED: 43 · DEFERRED (multi-user): 4 · TODO: 31 · BLOCKED: 0
+- (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
+  per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **DAT-L2**
+- Current branch: `main` · Last resume point: **DAT-L3**
 
 ---
 
@@ -524,7 +526,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 
 ### Data / API — lows (may be grouped into one `chore(DAT-L): cleanup` commit if trivial)
 - [x] **DAT-L1** · 🟢 · `updateDriftState` compares two untyped params as text → cast `::float8`. (`aesthetics.ts:308-323`) — DONE: already resolved — verified by reading `lib/db/aesthetics.ts` (driftScore is passed as a typed number; the CASE comparisons are numeric; the `::text` casts added by PIPE-H3 cover the null-identity checks). No change needed.
-- [ ] **DAT-L2** · 🟢 · N+1 upserts in `upsertConceptGraph`; batch with `unnest`. (`concepts.ts:237-248`)
+- [x] **DAT-L2** · 🟢 · N+1 upserts in `upsertConceptGraph`; batch with `unnest`. (`concepts.ts:237-248`) — DONE: nodes and edges now each upsert in ONE `unnest`-driven statement (was N + N·(N−1)/2 round trips); labels deduped first (ON CONFLICT can't touch a row twice per statement). Live-tested on scratch rows: insert→increment semantics identical, cleaned up. Commit: fix(DAT-L2).
 - [ ] **DAT-L3** · 🟢 · EMA read-modify-write race in feedback; single SQL statement. (`feedback/route.ts:48-105`) (moot after DAT-C2)
 - [x] **DAT-L4** · 🟢 · `GET /api/feedback` swallows DB errors as `{}` 200 → return 500. (`feedback/route.ts:144-147`) — DONE: catch now returns JSON 500 (matches POST handler), so clients can't mistake a DB failure for "no feedback". Commit: chore(DAT-L).
 - [x] **DAT-L5** · 🟢 · Delete is device-scoped only; `getFeedbackForUser` resurrects other-device rows. (`feedback.ts:69-74`) — DONE: `deleteFeedback` takes optional `userId` and deletes `(device_id = X OR user_id = Y)` for the article; DELETE route passes the session userId. Null userId keeps the old device-only scope. Commit: chore(DAT-L).
@@ -757,7 +759,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **DAT-H5** → DONE: Postgres cooldown + global run lock on rate_limits (no migration); both
   pipeline entry routes locked; live lock test passed; auth deliberately omitted (documented).
   Commit: 3d8c33d.
-- **DAT-L group** → chore(DAT-L) commit: L1 + L8 already-fixed (notes); L4 GET 500; L5 user-scoped
-  delete; L7 legacy artifacts + dead consts removed; L9 drainQueue fresh-read removal. L2 and L3
-  follow as their own commits (not trivial).
-- RESUME AT: **DAT-L2**
+- **DAT-L group** → chore(DAT-L) commit 38beed8: L1 + L8 already-fixed (notes); L4 GET 500; L5
+  user-scoped delete; L7 legacy artifacts + dead consts removed; L9 drainQueue fresh-read removal.
+- **DAT-L2** → DONE: unnest-batched node/edge upserts (2 statements per extraction); live-tested
+  on scratch rows. Commit: pending.
+- RESUME AT: **DAT-L3**
