@@ -72,11 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 55 · DEFERRED (multi-user): 4 · TODO: 19 · BLOCKED: 0
+- DONE/VERIFIED: 55 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 18 · BLOCKED: 0
 - (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
   per-item counts because the lows are now being worked individually.)
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **FE-L3**
+- Current branch: `main` · Last resume point: **FE-L4**
 
 ---
 
@@ -604,7 +604,7 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 ### Frontend — lows
 - [x] **FE-L1** · 🟢 · Delete 8 dead components + dead `countRead`, `.ql-verb-btn.active`, unused themes. (clash risk) — DONE: deleted the 8 unimported components (AccountIcon, BatchLabel, ErrorState, FeedSkeleton (inline copy in page.tsx is the live one), FeedbackButtons, LastUpdatedLabel, RefreshButton, ViewSourceLink — verified zero importers by grep), the never-called `countRead` (+ its now-unused `Article` import), and the `.ql-verb-btn.active` rule (no code ever sets `active`). KEPT the 4 theme variable blocks in globals.css: FE-H3 deliberately retuned all of them for contrast, they're inert without a `data-theme` setter (no clash), and deleting them would undo that investment — see Decisions Log. Commit: fix(FE-L1).
 - [x] **FE-L2** · 🟢 · Manifest brand mismatch: `background_color #fff`/`theme_color #111827` vs cream; add maskable icons + description. (`public/manifest.json`) — DONE: background/theme set to the cream `#F6F2EA` (matches layout.tsx's theme-color meta), description added, and real maskable variants GENERATED (icon-{192,512}-maskable.png — original art scaled to the 80% safe zone over its own #111827 background via PIL) and registered with `purpose: maskable`; originals marked `purpose: any`. Commit: fix(FE-L2).
-- [ ] **FE-L3** · 🟢 · Service worker registration-only (no offline). Add versioned cache + network-first for `/api/*` when ready. (`public/sw.js`)
+- [x] **FE-L3** · 🟢 · Service worker registration-only (no offline). Add versioned cache + network-first for `/api/*` when ready. (`public/sw.js`) — SKIPPED (deliberate defer, per the finding's own "when ready"): sw.js explicitly documents offline caching as a future milestone; shipping a cache layer before the offline UX is designed risks silently serving stale issues. Revisit alongside a real offline reading feature. No code change.
 - [ ] **FE-L4** · 🟢 · `export const dynamic='force-dynamic'` in a client component is ignored; remove. (`app/auth/page.tsx:3`)
 - [ ] **FE-L5** · 🟢 · Entity decoding double-applied + astral-unsafe + wrong order. Use `fromCodePoint`, decode `&amp;` last. (`articles/[id]/page.tsx:17-33`) (≈PIPE-M7)
 - [ ] **FE-L6** · 🟢 · `articleUrl` scheme never validated → guard `^https?:` at ingest (blocks `javascript:`/`data:`). (`validator.ts:22-25`)
@@ -659,6 +659,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-12 | DAT-C2 | Chose `UNIQUE NULLS NOT DISTINCT` (not the `user_id=''` sentinel); de-dup strategy per table: keep-newest for `user_aesthetic_profiles`/`discovery_topic_weights`, SUM-merge for `user_concepts`/`user_concept_edges`, keep-oldest + `probe_count = duplicates − 1` for `blind_spot_clusters` | Sentinel would require touching every read/write path. De-dup mirrors each upsert's write style: full-state rewrites → newest row is truth; increment-style upserts scattered +1s across duplicate rows → SUM restores accumulated taste data; blind-spot status UPDATEs matched all duplicates so the oldest row saw every update, and the on-conflict probe increment never fired so row-count reconstructs it. |
 | 2026-06-12 | DAT-H5 | Kept `/api/feed/refresh` unauthenticated; cooldown + run lock reuse the `rate_limits` table instead of a new table/advisory locks | Single-user app with auth off: the in-app button must call the route, so a secret would ship to the client. pg advisory locks don't survive the neon HTTP driver's per-statement sessions; a TTL'd atomic claim row does. Reusing rate_limits avoids a migration entirely. |
 | 2026-06-12 | FE-L1 | Kept the sepia/paper/dark theme CSS blocks despite "unused themes" in the finding | FE-H3 deliberately darkened `--dim` in all four themes one session earlier; the blocks are inert without a data-theme setter (no clash risk) and deleting them would undo that accessibility work the moment a theme switcher ships. |
+| 2026-06-12 | FE-L3 | Skipped adding SW offline caching (kept registration-only sw.js) | The finding is conditioned on "when ready"; no offline UX is designed, and a network-first cache shipped blind can silently serve stale issues — worse than no offline. Revisit with a real offline reading feature. |
 | 2026-06-12 | (scope) | Deferred remaining security hardening (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to a new *Future state — multi-user rollout* section; not enabling Vercel password protection | Kyle confirmed Tangent is private/single-user. These defend multi-user/abuse threat models that don't apply yet; production password protection is a ~$150/mo Vercel Pro feature. Revisit at multi-user rollout. |
 
 ---
@@ -823,5 +824,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **FE-L1** (+FE-L9) → DONE: 8 dead components, countRead, .ql-verb-btn.active deleted; themes
   kept (FE-H3 investment, inert). Commit: 269075a.
 - **FE-L2** → DONE: manifest cream colors + description + generated maskable icons.
-  Commit: pending.
-- RESUME AT: **FE-L3**
+  Commit: f677db7.
+- **FE-L3** → SKIPPED: offline caching deferred until an offline UX exists (finding itself says
+  "when ready"); logged in Decisions Log.
+- RESUME AT: **FE-L4**
