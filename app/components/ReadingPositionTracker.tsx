@@ -171,12 +171,27 @@ export default function ReadingPositionTracker({
     };
   }, [savePosition]);
 
-  // ── Clear any pending debounced save on unmount ──────────────────────────
+  // ── Flush position on unmount / article change ───────────────────────────
+  // An in-app Next <Link> navigation unmounts this tracker (or swaps articleId)
+  // without firing blur / beforeunload / visibilitychange, so the last scroll +
+  // dwell sitting in the debounce — or any progress past the last save — would
+  // be silently discarded (R2-04). Flush it synchronously with a keepalive POST
+  // (savePosition already sets keepalive:true) if there's unsaved progress, then
+  // clear the pending debounce timer. Depending on savePosition (which changes
+  // with articleId) makes the cleanup also run on article→article navigation;
+  // React runs all effect cleanups before any setup, so this captures the
+  // previous article's index and closure before the load effect overwrites them.
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      if (currentIndexRef.current !== savedIndexRef.current) {
+        void savePosition(true);
+      }
     };
-  }, []);
+  }, [savePosition]);
 
   return null;   // renders nothing
 }

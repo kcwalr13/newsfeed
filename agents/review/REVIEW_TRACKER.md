@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 4 DONE (R2-01, R2-02, R2-03, R2-19) · 31 TODO.
+  Progress: 5 DONE (R2-01, R2-02, R2-03, R2-04, R2-19) · 30 TODO.
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-04**
+- Current branch: `main` · **Last resume point: R2-05**
 
 ---
 
@@ -734,11 +734,22 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
     callers (`pipeline/run`, `feed/refresh`) updated to capture `lock.token` and pass it to release.
     Verified: tsc + lint + build green; live-Neon check on an isolated test key (7/7 assertions:
     mutual exclusion, wrong-token release no-ops, correct-token release deletes, expired-steal
-    cascade broken) — test key cleaned up, real lock row untouched.
-- [ ] **R2-04** · 🔴 High · [REGRESSION FE-M9] Reading position lost on in-app navigation (no flush on unmount)
+    cascade broken) — test key cleaned up, real lock row untouched. Commit: e9d9a69.
+- [x] **R2-04** · 🔴 High · [REGRESSION FE-M9] Reading position lost on in-app navigation (no flush on unmount)
   - Where: `app/components/ReadingPositionTracker.tsx:176-178`
   - Fix: unmount cleanup only `clearTimeout` — a `<Link>` nav fires no blur/unload/visibility, so the last scroll+dwell is discarded. Flush synchronously on unmount if `currentIndexRef !== savedIndexRef` (keepalive), then clear the timer.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: The unmount effect now flushes the position with a
+    keepalive POST (`savePosition(true)` — `savePosition` already sets `keepalive:true`) when
+    `currentIndexRef.current !== savedIndexRef.current`, then clears+nulls the debounce timer.
+    Changed the effect dep from `[]` to `[savePosition]` (which is `useCallback([articleId])`) so
+    the cleanup also runs on article→article navigation, not just true unmount — the tracker has
+    no `key`, so an App-Router `[id]`→`[id]` Link nav can swap `articleId` in place. React runs all
+    effect cleanups before any setup, so the flush captures the *previous* article's index and
+    closure before the load effect overwrites `currentIndexRef`. The index-difference guard avoids
+    a redundant POST when the last scroll was already saved. Verified: tsc + lint + build green.
+    Interactive behavior (scroll an article, click a card/back Link → exactly one
+    `/api/reading-position` POST with the final index+dwell) to be spot-checked on the Vercel deploy
+    — consistent with how FE-M9 / FE-H1 / FE-M4 interaction fixes were validated.
 - [ ] **R2-05** · 🔴 High · [REGRESSION PIPE-Q2] Low-value filter drops real "meetup" essays
   - Where: `lib/discovery/qualityGate.ts:91,106`
   - Fix: `\bmeetups?\b` + len≤60 drops "Why Meetup Culture Died in Silicon Valley" etc. (reproduced). Anchor the announcement shape (place/date/RSVP signal); add those titles as true-negative tests.
@@ -760,7 +771,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 ### Round 2 — Low (may batch into one `chore(R2-L)` commit)
 - [ ] **R2-17** · 🟢 Low · `bodyClean.ts` over-strips punctuated Title-Case closing sentences + short ledes; require `!TERMINAL_PUNCT` before headline-case trim. · TODO
 - [ ] **R2-18** · 🟢 Low · Discovery body+LLM loop fully sequential (`discovery/run.ts:253-313`) → fragile under latency; bounded concurrency (p-limit 3-4). · TODO
-- [x] **R2-19** · 🟢 Low · Run-lock TTL == maxDuration; set ~280s (part of R2-03). · DONE (in R2-03, commit pending): TTL raised 300→360s (ABOVE maxDuration 300), not the finding's suggested 280s — 280 < maxDuration would let a still-alive run lose its lock and re-open the steal race R2-03 fixes. See R2-03 Notes + Decisions Log.
+- [x] **R2-19** · 🟢 Low · Run-lock TTL == maxDuration; set ~280s (part of R2-03). · DONE (in R2-03, commit e9d9a69): TTL raised 300→360s (ABOVE maxDuration 300), not the finding's suggested 280s — 280 < maxDuration would let a still-alive run lose its lock and re-open the steal race R2-03 fixes. See R2-03 Notes + Decisions Log.
 - [ ] **R2-20** · 🟢 Low · `themeGenerator.ts:16-19` lacks the ANTHROPIC_API_KEY guard the other 5 LLM modules got (PIPE-H1 consistency). · TODO
 - [ ] **R2-21** · 🟢 Low · `REFRESH_COOLDOWN_MINUTES` non-numeric → NaN → `make_interval` throws → cooldown fails open (`config.ts:27-29`). Validate parse. · TODO
 - [ ] **R2-22** · 🟢 Low · `clientIp` returns literal `'unknown'` with no proxy headers (`rateLimit.ts:25`) → all share one bucket locally. · TODO
@@ -1031,5 +1042,9 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   owns, breaking the "expired lock stolen by run B, then deleted by zombie run A → concurrent batch
   writes" cascade. TTL 300→360s (above maxDuration). Both pipeline entry routes pass `lock.token`.
   Verified: gate green + live-Neon isolated-test-key check (7/7: mutual exclusion, token-scoped
-  release, expired-steal cascade broken). Commit: pending.
-- RESUME AT: **R2-04**
+  release, expired-steal cascade broken). Commit: e9d9a69.
+- **R2-04** → DONE: reading position now flushes on in-app nav. Unmount effect flushes
+  `savePosition(true)` (keepalive) when `currentIndexRef !== savedIndexRef`, then clears the timer;
+  dep changed `[]`→`[savePosition]` so it also fires on article→article Link nav (no `key` on the
+  tracker). Verified: gate green; interactive flush to spot-check on deploy. Commit: pending.
+- RESUME AT: **R2-05**
