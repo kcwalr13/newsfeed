@@ -1,0 +1,86 @@
+[
+  {
+    "id": "seed-contemplative-science",
+    "title": "The Quiet Mathematics of Snowflakes",
+    "dek": "A slow, contemplative look at how six-fold symmetry emerges from nothing but water and cold — and why no two are alike.",
+    "source": "Quanta Magazine",
+    "category": "science"
+  },
+  {
+    "id": "seed-propulsive-ideas",
+    "title": "Why Everything Is Moving Faster Than You Think",
+    "dek": "A propulsive argument that acceleration, not progress, is the defining texture of the present.",
+    "source": "Astral Codex Ten",
+    "category": "ideas"
+  },
+  {
+    "id": "seed-playful-music",
+    "title": "In Praise of the Three-Minute Pop Song",
+    "dek": "A joyful, irreverent defense of brevity, hooks, and the art of saying everything in a verse and a chorus.",
+    "source": "The Quietus",
+    "category": "music"
+  },
+  {
+    "id": "seed-serious-philosophy",
+    "title": "On the Difficulty of Living an Examined Life",
+    "dek": "A grave meditation on self-knowledge, and why Socrates' instruction is harder than it sounds.",
+    "source": "Aeon",
+    "category": "philosophy"
+  },
+  {
+    "id": "seed-personal-literature",
+    "title": "The Letters My Grandmother Never Sent",
+    "dek": "An intimate, first-person essay on inheritance, silence, and the things we leave unwritten.",
+    "source": "The Paris Review",
+    "category": "literature"
+  },
+  {
+    "id": "seed-universal-economics",
+    "title": "What Markets Get Wrong About Time",
+    "dek": "A sweeping, systems-level argument about discounting, the future, and the price of patience.",
+    "source": "Marginal Revolution",
+    "category": "economics"
+  },
+  {
+    "id": "seed-specialist-art",
+    "title": "The Forgotten Pigment That Changed Renaissance Blue",
+    "dek": "A deep, specialist dive into ultramarine, lapis lazuli, and the chemistry of devotion.",
+    "source": "Hyperallergic",
+    "category": "art"
+  },
+  {
+    "id": "seed-generalist-culture",
+    "title": "A Brief History of Everyday Objects",
+    "dek": "A wide-ranging, generalist tour through the hidden design of the things we never notice.",
+    "source": "The Public Domain Review",
+    "category": "culture"
+  },
+  {
+    "id": "seed-emotional-psychology",
+    "title": "The Grief That Has No Name",
+    "dek": "An emotionally resonant exploration of ambiguous loss and the feelings our language fails to hold.",
+    "source": "Psyche",
+    "category": "psychology"
+  },
+  {
+    "id": "seed-neutral-design",
+    "title": "The Engineering Behind a Perfectly Flat Table",
+    "dek": "A cool, precise account of tolerance, flatness, and the unglamorous craft of making things level.",
+    "source": "Dezeen",
+    "category": "design"
+  },
+  {
+    "id": "seed-abstract-film",
+    "title": "Cinema Without a Story",
+    "dek": "An abstract essay on slow cinema, duration, and films that ask you to simply watch.",
+    "source": "Senses of Cinema",
+    "category": "film"
+  },
+  {
+    "id": "seed-concrete-science",
+    "title": "How a Beaver Builds a Dam, Step by Step",
+    "dek": "A concrete, hands-on field account of engineering instinct, mud, and moving water.",
+    "source": "Nautilus",
+    "category": "science"
+  }
+]
