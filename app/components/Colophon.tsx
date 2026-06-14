@@ -7,6 +7,7 @@
  * Displays the issue's source credits in a traditional colophon style.
  */
 
+import Link from 'next/link';
 import type { DailyIssue } from '@/lib/types/article';
 
 interface Props {
@@ -115,6 +116,17 @@ export default function Colophon({ issue }: Props) {
         style={{ fontSize: '12px', fontStyle: 'italic', color: 'var(--dim)' }}
       >
         Tangent · {issue.dateShort}
+      </p>
+
+      {/* Dashboard link */}
+      <p className="mt-3 text-center">
+        <Link
+          href="/dashboard"
+          className="ql-mono hover:underline focus:outline-none focus-visible:underline"
+          style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '0.18em' }}
+        >
+          DASHBOARD
+        </Link>
       </p>
     </div>
   );
