@@ -5,7 +5,9 @@ import Link from 'next/link';
 import type { FeedResponse } from '@/lib/types/article';
 import { ISSUE_DISPLAY_SIZE } from '@/lib/config/feed';
 import { initDeviceId } from '@/lib/identity/device';
-import { runMigrationIfNeeded, loadFromServer, drainQueue, getFeedback } from '@/lib/feedback/store';
+import { runMigrationIfNeeded, loadFromServer, drainQueue, getFeedback, setFeedback } from '@/lib/feedback/store';
+import { getDeviceHeaders } from '@/lib/identity/device';
+import type { CalibrationResult } from './components/CalibrationModal';
 import ArticleCard from './components/ArticleCard';
 import EditorLetterModal from './components/EditorLetterModal';
 import CalibrationModal from './components/CalibrationModal';
@@ -97,6 +99,32 @@ export default function FeedPage() {
   useEffect(() => {
     fetchFeed();
     return () => feedAbortRef.current?.abort();
+  }, [fetchFeed]);
+
+  // Seed the taste model from the first-run calibration (P3-E3): route each
+  // like/pass through the existing feedback path (aesthetic EMA + concept graph
+  // + source Wilson scores + short-term recompute), apply the optional tone
+  // nudge, then refresh so the first issue is visibly shaped by the choices.
+  const handleCalibrationComplete = useCallback(async ({ responses, tones }: CalibrationResult) => {
+    for (const [id, value] of Object.entries(responses)) {
+      setFeedback(id, value);
+    }
+    try {
+      await drainQueue();
+    } catch { /* offline writes stay queued; non-blocking */ }
+    if (tones.length > 0) {
+      try {
+        await fetch('/api/onboarding/tone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getDeviceHeaders() },
+          body: JSON.stringify({ tones }),
+        });
+      } catch { /* tone nudge is best-effort */ }
+    }
+    try {
+      await loadFromServer();
+    } catch { /* falls back to local state */ }
+    await fetchFeed();
   }, [fetchFeed]);
 
   // Unmount-only abort for the refresh + issue-meta requests
@@ -216,7 +244,7 @@ export default function FeedPage() {
   return (
     <>
       <EditorLetterModal />
-      <CalibrationModal />
+      <CalibrationModal onComplete={handleCalibrationComplete} />
       {issueMeta && <IssueCover issue={issueMeta} />}
 
       <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
