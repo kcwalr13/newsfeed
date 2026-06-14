@@ -8,6 +8,7 @@ import { initDeviceId } from '@/lib/identity/device';
 import { runMigrationIfNeeded, loadFromServer, drainQueue, getFeedback } from '@/lib/feedback/store';
 import ArticleCard from './components/ArticleCard';
 import EditorLetterModal from './components/EditorLetterModal';
+import CalibrationModal from './components/CalibrationModal';
 import IssueCover from './components/IssueCover';
 import Colophon from './components/Colophon';
 import type { DailyIssue } from '@/lib/types/article';
@@ -215,6 +216,7 @@ export default function FeedPage() {
   return (
     <>
       <EditorLetterModal />
+      <CalibrationModal />
       {issueMeta && <IssueCover issue={issueMeta} />}
 
       <div className="min-h-screen" style={{ background: 'var(--bg)' }}>

@@ -35,6 +35,8 @@ export default function EditorLetterModal() {
   function dismiss() {
     localStorage.setItem(STORAGE_KEY, '1');
     setVisible(false);
+    // Let the first-run calibration flow (P3-E2) appear right after, without a reload.
+    window.dispatchEvent(new Event('tangent:onboarding-dismissed'));
   }
 
   useModalA11y(visible, dialogRef, dismiss);
