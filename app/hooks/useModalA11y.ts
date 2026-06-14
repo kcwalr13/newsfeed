@@ -11,6 +11,30 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+// Module-level body-scroll-lock ref count (R2-14). Each modal used to snapshot
+// and restore `body.style.overflow` independently, so two overlapping modals
+// clobbered each other's snapshot — the page could end up permanently
+// scroll-locked after both closed (the later modal restored the earlier one's
+// 'hidden'), or unlocked while one was still open. We instead snapshot the
+// original overflow once on the 0→1 transition and restore it once on 1→0.
+let scrollLockCount = 0;
+let savedBodyOverflow = '';
+
+function lockBodyScroll(): void {
+  if (scrollLockCount === 0) {
+    savedBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  scrollLockCount += 1;
+}
+
+function unlockBodyScroll(): void {
+  scrollLockCount = Math.max(0, scrollLockCount - 1);
+  if (scrollLockCount === 0) {
+    document.body.style.overflow = savedBodyOverflow;
+  }
+}
+
 /**
  * Accessibility plumbing shared by all modal/overlay dialogs:
  *  - moves focus into the dialog on open (first focusable element, else the container)
@@ -39,9 +63,8 @@ export function useModalA11y(
       : [];
     (focusables[0] ?? container)?.focus();
 
-    // Lock body scroll, remembering the prior value to restore it.
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // Lock body scroll via the shared ref count (safe under overlapping modals).
+    lockBodyScroll();
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -81,7 +104,7 @@ export function useModalA11y(
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = prevOverflow;
+      unlockBodyScroll();
       previouslyFocused?.focus?.();
     };
   }, [active, containerRef, onClose]);
