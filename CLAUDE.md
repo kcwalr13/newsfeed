@@ -61,9 +61,18 @@ Copy `.env.example` to `.env.local` and fill in the values. Full reference:
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` — Transactional email (verification / reset).
 
 **Optional tuning knobs** (parsed in `lib/pipeline/config.ts`; fall back to defaults if unset/invalid)
-- `MAX_ARTICLES_PER_SOURCE` (default 5), `MIN_SOURCES_PER_BATCH` (default 3), `REFRESH_COOLDOWN_MINUTES` (default 15).
+- `MAX_ARTICLES_PER_SOURCE` (default **4** — tuned down from 5 for diversity now the palette is 23 sources, P3-B3), `MAX_ARTICLES_PER_CATEGORY` (default 4 — soft per-category cap on the diverse core, P3-B3), `MIN_SOURCES_PER_BATCH` (default 3), `REFRESH_COOLDOWN_MINUTES` (default 15).
 
 ## Key Implementation Notes
+
+### Round 3 — Product (vision alignment) — see `agents/architect/design_product_round3_vision_alignment.md`
+- **Source palette = 23** (was 12), each with a `category` (`SourceCategory` in `lib/types/article.ts`: science/philosophy/ideas/economics/psychology/culture/music/art/design/film/literature). Category is **not** stored on `Article` — resolved on read via `categoryForArticle()` in `lib/pipeline/sourceCategory.ts`. New domains: music ×4, art ×2, design, film, literature, esoteric-culture ×2.
+- **Discovery** is hard-floored to fill its 6 slots down to `LLM_EVAL_FLOOR` (`lib/discovery/run.ts`, structured `[discovery] YIELD …` log, P3-A1); a **novelty filter** (`lib/discovery/novelty.ts` `loadSeenSourceDomains` + `registrableDomain`, `NOVELTY_LOOKBACK_ISSUES=14`) drops fixed/recently-seen domains so it surfaces unfamiliar sources (P3-A3); candidate supply is widened (`DISCOVERY_TOPICS_PER_RUN=12`, `DISCOVERY_CANDIDATES_PER_TOPIC=20`, `DISCOVERY_MAX_EVAL_CANDIDATES=40`, P3-A2) inside the DAT-H2 wall-clock budget. `computeDiscoveryYield()` (`lib/pipeline/discoveryMeta.ts`) returns `discoveryCount`/`discoverySources` on `GET /api/feed/today` (P3-A4).
+- **Adaptive rank blend:** the source/aesthetic split is no longer fixed 0.70/0.30 — `aestheticWeightForFeedback()` (`lib/config/aesthetic.ts`) ramps aesthetic weight `AESTHETIC_WEIGHT` (0.30) → `AESTHETIC_WEIGHT_MAX` (0.50) over `AESTHETIC_WEIGHT_SATURATION_COUNT` (50) feedback events; source weight is the complement (P3-C1).
+- **Display guarantees** (`lib/pipeline/displayDiversity.ts`, applied in the feed route before the top-`ISSUE_DISPLAY_SIZE`=7 slice): `promoteUnfamiliarSources` ≥`MIN_UNFAMILIAR_IN_ISSUE` (2) never-shown sources, `ensureCategorySpread` ≥`MIN_CATEGORIES_IN_ISSUE` (4) categories (P3-C2/C3). **Known gap (Round 4):** `/api/issue/meta` (colophon credits + theme) still uses raw batch order, so it can credit a different 7 than is displayed.
+- **Instrumentation:** `computeMetrics()` (`lib/db/metrics.ts`) → `GET /api/metrics` (solo-gated) → `/dashboard` page (linked from the Colophon); on-the-fly, no snapshot table (P3-D1/D2/D3; D4 deferred).
+- **First-run calibration:** `app/components/CalibrationModal.tsx` + `app/api/onboarding/calibration` (+ `/tone`) seed the taste model through the existing feedback path (P3-E1/E2/E3). **Known gap (Round 4):** the committed seed-set fallback writes synthetic article IDs that don't seed the aesthetic EMA.
+
 
 ### RSS Adapter helpers (`lib/pipeline/adapters/rssAdapter.ts`)
 - `htmlToPlainText(html, title?)` — strips HTML tags from RSS `content:encoded` fields **and** removes page chrome (share bars, "Featured Video", repeated title/byline/dateline, trailing related-article lists) via the shared `cleanBodyParagraphs` from `lib/utils/bodyClean.ts` (PIPE-Q1), before storing as `bodyText`.

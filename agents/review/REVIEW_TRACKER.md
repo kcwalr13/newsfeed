@@ -87,6 +87,11 @@ npm run dev           # for manual/browser spot-checks
   No migrations created (D4 deferred); all changes are config/logic/UI, deploy-safe. Live product-impact
   validation runs on the Vercel deploy / next daily cron (sandbox egress is bot-blocked on some feeds, so
   local runs are unrepresentative) — see the per-item "Kyle:" notes + the Session 5 product-impact entry.
+- **Round 4 (post-Round-3 adversarial review, 2026-06-14): 13 NEW items, all TODO.** See the "ROUND 4"
+  section below. 2 High (R4-01 colophon/theme credits the wrong 7 — live-confirmed; R4-08 onboarding seed
+  fallback writes phantom rows + doesn't seed the EMA), 6 Medium, 5 Low. **Docs were brought current in
+  this session** (README, CLAUDE.md, ARCHITECTURE.md — uncommitted working-tree edits; commit them).
+  **Last resume point: R4-01.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -875,6 +880,43 @@ migration (`BLOCKED-ON-APPLY`); everything else is config/logic/UI. Operational 
 
 ---
 
+## ROUND 4 — Post-Round-3 adversarial review (2026-06-14)
+
+Adversarial code review + PM/UX feel pass after Round 3 shipped (two deep-dive agents + live checks).
+Focus was regressions/edge-cases the Round-3 product changes introduced. Bug fixes, not features —
+standard workflow (atomic commit, gate green, push). No migration needed. **Docs (README, CLAUDE.md,
+ARCHITECTURE.md) were already brought current in the review session — not a Round-4 item.**
+Operational order: the two Highs first.
+
+### Round 4 — High
+- [ ] **R4-01** · 🔴 High · [REGRESSION amplified by P3-C2/C3] Colophon credits + editor theme reflect raw batch order, not the displayed 7
+  - Where: `app/api/issue/meta/route.ts` (`buildSourceCredits`, `generateTheme` over `batch.articles` raw order) vs `app/api/feed/today/route.ts:144-159` (rank + C2/C3 reorder) + `app/page.tsx:215`
+  - **Live-confirmed:** reader sees Quanta/Aeon/Prism News/Aquarium Drunkard/Nautilus/The Baffler/The Marginalian, but the colophon credits "Quanta ×5, Aeon ×2" and the theme reads "science and philosophy" — the framing undersells the breadth Round 3 created.
+  - Fix: apply the same rank + display-diversity reorder in `/api/issue/meta` (share a single "resolve displayed 7" helper with the feed route), or persist the final displayed order/folio once at assembly time and read it in both. Acceptance: colophon credits + theme match the displayed 7.
+  - Status: TODO · Commit: — · Notes: —
+- [ ] **R4-08** · 🔴 High · [REGRESSION from P3-E1/E3] Onboarding seed-set fallback writes phantom feedback rows and never seeds the aesthetic EMA
+  - Where: `app/api/onboarding/calibration/route.ts:34-42` (synthetic `seed-…` IDs), `app/page.tsx` handler → `setFeedback` → `POST /api/feedback`; `app/api/feedback/route.ts:55-60` (`getArticleAestheticScore('seed-…')` → null → EMA skipped); `feedback.article_id` is FK-less.
+  - Impact: when the seed fallback fires (no batch OR any DB hiccup in `getArticleAestheticScores`), calibration inserts ~16 feedback rows for non-existent articles (permanently inflating metrics) AND the aesthetic centroid is never seeded — the headline P3-E feature silently no-ops for the centroid.
+  - Fix: short-circuit synthetic IDs in the completion handler (apply only the tone nudge), or ship a small *scored* fixture set so seed pieces have real article IDs, or guard `upsertFeedback` against IDs that don't resolve via `findArticleInAnyBatch`. Acceptance: completing calibration via the fallback seeds a non-trivial centroid and writes no phantom rows.
+  - Status: TODO · Commit: — · Notes: —
+
+### Round 4 — Medium
+- [ ] **R4-02** · 🟡 Medium · `discoverySources` exposes raw registrable domains (`artwalkway.com`), not source names. `computeDiscoveryYield` (`lib/pipeline/discoveryMeta.ts:31`) — return `{domain, name}` (use `a.sourceName`) so the UI can show "Art Walkway." · TODO
+- [ ] **R4-03** · 🟡 Medium · Novelty filter has no mega-site denylist — Wikipedia (seen in prod), Medium, Substack, NYT, YouTube, Reddit pass as "hidden gems." Add a `MEGA_SITE_DENYLIST` checked in `lib/discovery/run.ts` before eval; for shared hosts (substack.com/medium.com) key novelty on the full host, not the registrable domain (else one Substack suppresses all others for 14 issues). · TODO
+- [ ] **R4-04** · 🟡 Medium · Hard-floor last-resort isn't bounded: `top = qualified.slice(0,6)` takes the best 6 regardless of `LLM_EVAL_FLOOR` (the floor is a label, not a gate, `lib/discovery/run.ts:386-418`) — a thin day can fill all 6 discovery slots with sub-3.0 content. Cap below-floor last-resort to ≤2, or shrink the quota when only sub-floor candidates remain. · TODO
+- [ ] **R4-09** · 🟡 Medium · Dashboard exploration-budget shows `{budget} / 7` but the budget is clamped `[2,6]` (`serendipity.ts`) — it can never read full. `app/dashboard/page.tsx:214` → use `/ {EXPLORATION_CEILING}` (6) or drop the denominator. · TODO
+- [ ] **R4-10** · 🟡 Medium · Mid-calibration refresh discards all in-progress responses (state-only until `finish()`; `CalibrationModal.tsx:117-127`). Persist partial progress (`tangent_calibration_progress`) and resume, or write each response as it's made. · TODO
+- [ ] **R4-11** · 🟡 Medium · `/dashboard` is ungated and uses a stricter device-id check than `/api/metrics` (`extractDeviceId` doesn't validate format / also takes a header). Gate the page behind the same solo check as the API, or document it as intentionally ungated (aggregate-only, single-user). · TODO
+
+### Round 4 — Low
+- [ ] **R4-05** · 🟢 Low · C2/C3 reorder runs after the ranker's `applyDiversityCap` (`SOURCE_CONSECUTIVE_CAP=3`), so it can reintroduce >3 consecutive same-source near the fold. Run the display reorders inside the ranker before the cap, or re-apply the cap after. · TODO
+- [ ] **R4-06** · 🟢 Low · Metrics "TODAY" panel relabels the latest batch as today even when the cron hasn't run (`lib/db/metrics.ts:93-100` → `app/dashboard/page.tsx:127`). Render "LATEST (Jun 13)" when `latestBatchDate` ≠ UTC today. · TODO
+- [ ] **R4-07** · 🟢 Low · C1 ramp uses `feedbackRows.length` (all events) while the dashboard maturity reads `profile.feedback_count` — divergent "feedback count" notions. Pick one canonical maturity count for both (`ranker.ts:226` vs `metrics.ts:160`). · TODO
+- [ ] **R4-12** · 🟢 Low · Dashboard bars/charts lack text alternatives — add `role="img"` + `aria-label` (follow the `SevenDotStrip` pattern). `app/dashboard/page.tsx` Bar + split bar. · TODO
+- [ ] **R4-13** · 🟢 Low · Calibration sets `tangent_calibration_done` even on an empty/failed fetch (`CalibrationModal.tsx:106`) → a transient first-run failure permanently consumes onboarding with zero signal (compounds R4-08). Only set the done flag when ≥1 real response was captured, or retry the fetch first. · TODO
+
+---
+
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
 
@@ -1338,4 +1380,19 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   holds by construction (batch pieces all scored → centroid moves; recompute on every POST → ≥3 events from
   ≥3 responses). Did not run live to avoid polluting Kyle's real profile; verified by gate + sims. Commit: pending.
 - **E workstream complete (E1–E3). ✅ ROUND 3 — PRODUCT COMPLETE: 16/17 DONE, P3-D4 DEFERRED (optional), 0 TODO.**
-- RESUME AT: **— (Round 3 complete; D4 optional snapshot table deferred. Kyle: live-validate on the deploy / next cron — see per-item Kyle notes.)**
+- **✅ ROUND 3 COMPLETE.** RESUME AT (Round 3): — (D4 optional deferred).
+
+### Session 6 — 2026-06-14 — post-Round-3 adversarial review + doc refresh (reviewer/PM, Cowork)
+- Triggered a live refresh on the deploy to validate Round 3: **6 → 17 distinct sources**, discovery
+  quota **2 → 6 (filled)**, new-palette + discovered sources present, displayed 7 spanning science/
+  philosophy/music/culture. Discovery share (metrics): ~1% (30d) → **30% today**. Round 3 product
+  outcome confirmed live.
+- Ran two adversarial code-review agents (pipeline/data + frontend/new-surfaces) + a PM/UX feel pass.
+  Opened **Round 4** (13 items): 2 High (R4-01 colophon/theme credits the wrong 7 — live-confirmed;
+  R4-08 onboarding seed-fallback phantom rows + no EMA seed), 6 Medium, 5 Low. Editorial feel otherwise
+  intact (badges, rationale, voice, in-voice controls all rendering).
+- **Brought docs current** (not a Round-4 item): README how-it-works, CLAUDE.md tuning knobs + a Round-3
+  implementation-notes block, ARCHITECTURE.md (status, repo structure, Source/FeedResponse types, decisions
+  table, API routes, + a "Post-review updates (Round 3)" addendum). Uncommitted working-tree edits — commit them.
+- Gate: `tsc` + `lint` green; all 16 Round-3 deploys Ready (build green).
+- RESUME AT: **R4-01**

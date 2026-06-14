@@ -32,14 +32,16 @@ per-finding loop defined in the tracker:
 ## Policy (already decided — don't re-litigate)
 - **Scope:** the entire tracker, in order — **except items marked `DEFERRED`**, which are out of
   scope (single-user project; see the tracker's *Future state — multi-user rollout* section). Skip
-  them; do not re-open them. We are now on the **ROUND 3 — Product backlog** (Rounds 1 & 2 are complete).
-  The next actionable item is **P3-B1**. These are **feature/config items, not bug fixes** — read the
-  precise plan first: `agents/architect/design_product_round3_vision_alignment.md` (it has the exact
-  source list, acceptance criteria, sequencing B→A→C→D→E, and risks). Don't skip ahead or batch unrelated
-  items into one commit. Follow the design doc's acceptance criteria, not just a green gate.
-- **These are product changes — verify product impact, not only the gate.** After B+A land, trigger a
-  refresh and confirm the new batch draws from ≥10 sources across ≥5 categories and includes ≥3
-  never-before-seen sources, and that the discovery yield log shows a filled quota. Use `commit -m "feat(P3-XX): …"`.
+  them; do not re-open them. We are now on the **ROUND 4 backlog** (Rounds 1–3 are complete). The next
+  actionable item is **R4-01**. These are **bug fixes** introduced/surfaced by Round 3. Start with the two
+  Highs: **R4-01** (the colophon credits + editor theme are built from raw batch order, so they describe a
+  different 7 than the C2/C3-reordered displayed issue — live-confirmed) and **R4-08** (the onboarding
+  seed-set fallback writes phantom feedback rows and never seeds the aesthetic EMA). Don't skip ahead or
+  batch unrelated items into one commit (the R4 Lows may share one `chore(R4-L)` commit). Commit
+  `fix(R4-XX): …`.
+- **Verify the product outcome, not only the gate.** For R4-01, confirm the colophon credits + theme match
+  the displayed 7 after the fix (compare `/api/issue/meta` to `/api/feed/today` top-7). For R4-08, confirm
+  completing calibration seeds a non-trivial centroid and writes no `seed-…` feedback rows.
 - **Push after every finding.** Each push deploys to Vercel and is used for live re-validation,
   so the build **must be green before you push.** Never push a red build.
 - **Autonomy:** proceed using the report's recommended fix on every item. For any judgment call
@@ -75,7 +77,6 @@ When you stop, print a concise summary:
 
 Verification commands (recap): `npx tsc --noEmit` · `npm run lint` · `npm run build` · `npm run dev`.
 
-Start now: read `agents/architect/design_product_round3_vision_alignment.md` (the precise plan), then open
-`agents/review/REVIEW_TRACKER.md`, find the first `TODO` in the **ROUND 3 — Product** section (currently
-**P3-B1**), and begin the loop. P3-B1 (add the 11 verified sources) is a quick, high-impact first win.
-Work the operational order B → A → C → D → E.
+Start now: open `agents/review/REVIEW_TRACKER.md`, read the **ROUND 4** section, find the first `TODO`
+(currently **R4-01**), and begin the loop. R4-01 and R4-08 are the two Highs — fix them first. Re-confirm
+each against current code before changing it.

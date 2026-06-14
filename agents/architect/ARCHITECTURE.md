@@ -3,7 +3,7 @@
 **Last Updated**: 2026-06-13
 **Maintained by**: Architect Agent
 **Status**: Active — Milestones 1–8, Phases 1–4, QA pass, post-Phase-4 operational fixes, and the
-Round-1 + Round-2 review-remediation campaign shipped. See the **Post-review updates** section near
+Round-1 + Round-2 review-remediation campaign, and the Round-3 product/vision-alignment campaign, shipped. See the **Post-review updates** sections near
 the end for systems added/changed during remediation; `agents/review/REVIEW_TRACKER.md` has the
 finding-by-finding log.
 
@@ -66,9 +66,9 @@ tangent/
 │   └── page.tsx              ← Feed homepage (/)
 ├── data/                     ← Runtime data
 │   └── sources.json          ← Fixed-pipeline RSS source configuration (checked into git)
-│       (12 esoteric sources: Quanta, Aeon, Nautilus, Astral Codex Ten,
-│        Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian,
-│        Psyche, The Baffler, Noema, Works in Progress)
+│       (23 sources across 11 categories; each entry carries a `category`:
+│        science/philosophy/ideas/economics/psychology/culture/music/art/
+│        design/film/literature — broadened 12→23 in Round 3, P3-B1/B2)
 │   NOTE: Batch storage and pipeline logs moved to Neon DB (migration 013).
 │         Refresh cooldown + global run-lock now Postgres-backed (rate_limits
 │         table, migration 019) in lib/pipeline/cooldown.ts (was in-memory Map).
@@ -152,7 +152,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
   - `probeInfo?: { probeType: 'blind_spot'; clusterLabel: string }` — set only on probe articles; written to batch JSON
 
 **`FeedResponse`** — envelope returned by `GET /api/feed/today`
-- `batchDate: string` (YYYY-MM-DD) + `articles: Article[]`
+- `batchDate: string` (YYYY-MM-DD), `articles: Article[]`, `generatedAt?: string`,
+  `discoveryCount?: number`, `discoverySources?: string[]` (registrable domains of the day's
+  discovery-sourced articles, P3-A4)
 
 **`ArticleBatch`** — in-memory shape and DB storage shape for a daily article batch.
 - `batchDate`, `generatedAt` (ISO-8601), `articles: Article[]`
@@ -161,7 +163,8 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 
 **`Source`** — entry in `data/sources.json`
 - `slug`, `name`, `url`, `type: 'rss' | 'newsapi'`, `active: boolean`
-- Optional: `feedUrl` (for RSS), `query` (for NewsAPI)
+- Optional: `feedUrl` (for RSS), `query` (for NewsAPI), `category?: SourceCategory`
+- `SourceCategory` (`lib/types/article.ts`): `science | philosophy | ideas | economics | psychology | culture | music | art | design | film | literature`. Resolved onto articles at read time via `categoryForArticle()` (`lib/pipeline/sourceCategory.ts`); not persisted on `Article`. (Round 3, P3-B2)
 
 **`DbUser`** — `lib/types/auth.ts`
 - `user_id`, `email`, `hashed_password`, `email_verified_at`, `created_at`
@@ -275,6 +278,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | POST | `/api/auth/forgot-password` | Send password reset email | None |
 | POST | `/api/auth/reset-password` | Set new password, invalidate sessions | None |
 | POST | `/api/feed/refresh` | Triggers manual pipeline run with cooldown enforcement | `dd_session` cookie (authenticated users only) |
+| GET | `/api/metrics` | Product metrics (discovery share, sources/week, category mix, exploration acceptance, taste maturity) for `/dashboard` (Round 3, P3-D2) | Solo gate (device cookie) |
+| GET | `/api/onboarding/calibration` | Returns ~16 contrasting calibration pieces for first-run taste calibration (Round 3, P3-E1) | None / device |
+| POST | `/api/onboarding/tone` | Applies an optional tone preference to the aesthetic centroid (Round 3, P3-E2) | Device cookie / `X-Device-ID` header |
 
 ---
 
@@ -283,7 +289,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Batch storage | Neon `article_batches` table (migration 013) | Vercel's serverless filesystem is read-only; DB-backed storage is required for deployment. Previous filesystem approach (JSON files) worked only in local dev. |
-| Primary content source | RSS feeds (12 esoteric sources) | Free, broad coverage, full text. Sources: Quanta, Aeon, Nautilus, Astral Codex Ten, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian, Psyche, The Baffler, Noema, Works in Progress. Swapped from mainstream outlets (BBC, Ars, The Verge) to match discovery companion vision. |
+| Primary content source | RSS feeds (**23 sources across 11 categories**) | Free, broad coverage, full text. Round 3 broadened the palette 12→23 (added music ×4, visual art ×2, design, film, literature, esoteric-culture ×2) and gave every source a `category` (P3-B1/B2). Swapped from mainstream outlets (BBC, Ars, The Verge) to match the discovery-companion vision. |
+| Adaptive aesthetic blend (Round 3) | `aestheticWeightForFeedback()` ramps the aesthetic weight 0.30 → 0.50 over 50 feedback events; source weight is the complement | The fixed 0.70/0.30 split under-trusted the learned taste once mature. Ramping up (never down) with feedback keeps early issues stable while letting a trained model lead (P3-C1). |
+| Display diversity (Round 3) | `promoteUnfamiliarSources` (≥2 never-shown) + `ensureCategorySpread` (≥4 categories) reorder before the top-7 slice (`lib/pipeline/displayDiversity.ts`) | Guarantees the shown issue is visibly broad even when ranking concentrates on a few sources (P3-C2/C3). |
 | Secondary content source | Small Web crawler (Phase 1+) | Replaced NewsAPI. IndieWeb sources surfaced via blogroll expansion. |
 | Body text strategy | Best-effort from RSS `content` field | Avoids scraping complexity in v1; graceful fallback UX |
 | Pipeline trigger | HTTP endpoint guarded by `CRON_SECRET` | Works with any external cron service; no vendor lock-in |
@@ -517,6 +525,46 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `lib/pipeline/cooldown.ts` — replaced filesystem JSON with in-memory `Map`; Vercel-compatible | **Done** | 2026-04-20 |
 | `lib/discovery/bodyExtractor.ts` — replaced `@mozilla/readability` + `jsdom` with `node-html-parser`; removed jsdom and @types/jsdom from package.json | **Done** | 2026-04-20 |
 | `data/sources.json` — replaced mainstream RSS sources with 8 esoteric discovery sources (Quanta, Aeon, Nautilus, Astral Codex Ten, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian) | **Done** | 2026-04-20 |
+
+---
+
+## Post-review updates (Round 3 — Product / Vision Alignment, 2026-06-14)
+
+Source: `agents/architect/design_product_round3_vision_alignment.md`; backlog in
+`agents/review/REVIEW_TRACKER.md` → ROUND 3. **No migration** (D4 metrics-snapshot table deferred);
+**no new required env var** (optional `MAX_ARTICLES_PER_CATEGORY` knob added, default 4).
+
+**Supply & palette**
+- Fixed palette **12 → 23** sources, each with a `category` (`SourceCategory`); `categoryForArticle()`
+  resolver in `lib/pipeline/sourceCategory.ts` (P3-B1/B2). `MAX_ARTICLES_PER_SOURCE` 5 → 4; new soft
+  `MAX_ARTICLES_PER_CATEGORY` (4); round-robin diversify before trim (P3-B3).
+- Discovery **hard-floored** to fill 6 slots down to `LLM_EVAL_FLOOR`, with a structured
+  `[discovery] YIELD …` log (P3-A1). Candidate supply widened: full 12-topic bank
+  (`DISCOVERY_TOPICS_PER_RUN=12`, `DISCOVERY_QUERIES_PER_TOPIC=1`, `DISCOVERY_CANDIDATES_PER_TOPIC=20`,
+  `DISCOVERY_MAX_EVAL_CANDIDATES=40`) inside the DAT-H2 wall-clock budget (P3-A2).
+- **Novelty filter** (`lib/discovery/novelty.ts` — `loadSeenSourceDomains` + `registrableDomain`,
+  `NOVELTY_LOOKBACK_ISSUES=14`) drops fixed/recently-seen domains so discovery surfaces unfamiliar
+  sources (P3-A3). `computeDiscoveryYield()` (`lib/pipeline/discoveryMeta.ts`) exposes
+  `discoveryCount`/`discoverySources` on `GET /api/feed/today` (P3-A4).
+
+**Ranking & display**
+- Adaptive source/aesthetic blend (`aestheticWeightForFeedback`, `lib/config/aesthetic.ts`: 0.30 →
+  `AESTHETIC_WEIGHT_MAX` 0.50 over `AESTHETIC_WEIGHT_SATURATION_COUNT` 50 events) replaces the fixed
+  0.70/0.30 (P3-C1).
+- Display guarantees (`lib/pipeline/displayDiversity.ts`, applied before the top-`ISSUE_DISPLAY_SIZE`=7
+  slice): ≥`MIN_UNFAMILIAR_IN_ISSUE` (2) never-shown sources, ≥`MIN_CATEGORIES_IN_ISSUE` (4) categories
+  (P3-C2/C3).
+
+**Instrumentation & onboarding**
+- `lib/db/metrics.ts` `computeMetrics()` → `GET /api/metrics` (solo gate) → `/dashboard` page
+  (linked from `Colophon.tsx`); on-the-fly, no snapshot table (P3-D1/D2/D3; D4 deferred).
+- First-run calibration: `app/api/onboarding/calibration` + `/tone`, `CalibrationModal.tsx`, seeded
+  through the existing feedback path to cross `SHORT_TERM_MIN_EVENTS=3` (P3-E1/E2/E3).
+
+**Known gaps (logged for Round 4):** `/api/issue/meta` builds the colophon credits + theme from raw
+batch order, so they can describe a different 7 than the C2/C3-reordered displayed 7; the calibration
+seed-set fallback writes synthetic article IDs that don't seed the aesthetic EMA. See REVIEW_TRACKER.md
+ROUND 4.
 
 ---
 

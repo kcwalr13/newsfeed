@@ -17,13 +17,22 @@ conventions and the agent pipeline are in [`CLAUDE.md`](CLAUDE.md).
 
 ## How it works (one paragraph)
 
-A daily pipeline pulls candidates from a set of trusted RSS sources plus an agentic
-discovery pass (Brave Search + a Small Web crawl), screens them through a quality
-gate, evaluates each with Claude, scores them along subjective aesthetic dimensions,
-ranks them against your evolving taste model, and writes a dated **batch** (a daily
-"issue" of ~7 pieces) to Postgres. The web app reads the latest batch, records your
-feedback (like / save / pass + reading position + dwell), and feeds that back into
-the taste model.
+A daily pipeline pulls candidates from **23 trusted RSS sources** — spanning science,
+philosophy, ideas, economics, psychology, culture, music, art, design, film, and
+literature — plus an agentic discovery pass (Brave Search + a Small Web crawl). A
+**novelty filter** drops discovered candidates whose domain is already a fixed source
+or has appeared in recent issues, so discovery surfaces genuinely unfamiliar sources.
+Candidates are screened through a quality gate, evaluated with Claude, scored along
+subjective aesthetic dimensions, and ranked against your evolving taste model with an
+**adaptive blend** that trusts source reputation early and your learned taste as
+feedback accumulates. The pipeline writes a dated **batch** of 20 articles to Postgres;
+the app shows the top **7** as the day's issue, guaranteeing at least 2 unfamiliar
+sources and at least 4 distinct categories. The app records your feedback
+(like / save / pass + reading position + dwell), feeds it back into the taste model, and
+reports the whole system's health on a **`/dashboard`** page (discovery share, distinct
+sources this week, category mix, exploration acceptance, taste-model maturity). A
+first-run **taste calibration** seeds the model from a few choices so it learns you
+faster.
 
 ## Tech stack
 
