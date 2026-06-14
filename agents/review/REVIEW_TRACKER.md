@@ -79,9 +79,9 @@ npm run dev           # for manual/browser spot-checks
   > Round-1 commit hashes rather than the `pending` markers.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 34 DONE (R2-01–R2-28, D-01–D-06) · 1 TODO (S-01 ops — owner action). **All 28 code/UX + all 6 docs findings complete.**
+  Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: S-01** (SKIP — owner secret rotation)
+- Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
 
 ---
 
@@ -808,7 +808,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **D-06** · 🟢 Low · CLAUDE.md `decodeEntities` note now imprecise (shared named+numeric decoder; `htmlToPlainText` now strips chrome); "Next.js 14+" → 16. · DONE (commit pending): updated the RSS-adapter helper notes — `htmlToPlainText(html, title?)` now documented as also stripping page chrome via the shared `cleanBodyParagraphs` (bodyClean.ts, PIPE-Q1), and `decodeEntities` as an alias for the shared `decodeHtmlEntities` (htmlEntities.ts) that handles both named and numeric entities at ingest + display (FE-L5/PIPE-M7). CLAUDE.md had no literal "Next.js 14+" (that was ARCHITECTURE.md, fixed in D-03); set the Tech Stack framework line to "Next.js 16 (App Router) + React 19" for precision. Gate green.
 
 ### Round 2 — Security (operational)
-- [ ] **S-01** · 🔴 High (ops) · Rotate secrets surfaced during review. `.env.local` (gitignored, never committed — verified) holds live ANTHROPIC_API_KEY, Neon `DATABASE_URL` w/ password, BRAVE_SEARCH_API_KEY, NEWSAPI_KEY, CRON_SECRET; values were read in-band during these review sessions. Rotate all five + update Vercel env; keep `.env.local` out of future review scope. (Not a code change.) · TODO
+- [ ] **S-01** · 🔴 High (ops) · Rotate secrets surfaced during review. `.env.local` (gitignored, never committed — verified) holds live ANTHROPIC_API_KEY, Neon `DATABASE_URL` w/ password, BRAVE_SEARCH_API_KEY, NEWSAPI_KEY, CRON_SECRET; values were read in-band during these review sessions. Rotate all five + update Vercel env; keep `.env.local` out of future review scope. (Not a code change.) · SKIPPED — **owner action: rotate keys + update Vercel env.** Not a code task; per campaign policy, Code does not touch `.env.local` or attempt rotation. Kyle to rotate all 5 secrets (ANTHROPIC_API_KEY, DATABASE_URL password, BRAVE_SEARCH_API_KEY, NEWSAPI_KEY, CRON_SECRET) and update the corresponding Vercel env vars + redeploy.
 
 ---
 
@@ -1155,4 +1155,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   decodeEntities is the shared named+numeric decoder) + Tech Stack set to Next.js 16 / React 19. Commit: pending.
 - **All 28 code/UX (R2-01–R2-28) + all 6 docs (D-01–D-06) findings DONE + pushed.** Only S-01
   (owner secret rotation — not a code task) remains.
-- RESUME AT: **S-01** (operational SKIP — see below)
+- **S-01** → SKIPPED: owner action (rotate the 5 `.env.local` secrets + update Vercel env). Per
+  campaign policy, Code does not touch `.env.local` or rotate keys. Commit: pending.
+- **✅ ROUND 2 COMPLETE** — 34 findings DONE, 1 SKIPPED (S-01 owner action), 0 TODO. Whole tracker
+  cleared except the operational secret rotation, which is Kyle's manual step.
+- RESUME AT: **—** (nothing left for Code; S-01 awaits Kyle)
