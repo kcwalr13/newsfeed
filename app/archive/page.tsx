@@ -49,7 +49,9 @@ function daysAgo(dateStr: string): string {
   const then = new Date(`${dateStr}T12:00:00`);
   const todayNoon = new Date(`${localTodayString()}T12:00:00`);
   const diff = Math.round((todayNoon.getTime() - then.getTime()) / (1000 * 60 * 60 * 24));
-  if (diff === 0) return 'today';
+  // diff < 0 means a future-dated batch (e.g. timezone skew); show 'today'
+  // rather than a nonsensical "-1 days ago" (R2-15).
+  if (diff <= 0) return 'today';
   if (diff === 1) return '1 day ago';
   return `${diff} days ago`;
 }

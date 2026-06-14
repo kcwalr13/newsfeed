@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 15 DONE (R2-01–R2-14, R2-19) · 20 TODO. **All 5 Round-2 Highs complete.**
+  Progress: 16 DONE (R2-01–R2-15, R2-19) · 19 TODO. **All 5 Round-2 Highs complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-15**
+- Current branch: `main` · **Last resume point: R2-16**
 
 ---
 
@@ -777,7 +777,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **R2-12** · 🟡 Medium · Dot-strip `read` excludes dislikes (`app/page.tsx:183`), so "All N pieces read" is unreachable once any piece is passed. Count actioned (like/save/dislike) or reword. · DONE (commit pending): took the report's primary option — `read` now counts any actioned piece (`like`/`save`/`dislike`), so passing on a piece counts toward progress and "All N pieces read. Well done." (and the dot strip / `read`/total / "N more to go") becomes reachable. Gate green.
 - [x] **R2-13** · 🟡 Medium · Three CSS themes (dark/sepia/paper) are dead code — nothing sets `data-theme`, no `prefers-color-scheme` (`globals.css:23-53`); the "AA across 4 themes" work is unwired. Wire it or mark not-yet-live. · DONE (commit pending): chose **mark not-yet-live** (not "wire it"). Added a banner comment above the alternate-theme blocks in `globals.css` documenting they are intentionally inactive (no `data-theme` setter, no `prefers-color-scheme` hook), kept because FE-H3 already made each AA-compliant so a future theme switcher can flip them on without redoing contrast work — i.e. deliberate, not a bug. Wiring `prefers-color-scheme: dark` would flip the live look for many users without design review (contra FE-L3 "don't ship blind"); a switcher UI is out of campaign scope. Consistent with Decisions Log FE-L1. Gate green.
 - [x] **R2-14** · 🟡 Medium · `useModalA11y` scroll-lock can leak (page stuck) if two modals overlap — per-instance `overflow` snapshot (`useModalA11y.ts:43-44,84`). Use a global ref-count lock. · DONE (commit pending): replaced the per-instance `prevOverflow` snapshot/restore with module-level `lockBodyScroll`/`unlockBodyScroll` backed by a `scrollLockCount` ref count — the original `body.style.overflow` is captured once on the 0→1 transition and restored once on 1→0, so overlapping modals can't clobber each other's snapshot (no premature unlock, no stuck page). Count clamps at 0. Verified: gate green + 7/7 simulation (overlap with A-closes-first stays locked then unlocks cleanly; pre-existing overflow preserved).
-- [ ] **R2-15** · 🟡 Medium · [FE-M5 gap] `daysAgo` renders "−1 days ago" for future-dated batches (`archive/page.tsx:46-55`). `if (diff<0) return 'today'`. · TODO
+- [x] **R2-15** · 🟡 Medium · [FE-M5 gap] `daysAgo` renders "−1 days ago" for future-dated batches (`archive/page.tsx:46-55`). `if (diff<0) return 'today'`. · DONE (commit pending): changed the early return from `diff === 0` to `diff <= 0`, so a future-dated batch (timezone skew) shows 'today' instead of "-1 days ago". Gate green.
 - [ ] **R2-16** · 🟡 Medium · `IssueCover` is `role="button"` wrapping a full dialog (`IssueCover.tsx:63-81`); use `role="dialog" aria-modal`. · TODO
 
 ### Round 2 — Low (may batch into one `chore(R2-L)` commit)
@@ -1093,5 +1093,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   globals.css) rather than wiring a switcher or prefers-color-scheme blind. Gate green. Commit: 1959b39.
 - **R2-14** → DONE: `useModalA11y` body-scroll lock is now a module-level ref count (snapshot
   original on 0→1, restore on 1→0) so overlapping modals can't leave the page stuck or prematurely
-  unlocked. Gate green + 7/7 simulation. Commit: pending.
-- RESUME AT: **R2-15**
+  unlocked. Gate green + 7/7 simulation. Commit: 6258a8c.
+- **R2-15** → DONE: archive `daysAgo` returns 'today' for `diff <= 0` (future-dated batches no
+  longer render "-1 days ago"). Gate green. Commit: pending.
+- RESUME AT: **R2-16**
