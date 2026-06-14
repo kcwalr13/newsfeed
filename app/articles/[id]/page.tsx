@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { findArticleAcrossBatches } from '@/lib/pipeline/storage';
 import ArticleInteractions from '@/app/components/ArticleInteractions';
 import ArticleBodyClient from '@/app/components/ArticleBodyClient';
+import HeroImage from '@/app/components/HeroImage';
 import { decodeHtmlEntities } from '@/lib/utils/htmlEntities';
 
 interface Props {
@@ -100,25 +101,9 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             {article.sourceName.toUpperCase()} · {publishedDate.toUpperCase()}
           </p>
 
-          {/* Hero image (duotone) */}
-          {article.imageUrl && (
-            <div
-              className="ql-duotone-wrapper rounded-sm overflow-hidden mb-6"
-              style={{ maxHeight: '280px' }}
-            >
-              {/* Above the fold (likely LCP) — keep eager, but reserve the
-                  box via aspect-ratio and decode off the main thread. */}
-              <img
-                src={article.imageUrl}
-                alt=""
-                className="w-full object-cover"
-                decoding="async"
-                style={{ aspectRatio: '16 / 9', maxHeight: '280px' }}
-              />
-              <div className="ql-duotone-shadow" />
-              <div className="ql-duotone-highlight" />
-            </div>
-          )}
+          {/* Hero image (duotone) — client component so it can hide itself if
+              the image URL fails to load (R2-26). */}
+          {article.imageUrl && <HeroImage src={article.imageUrl} />}
 
           {/* Title */}
           <h1

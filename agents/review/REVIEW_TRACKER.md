@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 25 DONE (R2-01–R2-25) · 10 TODO. **All 5 Round-2 Highs + all Mediums complete.**
+  Progress: 26 DONE (R2-01–R2-26) · 9 TODO. **All 5 Round-2 Highs + all Mediums complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-26**
+- Current branch: `main` · **Last resume point: R2-27**
 
 ---
 
@@ -790,7 +790,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **R2-23** · 🟢 Low · `getValidatedBaseUrl` throws into fire-and-forget `.catch` on register/forgot → user gets "email sent" while none sent. Surface/ document. · DONE (commit pending): replaced the bare `.catch(console.error)` on all three send sites (register, resend-verification, forgot-password) with a clear, distinct, greppable log (`[auth] … email … failed (check NEXTAUTH_URL/SMTP)`) and a comment documenting that the send is fire-and-forget — the response is independent of delivery by design (latency + anti-enumeration), so a misconfig/send failure is logged server-side but not surfaced. Chose surface-in-logs + document over awaiting/returning an error, which would re-introduce account enumeration on forgot/resend (see Decisions Log). Gate green.
 - [x] **R2-24** · 🟢 Low · `useModalA11y` initial-focus target not visibility-filtered like the Tab list; brittle shared abstraction. · DONE (commit pending): extracted a shared `focusableItems(container)` helper (visible focusables in DOM order, `offsetParent !== null` filter) and used it for BOTH the initial-focus move and the Tab trap, so initial focus no longer lands on a hidden control and the two can't drift. Gate green.
 - [x] **R2-25** · 🟢 Low · Verb buttons use `aria-pressed` (toggle) for a mutually-exclusive 3-way group; `radiogroup` is more accurate. · DONE (commit pending): both verb groups (ArticleInteractions reader controls + ArticleCard feed controls) now wrap the dislike/like/save buttons in a `role="radiogroup" aria-label="Your response to this piece"` container, and each button is `role="radio" aria-checked={isActive}` instead of `aria-pressed`. Communicates mutual exclusivity rather than three independent toggles. (Re-clicking still clears the selection — a minor, intentional deviation from strict radio behavior.) Gate green; grep confirms no `aria-pressed` remains.
-- [ ] **R2-26** · 🟢 Low · `<img>` has no `onError`/broken-image fallback (ArticleCard, article page) → empty duotone box. · TODO
+- [x] **R2-26** · 🟢 Low · `<img>` has no `onError`/broken-image fallback (ArticleCard, article page) → empty duotone box. · DONE (commit pending): ArticleCard (client) tracks `imageError` and on `<img onError>` falls back to its existing drop-cap folio (the same no-image design) instead of an empty duotone box. The article page is a server component, so the hero `<img>` was extracted into a new client `app/components/HeroImage.tsx` that hides itself on error. Gate green (warning count unchanged — the no-img-element warning moved page.tsx → HeroImage.tsx).
 - [ ] **R2-27** · 🟢 Low · Article page `publishedAt` uses raw `new Date()` (UTC) while archive got noon-anchoring (FE-M5 inconsistency). · TODO
 - [ ] **R2-28** · 🟢 Low · Feed init effect + two listeners both call `drainQueue` (mild dev waste). · TODO
 
@@ -1122,5 +1122,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   initial focus and the Tab trap, so initial focus can't land on a hidden control. Gate green.
   Commit: ecb91b1.
 - **R2-25** → DONE: verb groups (reader + card) are now `role="radiogroup"` with `role="radio"`
-  `aria-checked` buttons instead of `aria-pressed`. Gate green. Commit: pending.
-- RESUME AT: **R2-26**
+  `aria-checked` buttons instead of `aria-pressed`. Gate green. Commit: 6b477e5.
+- **R2-26** → DONE: broken hero images fall back gracefully — ArticleCard → drop-cap folio (state),
+  article page → new client `HeroImage` that hides on error. Gate green. Commit: pending.
+- RESUME AT: **R2-27**

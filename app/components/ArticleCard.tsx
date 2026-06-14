@@ -42,6 +42,9 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
     () => getFeedback(article.id) ?? null
   );
   const [confirmed, setConfirmed] = useState<Verb>(null);
+  // Broken image URL → fall back to the drop-cap folio instead of an empty
+  // duotone box (R2-26).
+  const [imageError, setImageError] = useState(false);
 
   function handleVerb(verb: 'like' | 'dislike' | 'save') {
     if (feedback === verb) {
@@ -90,8 +93,9 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
           )}
         </div>
 
-        {/* Hero image (duotone) OR drop-cap folio */}
-        {article.imageUrl ? (
+        {/* Hero image (duotone) OR drop-cap folio (also the fallback if the
+            image fails to load) */}
+        {article.imageUrl && !imageError ? (
           <Link
             href={href}
             className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
@@ -107,6 +111,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
                 className="w-full object-cover"
                 loading="lazy"
                 decoding="async"
+                onError={() => setImageError(true)}
                 style={{ aspectRatio: '16 / 9', maxHeight: '220px' }}
               />
               <div className="ql-duotone-shadow" />
