@@ -99,6 +99,16 @@ export interface FeedResponse {
    * Clients should format this to local time for display.
    */
   generatedAt?: string;
+  /**
+   * Number of articles in this issue sourced from proactive discovery (P3-A4).
+   * Derived from the per-article discoveryTopic marker. Absent if no batch.
+   */
+  discoveryCount?: number;
+  /**
+   * Unique registrable domains of the discovery-sourced articles (P3-A4).
+   * Powers the discovery-share / sources metrics (Workstream D).
+   */
+  discoverySources?: string[];
 }
 
 /** The on-disk representation of a daily article batch. */

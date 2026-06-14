@@ -10,6 +10,7 @@ import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/l
 import type { UserConcept } from '@/lib/types/concepts';
 import { EXPLORATION_BASELINE } from '@/lib/config/serendipity';
 import { generateMissingRationales } from '@/lib/pipeline/rationaleGenerator';
+import { computeDiscoveryYield } from '@/lib/pipeline/discoveryMeta';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,10 @@ export async function GET(req: NextRequest) {
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }
+
+  // Discovery-yield metadata for the issue (P3-A4) — derived from the persisted
+  // per-article discoveryTopic marker; exposed for the dashboard (Workstream D).
+  const { discoveryCount, discoverySources } = computeDiscoveryYield(batch.articles);
 
   // Create a temporary response object so resolveSession can attach a
   // refreshed Set-Cookie header to it. We will copy that header to the
@@ -88,7 +93,7 @@ export async function GET(req: NextRequest) {
       return rest;
     });
     return NextResponse.json(
-      { batchDate: batch.batchDate, articles: publicBatchArticles, generatedAt: batch.generatedAt },
+      { batchDate: batch.batchDate, articles: publicBatchArticles, generatedAt: batch.generatedAt, discoveryCount, discoverySources },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }
@@ -141,7 +146,7 @@ export async function GET(req: NextRequest) {
   if (setCookieHeader) headers['Set-Cookie'] = setCookieHeader;
 
   return NextResponse.json(
-    { batchDate: batch.batchDate, articles: publicArticles, generatedAt: batch.generatedAt },
+    { batchDate: batch.batchDate, articles: publicArticles, generatedAt: batch.generatedAt, discoveryCount, discoverySources },
     { headers }
   );
 }
