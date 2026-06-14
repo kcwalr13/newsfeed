@@ -38,6 +38,13 @@ export interface CalibrationResult {
   /** articleId → response. */
   responses: Record<string, 'like' | 'dislike'>;
   tones: string[];
+  /**
+   * Where the calibration pieces came from. 'batch' = real DB-scored articles
+   * (feedback routes normally); 'seed' = committed fallback fixtures whose ids
+   * aren't real articles, so they must seed the centroid directly without
+   * writing feedback rows (R4-08).
+   */
+  source: 'batch' | 'seed';
 }
 
 function hasPriorFeedback(): boolean {
@@ -61,6 +68,8 @@ export default function CalibrationModal({ onComplete }: Props) {
   const [responses, setResponses] = useState<Record<string, 'like' | 'dislike'>>({});
   const [tones, setTones] = useState<string[]>([]);
   const [phase, setPhase] = useState<'cards' | 'tone'>('cards');
+  // Where the pieces came from — drives how onComplete seeds the model (R4-08).
+  const [source, setSource] = useState<'batch' | 'seed'>('batch');
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Decide whether to show: calibration not done, editor letter already seen,
@@ -86,9 +95,9 @@ export default function CalibrationModal({ onComplete }: Props) {
     (resp: Record<string, 'like' | 'dislike'>, tn: string[]) => {
       localStorage.setItem(CALIBRATION_DONE_KEY, '1');
       setVisible(false);
-      onComplete?.({ responses: resp, tones: tn });
+      onComplete?.({ responses: resp, tones: tn, source });
     },
-    [onComplete]
+    [onComplete, source]
   );
 
   const skip = useCallback(() => finish(responses, tones), [finish, responses, tones]);
@@ -102,8 +111,10 @@ export default function CalibrationModal({ onComplete }: Props) {
     fetch('/api/onboarding/calibration')
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled && Array.isArray(d?.pieces) && d.pieces.length > 0) setPieces(d.pieces);
-        else if (!cancelled) finish({}, []); // nothing to calibrate on — bow out
+        if (!cancelled && Array.isArray(d?.pieces) && d.pieces.length > 0) {
+          setSource(d.source === 'seed' ? 'seed' : 'batch');
+          setPieces(d.pieces);
+        } else if (!cancelled) finish({}, []); // nothing to calibrate on — bow out
       })
       .catch(() => {
         if (!cancelled) finish({}, []);

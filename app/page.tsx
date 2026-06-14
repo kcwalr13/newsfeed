@@ -101,17 +101,36 @@ export default function FeedPage() {
     return () => feedAbortRef.current?.abort();
   }, [fetchFeed]);
 
-  // Seed the taste model from the first-run calibration (P3-E3): route each
-  // like/pass through the existing feedback path (aesthetic EMA + concept graph
-  // + source Wilson scores + short-term recompute), apply the optional tone
-  // nudge, then refresh so the first issue is visibly shaped by the choices.
-  const handleCalibrationComplete = useCallback(async ({ responses, tones }: CalibrationResult) => {
-    for (const [id, value] of Object.entries(responses)) {
-      setFeedback(id, value);
+  // Seed the taste model from the first-run calibration (P3-E3), apply the
+  // optional tone nudge, then refresh so the first issue is visibly shaped by
+  // the choices.
+  //
+  // 'batch' pieces are real DB-scored articles → route each like/pass through
+  // the existing feedback path (aesthetic EMA + concept graph + source Wilson
+  // scores + short-term recompute). 'seed' (fallback) pieces aren't real
+  // articles: sending them through the feedback path would write phantom rows
+  // and skip the EMA, so seed the centroid server-side from the committed scored
+  // fixtures and write NO feedback rows (R4-08).
+  const handleCalibrationComplete = useCallback(async ({ responses, tones, source }: CalibrationResult) => {
+    const entries = Object.entries(responses);
+    if (source === 'seed') {
+      if (entries.length > 0) {
+        try {
+          await fetch('/api/onboarding/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getDeviceHeaders() },
+            body: JSON.stringify({ responses }),
+          });
+        } catch { /* seeding is best-effort */ }
+      }
+    } else {
+      for (const [id, value] of entries) {
+        setFeedback(id, value);
+      }
+      try {
+        await drainQueue();
+      } catch { /* offline writes stay queued; non-blocking */ }
     }
-    try {
-      await drainQueue();
-    } catch { /* offline writes stay queued; non-blocking */ }
     if (tones.length > 0) {
       try {
         await fetch('/api/onboarding/tone', {

@@ -10,8 +10,8 @@
 import { NextResponse } from 'next/server';
 import { readLatestBatch } from '@/lib/pipeline/storage';
 import { getArticleAestheticScores } from '@/lib/db/aesthetics';
-import { selectCalibrationSet, type CalibrationPiece } from '@/lib/onboarding/calibration';
-import seedPieces from '@/data/calibration_seed.json';
+import { selectCalibrationSet } from '@/lib/onboarding/calibration';
+import { SEED_CALIBRATION_PIECES } from '@/lib/onboarding/seedSet';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,13 +32,13 @@ export async function GET() {
     }
     // Fallback: committed seed set (rare — a batch almost always exists).
     return NextResponse.json(
-      { pieces: seedPieces as CalibrationPiece[], source: 'seed' },
+      { pieces: SEED_CALIBRATION_PIECES, source: 'seed' },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (err) {
     console.error('[GET /api/onboarding/calibration]', err);
     return NextResponse.json(
-      { pieces: seedPieces as CalibrationPiece[], source: 'seed' },
+      { pieces: SEED_CALIBRATION_PIECES, source: 'seed' },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }

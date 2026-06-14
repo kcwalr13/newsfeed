@@ -91,7 +91,7 @@ npm run dev           # for manual/browser spot-checks
   section below. 2 High (R4-01 colophon/theme credits the wrong 7 — live-confirmed; R4-08 onboarding seed
   fallback writes phantom rows + doesn't seed the EMA), 6 Medium, 5 Low. **Docs were brought current in
   this session** (README, CLAUDE.md, ARCHITECTURE.md — committed in `33d6b18`).
-  Round-4 progress: **1 DONE (R4-01) · 12 TODO.** **Last resume point: R4-08.**
+  Round-4 progress: **2 DONE (R4-01, R4-08 — both Highs) · 11 TODO.** **Last resume point: R4-02.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -893,7 +893,7 @@ Operational order: the two Highs first.
   - Where: `app/api/issue/meta/route.ts` (`buildSourceCredits`, `generateTheme` over `batch.articles` raw order) vs `app/api/feed/today/route.ts:144-159` (rank + C2/C3 reorder) + `app/page.tsx:215`
   - **Live-confirmed:** reader sees Quanta/Aeon/Prism News/Aquarium Drunkard/Nautilus/The Baffler/The Marginalian, but the colophon credits "Quanta ×5, Aeon ×2" and the theme reads "science and philosophy" — the framing undersells the breadth Round 3 created.
   - Fix: apply the same rank + display-diversity reorder in `/api/issue/meta` (share a single "resolve displayed 7" helper with the feed route), or persist the final displayed order/folio once at assembly time and read it in both. Acceptance: colophon credits + theme match the displayed 7.
-  - Status: DONE · Commit: pending · Notes: Extracted the displayed-order resolution into a single
+  - Status: DONE · Commit: 9872335 · Notes: Extracted the displayed-order resolution into a single
     shared helper `lib/pipeline/displayedFeed.ts` (`resolveDisplayedFeed(req, batch)`): resolves
     identity + feedback/profile/scores/concepts, runs `rankFeed`, then the C2/C3 display-diversity
     reorders — returning the full reordered list (NOT sliced). `app/api/feed/today/route.ts` is
@@ -919,7 +919,31 @@ Operational order: the two Highs first.
   - Where: `app/api/onboarding/calibration/route.ts:34-42` (synthetic `seed-…` IDs), `app/page.tsx` handler → `setFeedback` → `POST /api/feedback`; `app/api/feedback/route.ts:55-60` (`getArticleAestheticScore('seed-…')` → null → EMA skipped); `feedback.article_id` is FK-less.
   - Impact: when the seed fallback fires (no batch OR any DB hiccup in `getArticleAestheticScores`), calibration inserts ~16 feedback rows for non-existent articles (permanently inflating metrics) AND the aesthetic centroid is never seeded — the headline P3-E feature silently no-ops for the centroid.
   - Fix: short-circuit synthetic IDs in the completion handler (apply only the tone nudge), or ship a small *scored* fixture set so seed pieces have real article IDs, or guard `upsertFeedback` against IDs that don't resolve via `findArticleInAnyBatch`. Acceptance: completing calibration via the fallback seeds a non-trivial centroid and writes no phantom rows.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Combined the report's options (b)+(short-circuit): the
+    fallback now seeds the centroid directly from a *scored fixture set* and writes **zero** feedback
+    rows. (a) Each of the 12 seed pieces in `data/calibration_seed.json` gained a hand-authored 6-dim
+    `aesthetic` vector honoring the dim poles (e.g. `concrete` 1=concrete/5=abstract, `playful`
+    1=playful/5=serious). (b) New `lib/onboarding/seedSet.ts` types the seed file, exposes
+    `SEED_CALIBRATION_PIECES` (client-facing, vector stripped) + `getSeedAesthetic(id)`. (c) New
+    `POST /api/onboarding/seed` applies `applyAestheticEmaUpdate` per like (vector) / dislike
+    (mirror `6-v`, matching the feedback route) — server-held vectors, whitelisted ids, value-validated,
+    no feedback-table write. (d) `CalibrationModal` now reads `source` ('batch'|'seed') from the
+    calibration GET and forwards it in `CalibrationResult`; `app/page.tsx`'s `handleCalibrationComplete`
+    branches: `seed` → POST `/api/onboarding/seed` (no `setFeedback`); `batch` → the existing feedback
+    path **unchanged**. **Product-outcome verification:** a no-DB EMA simulation over the seed vectors
+    yields a clearly non-trivial centroid in every scenario (distance from neutral 1.09 like-all → 2.50
+    for 3 playful/concrete likes; vs 0 unseeded) leaning in the expected tonal directions; the seed
+    path provably never calls `setFeedback`/`upsertFeedback`/`POST /api/feedback`, so no `seed-…` rows
+    are written. An adversarial-review subagent confirmed both acceptance criteria, that the batch path
+    is byte-identical, and that the seed endpoint is not abusable (a forged id → `getSeedAesthetic`
+    undefined → skipped; only the caller's own profile is ever touched). Note: the seed path
+    intentionally does NOT raise the C1 feedback-row count or short-term centroid (no real engagement
+    yet) — only the long-term centroid (used by the ranker at base weight) is seeded, which is the
+    honest behavior. Files: `data/calibration_seed.json`, `lib/onboarding/seedSet.ts` (new),
+    `app/api/onboarding/seed/route.ts` (new), `app/api/onboarding/calibration/route.ts`,
+    `app/components/CalibrationModal.tsx`, `app/page.tsx`. Verified: tsc + lint (0 errors) + build
+    green (route registered). Live end-to-end deferred to the deploy (P3-E3 precedent — running it
+    here would seed Kyle's real profile).
 
 ### Round 4 — Medium
 - [ ] **R4-02** · 🟡 Medium · `discoverySources` exposes raw registrable domains (`artwalkway.com`), not source names. `computeDiscoveryYield` (`lib/pipeline/discoveryMeta.ts:31`) — return `{domain, name}` (use `a.sourceName`) so the UI can show "Art Walkway." · TODO
@@ -973,6 +997,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-14 | P3-A2 | Read "rotate the full 12-topic query bank, not 2" as *probe all 12 topics, 1 query each* (`DISCOVERY_TOPICS_PER_RUN=12`, `DISCOVERY_QUERIES_PER_TOPIC=1`); widen via results-per-query (10→20) + a bounded eval cap (`DISCOVERY_MAX_EVAL_CANDIDATES=40`) | The phrase is ambiguous, but the binding constraint is the DAT-H2 wall-clock budget, and the dominant discovery latency is the *serialized* Brave queries (1.1s apart for the free-tier 1 req/s limit). 12 topics × 1 query keeps the per-run Brave query count at 12 — identical to today's 6 × 2 — so full topic-bank coverage costs **zero extra Brave latency**, while results-per-query 10→20 thickens the raw pool to ~240 at no latency cost. The eval cap is the real budget protector (bounds the body+LLM phase deterministically rather than relying on the blunt Promise.race cut-short), and it *is* the design's "candidate cap … so the gate has real choice" — the gate now picks 40 from ~240, interleaved by topic so Small-Web is represented. Reversible: all four are config constants. |
 | 2026-06-14 | P3-B2 | Resolve source category on demand from `data/sources.json` (`categoryForArticle`) rather than persisting `category` onto each `Article` | The design doc sanctions either. Persisting would require a pipeline re-run to backfill every existing batch, and discovered articles (the whole point of the supply work) have no fixed source anyway. A memoized resolver keyed on the verbatim `sourceName` (+ homepage host) works uniformly for in-memory candidates, stored batches (P3-D1 reads category from historical JSON), and sources later deactivated — zero migration, zero re-run, and `undefined` for discovered/unknown sources is exactly the right signal for the diversity/metrics consumers (B3/C3/D1). |
 | 2026-06-14 | P3-B1 | Kept dezeen + paris-review in `data/sources.json` despite a fresh HTTP 403 on re-verification (both UAs) | The 403 came from this sandbox's datacenter egress and reproduced under a real browser UA too, so it's IP/TLS-fingerprint bot protection, not a UA block — weak evidence that Vercel (which feed-verified both on 2026-06-13) is permanently blocked. The RSS adapter already isolates dead feeds (PIPE-H6: `parseURL` throws → caught → `[]`), so a still-blocked feed costs nothing (0 articles, no crash, MIN_SOURCES_PER_BATCH trivially met by 21 others) — exactly the resilience the design relies on. Substituting unverified feeds would deviate from the curated §3 list and require fresh verification of the replacement. The post-A+B refresh check + the per-source Wilson score will reveal real yield on the deploy. |
+| 2026-06-14 | R4-08 | Combined report options (b "scored fixtures") + a dedicated seed endpoint that bypasses the feedback table entirely, rather than (a) "tone-nudge only" or (c) "guard upsertFeedback" | (a) alone fails the acceptance: with no tones selected it seeds nothing, and it discards the like/pass signal. (c) alone (reject unresolvable ids) stops phantom rows but still leaves the centroid unseeded (the EMA also can't find a score for a non-article id). Only seeding the centroid *directly* from committed vectors meets both halves ("non-trivial centroid" AND "no phantom rows"). Seed vectors are held server-side (`seedSet.ts`) and the endpoint whitelists ids + validates values, so the client can't seed arbitrary vectors. The seed path deliberately does NOT write feedback rows or bump the short-term/C1 counts — there's no real engagement yet, so only the long-term centroid (ranker base weight 0.30) is seeded; that's the honest signal for a cold-start fallback. Branch on the API's `source` flag (not a `seed-` id-prefix sniff) so the routing doesn't depend on an id naming convention. Live end-to-end deferred (same P3-E3 precedent: it would seed Kyle's real profile). |
 | 2026-06-14 | R4-01 | Shared a single `resolveDisplayedFeed` helper between the feed + issue/meta routes (report's first option), AND added an `ISSUE_META_VERSION` cache-bust so already-cached (raw-order) metadata regenerates once | The report offered "share a helper" or "persist the displayed order at assembly time". Persisting at assembly can't work: the displayed order is *personalized* (rankFeed) + depends on shown-domain history, both unknown to the pipeline at batch-write time — only the per-request route can compute it. The shared helper makes both routes resolve the identical seven from one code path. The cache-bust is necessary because issue metadata is cached per-batch in `article_batches.issue_metadata`; without it, batches generated before the fix (incl. the live-confirmed "Quanta ×5/Aeon ×2" one) would keep serving raw-order credits until the next uncached batch, making the fix un-verifiable on today's issue. A `metaVersion` guard regenerates each stale batch exactly once (one Haiku call, bounded by views) then re-caches at v2. Did NOT run the live two-route compare from the session: issue/meta *writes* the resolved order to the live colophon, and an anonymous (no-cookie) local run would persist anonymous-ranked credits over Kyle's real ones — same write-pollution precedent as P3-E3. |
 | 2026-06-13 | R2-05 | Replaced the meetup "word + length≤60" rule with a signal/label classifier that **biases toward keeping** essays; did not add a committed test (no runner in repo) | The finding asked to "anchor the announcement shape (place/date/RSVP signal)". An announcement carries scheduling/RSVP cues or is a short event label; an essay merely discusses meetups. False positives (dropping essays) are the harm here, so when a meetup title lacks any announcement signal and isn't a short label, we keep it — a stray announcement slipping through is cheap (discovery still LLM-scores it; fixed-RSS just shows one extra item) versus silently dropping a real essay. Day-of-week/clock-time signals only apply once "meetup" is present, bounding their false-positive surface. The repo has no test framework (PIPE-Q2's "11-case test" was ad-hoc), so the true-positive/negative matrix was run as an ad-hoc script replicating the committed regexes rather than added as a committed test. |
 
@@ -1430,5 +1455,14 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   regenerates exactly once. Product outcome holds by construction (one helper, same inputs → same 7);
   an adversarial-review subagent confirmed behavior-equivalence on both paths + a bounded single
   regeneration. Live two-route compare deferred to the deploy (avoids writing anonymous-order
-  credits to Kyle's live colophon — P3-E3 precedent). Decision logged. Gate green. Commit: pending.
-- RESUME AT: **R4-08**
+  credits to Kyle's live colophon — P3-E3 precedent). Decision logged. Gate green. Commit: 9872335.
+- **R4-08** → DONE: onboarding seed-set fallback no longer writes phantom feedback rows and now seeds
+  the centroid. Added hand-authored `aesthetic` vectors to the 12 `calibration_seed.json` fixtures;
+  new `lib/onboarding/seedSet.ts` (typed seed set, client-facing pieces minus the vector,
+  `getSeedAesthetic`); new `POST /api/onboarding/seed` (applies the EMA directly per like/dislike, no
+  feedback rows, whitelisted ids, value-validated); `CalibrationModal` forwards `source`
+  ('batch'|'seed') and `page.tsx` branches — seed → seed endpoint (no `setFeedback`), batch → existing
+  feedback path unchanged. EMA simulation confirms a non-trivial centroid (distance-from-neutral
+  1.09–2.50 vs 0 unseeded); adversarial subagent confirmed zero feedback writes + batch path
+  byte-identical + endpoint not abusable. Decision logged. Gate green. Commit: pending.
+- RESUME AT: **R4-02**
