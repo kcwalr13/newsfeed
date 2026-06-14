@@ -146,20 +146,25 @@ export async function findArticlesByIds(
 }
 
 /**
- * Fetches a single article from the most recent batch via SQL-side JSONB
- * projection, so callers that need one article (e.g. the feedback route, on
- * every POST) don't pull the whole batch — every article's bodyText included —
- * over the wire. Returns null if the article isn't in the latest batch.
+ * Fetches a single article across ALL stored batches (newest containing batch
+ * wins) via a SQL-side JSONB projection, so callers that need one article
+ * (e.g. the feedback route, on every POST) don't pull the whole batch — every
+ * article's bodyText included — over the wire (the DAT-M5 wire-cost win).
+ * Resolving across all batches (not just the latest) is what lets a like/save
+ * on an archived article still find the article so concept learning and probe
+ * routing fire (R2-02). The JSONB containment (@>) predicate lets the
+ * migration-017 GIN index prefilter. Returns null if no batch contains the id.
  */
-export async function findArticleInLatestBatch(
+export async function findArticleInAnyBatch(
   id: string
 ): Promise<ArticleBatch['articles'][number] | null> {
   const rows = await sql`
     SELECT elem AS article
     FROM article_batches ab
     CROSS JOIN LATERAL jsonb_array_elements(ab.articles) AS elem
-    WHERE ab.batch_date = (SELECT MAX(batch_date) FROM article_batches)
+    WHERE ab.articles @> ${JSON.stringify([{ id }])}::jsonb
       AND elem->>'id' = ${id}
+    ORDER BY ab.batch_date DESC
     LIMIT 1
   `;
   if (rows.length === 0) return null;

@@ -172,8 +172,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const article = value !== null
       ? await (async () => {
           try {
-            const { findArticleInLatestBatch } = await import('@/lib/pipeline/storage');
-            return await findArticleInLatestBatch(articleId);
+            const { findArticleInAnyBatch } = await import('@/lib/pipeline/storage');
+            return await findArticleInAnyBatch(articleId);
           } catch {
             return null;
           }

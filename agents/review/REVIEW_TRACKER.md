@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 1 DONE (R2-01) · 34 TODO.
+  Progress: 2 DONE (R2-01, R2-02) · 33 TODO.
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-02**
+- Current branch: `main` · **Last resume point: R2-03**
 
 ---
 
@@ -690,7 +690,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **R2-01** · 🔴 High · [REGRESSION DAT-L1 / blocks PIPE-H2] Drift state never persists — untyped null SQL param throws
   - Where: `lib/db/aesthetics.ts:330,334` · `lib/utils/driftScore.ts:20-25`
   - Fix: `computeDriftScore` returns `number|null` (null < 3 short-term events); cast the param — `driftScore::float8 IS NULL` / `< DRIFT_THRESHOLD` (lines 330,334 + two later refs). Throw is swallowed, so PIPE-H2's drift blend never activates. DAT-L1 was mis-closed.
-  - Status: DONE · Commit: pending · Notes: Confirmed live — `computeDriftScore` returns
+  - Status: DONE · Commit: 3375de1 · Notes: Confirmed live — `computeDriftScore` returns
     `number|null` (null when `short_term_feedback_count < SHORT_TERM_MIN_EVENTS`), and
     `updateDriftState` interpolated that null into `$1 IS NULL` / `$1 < $2` under the
     `@neondatabase/serverless` parameterized protocol → "could not determine data type of
@@ -702,10 +702,22 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
     tsc + lint + build green; targeted live-Neon check (0-row UPDATE on a nonexistent device,
     non-destructive) — both `null` and `0.8` driftScore now prepare+execute with no param-type
     error (previously the `null` case threw).
-- [ ] **R2-02** · 🔴 High · [REGRESSION DAT-M5 × DAT-H3] Likes/saves on archived articles silently skip concept learning
+- [x] **R2-02** · 🔴 High · [REGRESSION DAT-M5 × DAT-H3] Likes/saves on archived articles silently skip concept learning
   - Where: `app/api/feedback/route.ts:175-176` · `lib/pipeline/storage.ts:154-167`
   - Fix: feedback route resolves via `findArticleInLatestBatch` (scoped `MAX(batch_date)`), so non-today articles → null → `after()` concept-extraction returns early; probeInfo never recorded. Use `findArticleAcrossBatches(id)` (exists, GIN-indexed) or a `findArticleInAnyBatch` slim projection.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Chose the **slim-projection** option (new
+    `findArticleInAnyBatch` in `lib/pipeline/storage.ts`) over reusing `findArticleAcrossBatches`,
+    because the latter pulls the entire batch `articles` array (every bodyText) over the wire on
+    every like/save — re-introducing the exact DAT-M5 regression this campaign is fixing. The new
+    function mirrors the old `findArticleInLatestBatch` (SQL-side `jsonb_array_elements` projecting
+    just the matching element) but drops the `MAX(batch_date)` scope and adds the GIN-indexed
+    (migration 017) `articles @> [{id}]` containment + `ORDER BY batch_date DESC LIMIT 1` so the
+    newest containing batch wins. Feedback route now calls it; the now-orphaned
+    `findArticleInLatestBatch` was removed (dead after the swap; no other references repo-wide).
+    Net effect: archived likes/saves now resolve the article → `after()` concept extraction runs
+    (`article.bodyText` present) and `probeInfo` routing fires. Verified: tsc + lint + build green;
+    live-Neon read-only check — a 2026-04-20-batch article returns 0 rows under the old latest-only
+    query but 1 row (with bodyText) under the new any-batch query. See Decisions Log.
 - [ ] **R2-03** · 🔴 High · [REGRESSION DAT-H5] Pipeline run-lock can be stolen then deleted by a different run → concurrent batch writes
   - Where: `lib/pipeline/cooldown.ts:82-84,21`
   - Fix: `releasePipelineRunLock` is an unconditional `DELETE` (no owner token) and TTL(300s)==`maxDuration`. Store a random token at acquire, `DELETE … WHERE bucket_key=$1 AND token=$2`; raise TTL above maxDuration (~360s).
@@ -778,6 +790,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-12 | FE-L3 | Skipped adding SW offline caching (kept registration-only sw.js) | The finding is conditioned on "when ready"; no offline UX is designed, and a network-first cache shipped blind can silently serve stale issues — worse than no offline. Revisit with a real offline reading feature. |
 | 2026-06-12 | PIPE-M6 | Canonicalizer applied to dedup passes only, NOT the article id hash (report suggested both) | Article ids key feedback + reading-position rows; rehashing canonicalized URLs would orphan all existing user data for any article whose URL carries query params. Dedup-only captures the user-facing win (no duplicate articles in a batch) at zero migration cost. |
 | 2026-06-12 | (scope) | Deferred remaining security hardening (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to a new *Future state — multi-user rollout* section; not enabling Vercel password protection | Kyle confirmed Tangent is private/single-user. These defend multi-user/abuse threat models that don't apply yet; production password protection is a ~$150/mo Vercel Pro feature. Revisit at multi-user rollout. |
+| 2026-06-13 | R2-02 | Added a new `findArticleInAnyBatch` slim SQL-side JSONB projection rather than reusing the existing `findArticleAcrossBatches`; removed the now-orphaned `findArticleInLatestBatch` | The finding offered either option. `findArticleAcrossBatches` returns the whole batch `articles` array (all bodyText) — calling it on every like/save would undo the DAT-M5 wire-cost win (the very kind of regression this Round-2 campaign targets). The slim projection resolves across all batches while transferring only the one matching element, satisfying both R2-02 and DAT-M5. The old latest-only helper was dead after the swap (no repo-wide references), so it was removed instead of left as dead code. |
 
 ---
 
@@ -991,5 +1004,12 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   < SHORT_TERM_MIN_EVENTS) was an untyped Neon param → "could not determine data type" → swallowed
   by the feedback route's try/catch → drift never persisted → PIPE-H2 drift blend inert. Verified:
   tsc + lint + build green; live-Neon targeted check (non-destructive 0-row UPDATE) confirms null &
-  numeric scores now execute without the param-type error. Commit: pending.
-- RESUME AT: **R2-02**
+  numeric scores now execute without the param-type error. Commit: 3375de1.
+- **R2-02** → DONE: archived likes/saves no longer skip concept learning. New
+  `findArticleInAnyBatch` slim JSONB projection (resolves across all batches, GIN-indexed
+  containment, newest wins) replaces `findArticleInLatestBatch` (which scoped to `MAX(batch_date)`
+  → null for archive articles → `after()` concept extraction returned early + probeInfo unread).
+  Removed the orphaned latest-only helper; chose the slim projection over `findArticleAcrossBatches`
+  to preserve the DAT-M5 wire-cost win (see Decisions Log). Verified: gate green + live-Neon check
+  (old-batch article: 0 rows latest-only, 1 row with bodyText any-batch). Commit: pending.
+- RESUME AT: **R2-03**
