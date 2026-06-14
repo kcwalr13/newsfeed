@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { upsertReadingPosition } from '@/lib/db/readingPositions';
 import { extractDeviceId } from '@/lib/auth/session';
+import { MAX_DWELL_SECONDS, MAX_PARAGRAPH_INDEX } from '@/lib/config/aesthetic';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,12 +53,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_finished_at' }, { status: 400 });
   }
 
+  // Clamp to column ceilings so an extreme (stuck-timer or forged) value can't
+  // overflow the INTEGER columns → 500 (R2-09). Lower bounds already validated.
+  const clampedParagraphIndex = Math.min(paragraphIndex, MAX_PARAGRAPH_INDEX);
+  const clampedDwell = Math.min(Math.floor(dwellSeconds), MAX_DWELL_SECONDS);
+
   try {
     await upsertReadingPosition(
       deviceId,
       articleId,
-      paragraphIndex,
-      Math.floor(dwellSeconds),
+      clampedParagraphIndex,
+      clampedDwell,
       finishedAt
     );
     return NextResponse.json({ ok: true });

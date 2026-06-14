@@ -30,6 +30,7 @@ import {
   WEIGHT_LIKE_LONG,
   WEIGHT_SAVE_WITH_LIKE,
   WEIGHT_SAVE_NO_LIKE,
+  MAX_DWELL_SECONDS,
 } from '@/lib/config/aesthetic';
 import { enforceRateLimit } from '@/lib/rateLimit';
 
@@ -150,9 +151,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Number.isFinite: Infinity passes a bare `>= 0` check and survives Math.floor
+  // Number.isFinite: Infinity passes a bare `>= 0` check and survives Math.floor.
+  // Clamp to MAX_DWELL_SECONDS so a stuck-timer/forged value can't overflow the
+  // feedback.dwell_seconds NUMERIC(7,2) column → 500 (R2-09).
   const parsedDwell = typeof dwellSeconds === 'number' && Number.isFinite(dwellSeconds) && dwellSeconds >= 0
-    ? Math.floor(dwellSeconds) : 0;
+    ? Math.min(Math.floor(dwellSeconds), MAX_DWELL_SECONDS) : 0;
 
   const cookieRes = new NextResponse();
   const session = await resolveSession(req, cookieRes);

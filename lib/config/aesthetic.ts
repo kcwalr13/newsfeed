@@ -77,6 +77,23 @@ export const SHORT_TERM_WINDOW_DAYS  = 21;
 /** Minimum qualifying feedback events before short-term centroid is trusted. */
 export const SHORT_TERM_MIN_EVENTS   = 3;
 
+// ── Reading-engagement input ceilings (R2-09) ───────────────────────────────
+
+/**
+ * Upper bound for a stored dwell value (seconds). Clamped on write so a stuck
+ * timer or a forged payload can't overflow the DB column → 500. The binding
+ * limit is `feedback.dwell_seconds NUMERIC(7,2)` (max 99999.99); we cap at
+ * 99,999 (~27.7h of visible dwell — already implausible) so both the feedback
+ * NUMERIC and the reading_positions INTEGER columns are always in range.
+ */
+export const MAX_DWELL_SECONDS = 99_999;
+/**
+ * Upper bound for a stored paragraph index. Clamped on write so a forged value
+ * can't overflow `reading_positions.paragraph_index INTEGER` (max 2.1B) → 500.
+ * No real article approaches this many paragraphs.
+ */
+export const MAX_PARAGRAPH_INDEX = 100_000;
+
 // ── Phase 3: Engagement weight constants ─────────────────────────────────────
 
 /** Dwell time threshold (seconds) for medium engagement weighting. */
