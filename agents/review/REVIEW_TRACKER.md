@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 30 DONE (R2-01–R2-28, D-01, D-02) · 5 TODO (D-03–D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
+  Progress: 31 DONE (R2-01–R2-28, D-01–D-03) · 4 TODO (D-04–D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: D-03**
+- Current branch: `main` · **Last resume point: D-04**
 
 ---
 
@@ -797,7 +797,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 ### Round 2 — Documentation
 - [x] **D-01** · 🔴 High · README.md is still create-next-app boilerplate. Rewrite: product blurb, prereqs, `.env.example`→`.env.local`, `npm run db:migrate`, `npm run dev`, cron, pointers to CLAUDE.md/ARCHITECTURE.md. · DONE (commit pending): replaced the boilerplate with a Tangent README — product blurb + "not a news aggregator", how-it-works, tech stack (Next 16 / React 19 / Tailwind v4 / Neon / Claude), prerequisites (Node 22+), getting-started (`npm install` → `cp .env.example .env.local` → `npm run db:migrate` → `npm run dev`), an env-var table (required vs optional, sourced from the real `.env.example`), scripts table, migrations section, deployment (Vercel cron `0 8 * * *` at 08:00 UTC + `CRON_SECRET`), and pointers to CLAUDE.md / ARCHITECTURE.md / the vision doc. All facts verified against package.json, .env.example, vercel.json. Gate green.
 - [x] **D-02** · 🔴 High · CLAUDE.md env list incomplete (omits OWNER_EMAIL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, NEXTAUTH_URL, tuning knobs); duplicate "Environment Variables" heading; migration notes only cover 011/012 of 001–019 and never mention `npm run db:migrate`; misattributes receptivity/exploration cols to 012 (they're in 011). · DONE (commit pending): merged the two env headings into one complete `## Environment Variables` section (required / discovery / auth / optional tuning), adding OWNER_EMAIL, NEXTAUTH_URL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, CRON_SECRET, and the `config.ts` tuning knobs; fixed the `.env.local.example`→`.env.example` reference and removed the duplicate bottom heading. Rewrote the Database-migrations note: it now points to `npm run db:migrate` / `:status` + the `schema_migrations` runner, describes 011 as adding the serendipity schema (incl. receptivity/exploration), and corrects 012 to be the dwell-only corrective re-add (no longer misattributing receptivity/exploration to 012). Gate green. (decodeEntities note + Next version left for D-06.)
-- [ ] **D-03** · 🔴 High · ARCHITECTURE.md (Last Updated 2026-04-20) stale: in-memory cooldown (now Postgres+run-lock), "8 sources" (now 12), "07:00 UTC" cron (actually 08:00), "Next.js 14+" (now 16), missing OWNER_EMAIL/ALLOWED_BASE_URLS, lists deleted components as shipped, omits rateLimit/run-lock/blind-spot-wiring/bodyClean/promptSafety/llm.ts and migrations 014–019. · TODO
+- [x] **D-03** · 🔴 High · ARCHITECTURE.md (Last Updated 2026-04-20) stale: in-memory cooldown (now Postgres+run-lock), "8 sources" (now 12), "07:00 UTC" cron (actually 08:00), "Next.js 14+" (now 16), missing OWNER_EMAIL/ALLOWED_BASE_URLS, lists deleted components as shipped, omits rateLimit/run-lock/blind-spot-wiring/bodyClean/promptSafety/llm.ts and migrations 014–019. · DONE (commit pending): the file is `agents/architect/ARCHITECTURE.md` (not repo root). Fixed all cited stale facts inline — Last Updated → 2026-06-13, Next.js 14+ → 16 (+React 19), cron 07:00 → 08:00 UTC (`0 8 * * *`), 8 → 12 sources (in 3 places: structure, decisions, body), in-memory cooldown → Postgres `rate_limits` cooldown + token-scoped run-lock (structure + cooldown.ts line + decisions table), Storage(v1) row, env table gains `OWNER_EMAIL` + `ALLOWED_BASE_URLS`. Added a **Post-review updates** section documenting the omitted systems (rate limiter, run-lock, blind-spot wiring, migration runner, bodyClean/promptSafety/llm.ts/concurrency/useModalA11y/HeroImage, migrations 014–019) and the 8 removed v1 components (verified MISSING: FeedbackButtons/FeedSkeleton/ErrorState/BatchLabel/ViewSourceLink/LastUpdatedLabel/RefreshButton/AccountIcon) whose "Shipped" rows are now flagged historical; plus a 2026-06-13 changelog entry. Also corrected the README links from D-01 (`ARCHITECTURE.md` → `agents/architect/ARCHITECTURE.md`). Facts verified against sources.json (12) + migrations dir. Gate green.
 - [ ] **D-04** · 🟡 Medium · REVIEW_TRACKER.md: 45 Round-1 findings still say `Commit: pending` (never back-filled from Session Log hashes). Back-fill or add a top note deferring to the Session Log. · TODO
 - [ ] **D-05** · 🟡 Medium · Cron schedule contradiction: `vercel.json` 08:00 UTC vs ARCHITECTURE.md 07:00 UTC (×3). Fix the doc. · TODO
 - [ ] **D-06** · 🟢 Low · CLAUDE.md `decodeEntities` note now imprecise (shared named+numeric decoder; `htmlToPlainText` now strips chrome); "Next.js 14+" → 16. · TODO
@@ -1135,5 +1135,10 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   green. Commit: cfb9fd7.
 - **D-02** → DONE: CLAUDE.md env section completed + de-duplicated; migration notes now reference
   `npm run db:migrate` and correctly attribute 011 (serendipity schema incl. receptivity/exploration)
-  vs 012 (dwell-only corrective). Gate green. Commit: pending.
-- RESUME AT: **D-03**
+  vs 012 (dwell-only corrective). Gate green. Commit: 9d72efc.
+- **D-03** → DONE: `agents/architect/ARCHITECTURE.md` de-staled (Next 16, cron 08:00, 12 sources,
+  Postgres cooldown+run-lock, OWNER_EMAIL/ALLOWED_BASE_URLS) + new "Post-review updates" section
+  (rate limiter, run-lock, blind-spot wiring, migration runner, new modules, migrations 014–019,
+  8 removed v1 components) + changelog entry; fixed D-01's README links to the doc. Gate green.
+  Commit: pending.
+- RESUME AT: **D-04**

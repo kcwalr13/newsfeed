@@ -12,7 +12,7 @@ identity parameterized (`userId` / `deviceId`) so multi-user is possible later.
 
 The full product vision lives in
 [`agents/ba/vision_discovery_companion.md`](agents/ba/vision_discovery_companion.md).
-Architecture and design notes are in [`ARCHITECTURE.md`](ARCHITECTURE.md); working
+Architecture and design notes are in [`ARCHITECTURE.md`](agents/architect/ARCHITECTURE.md); working
 conventions and the agent pipeline are in [`CLAUDE.md`](CLAUDE.md).
 
 ## How it works (one paragraph)
@@ -116,4 +116,4 @@ production database before relying on dependent code.
 
 This repo is developed with a four-agent workflow (BA → PM → Architect → Dev) whose
 artifacts live under [`agents/`](agents). Start with [`CLAUDE.md`](CLAUDE.md) for the
-ground rules and [`ARCHITECTURE.md`](ARCHITECTURE.md) for the system design.
+ground rules and [`ARCHITECTURE.md`](agents/architect/ARCHITECTURE.md) for the system design.

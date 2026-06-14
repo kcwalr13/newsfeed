@@ -1,8 +1,11 @@
 # System Architecture
 
-**Last Updated**: 2026-04-20
+**Last Updated**: 2026-06-13
 **Maintained by**: Architect Agent
-**Status**: Active — Milestones 1–8, Phases 1–4, QA pass, and post-Phase-4 operational fixes shipped
+**Status**: Active — Milestones 1–8, Phases 1–4, QA pass, post-Phase-4 operational fixes, and the
+Round-1 + Round-2 review-remediation campaign shipped. See the **Post-review updates** section near
+the end for systems added/changed during remediation; `agents/review/REVIEW_TRACKER.md` has the
+finding-by-finding log.
 
 > **Vision (2026-04-07):** The project is a personalized content discovery companion,
 > not a news aggregator. Single-user scope (Kyle), starter sources provided, identity
@@ -26,13 +29,13 @@ For full technical detail on any milestone, see the linked design documents belo
 
 | Layer | Technology | Status | Why |
 |-------|-----------|--------|-----|
-| Framework | Next.js 14+ (App Router) | Active | Chosen at project start; provides routing, API routes, and SSR in one package |
+| Framework | Next.js 16 (App Router) + React 19 | Active | Chosen at project start; provides routing, API routes, and SSR in one package |
 | Language | TypeScript (strict) | Active | Type safety across pipeline, API, and UI; shared types prevent drift |
 | Styling | Tailwind CSS | Active | Utility-first; consistent with project setup; no separate CSS files |
 | Package manager | npm | Active | Project default |
 | Platform | PWA (Progressive Web App) | Active | Installable on mobile without app stores; works on desktop too |
 | Database | Neon serverless Postgres | Active | Feedback, auth, topic weights; scales to future use cases |
-| Storage (v1) | JSON files on filesystem | Active | Zero infrastructure; adequate for 20 articles/day; trivially replaceable |
+| Storage | Neon Postgres (batches, cooldown, run-lock, rate limits) | Active | Vercel's filesystem is read-only; batches moved to the `article_batches` table (migration 013) and the refresh cooldown + global run-lock + rate limiter to the `rate_limits` table (migration 019). The original JSON-file approach was local-dev only. |
 | LLM | Claude API (Anthropic SDK) | Phase 1+ | Content evaluation, quality scoring, agent orchestration, query generation |
 | Web crawling | Playwright (headless browser) | Phase 1+ | Small Web / IndieWeb crawling; hybrid API + browser agent strategy |
 | Vector storage | pgvector on Neon | Phase 2+ | Embedding storage for latent aesthetic space; already available in Neon |
@@ -63,10 +66,12 @@ tangent/
 │   └── page.tsx              ← Feed homepage (/)
 ├── data/                     ← Runtime data
 │   └── sources.json          ← Fixed-pipeline RSS source configuration (checked into git)
-│       (8 esoteric sources: Quanta, Aeon, Nautilus, Astral Codex Ten,
-│        Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian)
+│       (12 esoteric sources: Quanta, Aeon, Nautilus, Astral Codex Ten,
+│        Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian,
+│        Psyche, The Baffler, Noema, Works in Progress)
 │   NOTE: Batch storage and pipeline logs moved to Neon DB (migration 013).
-│         Refresh cooldown moved to in-memory Map in lib/pipeline/cooldown.ts.
+│         Refresh cooldown + global run-lock now Postgres-backed (rate_limits
+│         table, migration 019) in lib/pipeline/cooldown.ts (was in-memory Map).
 ├── lib/                      ← Server-side business logic
 │   ├── auth/                 ← Session middleware
 │   │   └── session.ts        ← resolveSession(), buildSessionCookie(), clearSessionCookie()
@@ -100,7 +105,7 @@ tangent/
 │   │   ├── adapters/         ← Per-source-type fetch adapters
 │   │   ├── conceptBonus.ts   ← applyConceptBonus() — concept resonance ranking signal (Phase 3+)
 │   │   ├── config.ts         ← Infrastructure constants and source loader (ARTICLES_PER_DAY re-exported from lib/config/feed.ts)
-│   │   ├── cooldown.ts       ← Per-user refresh cooldown tracker (in-memory Map; resets on cold start)
+│   │   ├── cooldown.ts       ← Postgres-backed refresh cooldown + global pipeline run-lock (token-scoped; rate_limits table, migration 019)
 │   │   ├── explorationAssembler.ts ← Serendipity exploration slot assembly (Phase 4+)
 │   │   ├── blindSpotProber.ts ← Blind spot cluster identification and probe injection (Phase 4+)
 │   │   ├── receptivity.ts    ← Receptivity score computation and budget modulation (Phase 4+)
@@ -278,7 +283,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Batch storage | Neon `article_batches` table (migration 013) | Vercel's serverless filesystem is read-only; DB-backed storage is required for deployment. Previous filesystem approach (JSON files) worked only in local dev. |
-| Primary content source | RSS feeds (8 esoteric sources) | Free, broad coverage, full text. Sources: Quanta, Aeon, Nautilus, Astral Codex Ten, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian. Swapped from mainstream outlets (BBC, Ars, The Verge) to match discovery companion vision. |
+| Primary content source | RSS feeds (12 esoteric sources) | Free, broad coverage, full text. Sources: Quanta, Aeon, Nautilus, Astral Codex Ten, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian, Psyche, The Baffler, Noema, Works in Progress. Swapped from mainstream outlets (BBC, Ars, The Verge) to match discovery companion vision. |
 | Secondary content source | Small Web crawler (Phase 1+) | Replaced NewsAPI. IndieWeb sources surfaced via blogroll expansion. |
 | Body text strategy | Best-effort from RSS `content` field | Avoids scraping complexity in v1; graceful fallback UX |
 | Pipeline trigger | HTTP endpoint guarded by `CRON_SECRET` | Works with any external cron service; no vendor lock-in |
@@ -287,7 +292,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Client routing | Next.js App Router `Link` | Already the framework |
 | Dedup strategy | By `articleUrl` | Same article from two sources yields one record |
 | Feed personalization | API-time ranking in `rankFeed()` | Avoids per-identity batch file proliferation; ranking is O(20 articles) in memory; single shared batch on disk unchanged; graceful DB failure degrades to unranked feed |
-| Manual refresh cooldown storage | In-memory `Map<userId, timestamp>` in `cooldown.ts` | Vercel filesystem is read-only so JSON file approach crashed. In-memory resets on cold start (acceptable for single-user), but never crashes and the refresh path returns 200 on success. |
+| Manual refresh cooldown storage | Postgres `rate_limits` table (migration 019) + a global token-scoped pipeline run-lock, both in `cooldown.ts` | The original in-memory Map reset on every cold start, so the cooldown never applied and concurrent refreshes could each run the full pipeline (DAT-H5). The DB-backed cooldown + run-lock fail open on any DB error, never locking the owner out. The run-lock stores a random token so only the acquiring run can release it (R2-03). |
 | Same-day batch overwrite | `writeBatch` with force flag | Manual refresh overwrites same-day file; `GET /api/feed/today` reads the latest state naturally |
 | Password hashing | bcryptjs, cost=12 | No native bindings needed; works on serverless; industry standard |
 | Search provider for discovery | Brave Search API | Independent index (no Google dependency), strong long-tail coverage, free tier covers our cadence (~180 calls/month), structured JSON response with outlet name and age fields |
@@ -315,7 +320,7 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | Aesthetic migration number | `009_aesthetic_scores.sql` (Phase 2+) | 007 and 008 already exist; next sequential number is 009. |
 | Body text extraction library | `node-html-parser`, server-side only (Phase 1+) | Originally used `@mozilla/readability` + `jsdom` but jsdom pulls in ESM-only code (`@exodus/bytes`) that crashes Vercel's CJS serverless runtime with ERR_REQUIRE_ESM. Replaced with `node-html-parser` (CJS-compatible) with a custom content extractor targeting `article`/`main`/`role=main` containers. jsdom and @mozilla/readability removed from dependencies. |
 | Solo mode (auth bypass) | `AuthContext` always resolves to hardcoded `solo` user; `/api/auth/me` returns it without DB lookup | Single-user deployment doesn't need an auth gate. Auth plumbing preserved for future re-enablement. `RefreshButton` is unconditionally visible. |
-| Daily pipeline trigger | Vercel cron via `vercel.json` calling `POST /api/pipeline/run` at 07:00 UTC | Zero-ops scheduling; no external cron service needed. `CRON_SECRET` bearer token guards the endpoint. |
+| Daily pipeline trigger | Vercel cron via `vercel.json` calling `POST /api/pipeline/run` at 08:00 UTC (`0 8 * * *`) | Zero-ops scheduling; no external cron service needed. `CRON_SECRET` bearer token guards the endpoint (compared in constant time). |
 | Query bank storage | `data/query_banks.json` (runtime, gitignored) + `data/query_banks.default.json` (committed seed) (Phase 1+) | Inspectable/editable by operator without redeploy; default seed prevents cold-start failure |
 | Query rotation cursor storage | `data/query_rotation_state.json` (separate from bank) (Phase 1+) | Decouples query content from cursor state; bank can be refreshed without corrupting cursor |
 | Queries per topic per run | 2 (Phase 1+) | Stays within Brave free tier (~360 calls/month vs. 2,000 limit); meaningful rotation |
@@ -362,9 +367,11 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `SMTP_USER` | Email sending | SMTP username or API token |
 | `SMTP_PASS` | Email sending | SMTP password or API token secret |
 | `EMAIL_FROM` | Email sending | From address: `"Tangent <noreply@yourdomain.com>"` |
-| `NEXTAUTH_URL` | Email link generation | Base URL: `http://localhost:3000` (dev), `https://yourdomain.com` (prod) |
+| `NEXTAUTH_URL` | Email link generation | Base URL: `http://localhost:3000` (dev), `https://yourdomain.com` (prod). Validated to an https origin before building email links (SEC-M1). |
+| `ALLOWED_BASE_URLS` | Email link generation (optional) | Comma-separated allowlist of origins permitted in email links; when set, `NEXTAUTH_URL`'s origin must be a member or email sending fails closed (SEC-M1). |
 | `BRAVE_SEARCH_API_KEY` | Discovery pipeline (all Brave Search calls) | Obtain at https://api.search.brave.com. Free tier: 2,000 req/month. Never commit. |
 | `ANTHROPIC_API_KEY` | LLM content evaluator (Phase 1+), query bank generation script | Obtain at console.anthropic.com. Never commit. |
+| `OWNER_EMAIL` | Account menu (single-user) | Owner email returned by `/api/auth/me`; server-only, never hardcoded in source or shipped in the client bundle (SEC-C1). |
 
 ---
 
@@ -513,6 +520,47 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 
 ---
 
+## Post-review updates (Round 1 + Round 2 remediation, 2026-06-12 → 2026-06-13)
+
+The "What Has Been Built" table above is a point-in-time milestone log; the review
+remediation campaign (see `agents/review/REVIEW_TRACKER.md` for the finding-by-finding
+record) added or changed the following systems. Where this section conflicts with
+older rows, this section wins.
+
+**New / changed infrastructure**
+- **Postgres cooldown + global run-lock** (`lib/pipeline/cooldown.ts`, migration 019 `rate_limits`): replaced the in-memory `Map` (which reset on every cold start, so the cooldown never applied and concurrent runs could clobber each other — DAT-H5). The run-lock is token-scoped — only the acquiring run can release it — with a TTL above `maxDuration` (R2-03).
+- **Rate limiter** (`lib/rateLimit.ts`, migration 019): Postgres fixed-window limiter on the auth, feedback, and refresh routes; fails open on DB error (SEC-H2). Client IP is read from `x-vercel-forwarded-for` / right-most `x-forwarded-for` to resist spoofing (R2-08).
+- **Migration runner** (`scripts/migrate.mjs`, `npm run db:migrate` / `:migrate:status`): applies `lib/db/migrations/NNN_*.sql` in order, each in a transaction, recording them in `schema_migrations`. Migrations 001–006 were backfilled (DAT-H1).
+- **`maxDuration = 300`** on both pipeline routes; per-article LLM loops and the discovery body+LLM loop run at bounded concurrency via `lib/utils/concurrency.ts` (DAT-H2, R2-18), under a wall-clock budget.
+
+**New modules**
+- `lib/config/llm.ts` — central `LLM_MODEL` id (was duplicated across modules; PIPE-L9).
+- `lib/utils/bodyClean.ts` — shared body-text chrome stripper used by the RSS adapter + body extractor (PIPE-Q1, R2-17).
+- `lib/utils/promptSafety.ts` — untrusted-content fencing for all LLM call sites (PIPE-M4).
+- `lib/utils/concurrency.ts` — `forEachWithConcurrency` shared by the pipeline and discovery (R2-18).
+- `app/hooks/useModalA11y.ts` — focus trap / Escape / restore / ref-counted body-scroll-lock for all overlays (FE-M4, R2-14, R2-24).
+- `app/components/HeroImage.tsx` — client hero image with broken-image fallback (R2-26).
+- `app/not-found.tsx`, `app/error.tsx` — styled editorial error/404 (DAT-H3, FE-M6).
+
+**Behavioural changes**
+- Blind-spot prober is now **wired into** `runPipeline` (was dead code): `probeInfo` rides in the batch JSON → ranker `◐` slot + feedback promote/suppress (PIPE-H3).
+- Centered-cosine aesthetic proximity + drift (PIPE-H2); drift state now persists (the null `driftScore` SQL param is cast `::float8` — R2-01).
+- Feedback resolves the liked/saved article across **all** batches so archived likes still learn concepts (R2-02).
+- Owner email moved out of the client bundle to `OWNER_EMAIL` (SEC-C1); device id validated as a UUID and treated as a namespacing key, not an auth boundary (SEC-H1).
+- Tailwind v4 CSS-variable utility syntax fixed app-wide (focus rings now render — FE-H2); card navigation uses `<Link>` (FE-M7).
+
+**Migrations 014–019** (all applied to Neon 2026-06-12)
+- `014_issue_metadata.sql` — issue cover/theme metadata.
+- `015_query_rotation_state.sql` — discovery query rotation cursor (moved off the read-only filesystem; DAT-C1).
+- `016_nulls_not_distinct_unique.sql` — de-dup + `UNIQUE NULLS NOT DISTINCT` on the five identity tables so anonymous upserts converge (DAT-C2).
+- `017_article_batches_gin.sql` — GIN index for cross-batch article lookup (DAT-H3).
+- `018_feedback_value_save.sql` — `feedback_value_check` includes `'save'` (DAT-H4).
+- `019_rate_limits.sql` — backs the rate limiter, cooldown, and run-lock.
+
+**Removed v1 components** (FE-L1 deleted 8 dead components): `FeedbackButtons`, `FeedSkeleton`, `ErrorState`, `BatchLabel`, `ViewSourceLink`, `LastUpdatedLabel`, `RefreshButton`, `AccountIcon` no longer exist — their "Shipped" rows above are historical. Their roles are now handled inline or by the components listed above.
+
+---
+
 ## Design Documents
 
 | Milestone | Design Doc | Task List |
@@ -564,4 +612,5 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | 2026-04-19 | Manual | QA pass: four browser-verified bugs fixed — migration 011 user_feedback typo (HTTP 500 on all feedback), raw HTML body text in RSS articles, HTML entities not decoded in titles, explorationSlotType stripped from API (no badges). migration 012 corrective DDL added. ESLint cleaned. ANTHROPIC_API_KEY confirmed required. CLAUDE.md updated with env notes and implementation notes. |
 | 2026-04-20 | Manual | Post-Phase-4 operational fixes: (1) app rebranded to Tangent; (2) Vercel cron added (vercel.json, daily 07:00 UTC); (3) solo mode auth bypass (no login required); (4) batch storage migrated from filesystem to Neon DB (migration 013, storage.ts rewrite); (5) cooldown.ts rewritten to in-memory Map; (6) bodyExtractor.ts rewritten using node-html-parser (jsdom/readability removed — ESM incompatibility on Vercel); (7) data/sources.json replaced with 8 esoteric discovery sources (Quanta, Aeon, Nautilus, ACX, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian). ARCHITECTURE.md updated to reflect all changes. |
 | 2026-04-25 | Dev Agent | Taste-learning fixes: (1) ranker.ts — cross-session source scoring: all historical feedback now processed via `extractSourceSlugFromId()` (slices trailing `-<8hex>` suffix) instead of filtering to today's batch only; `save` events count as positive signals alongside `like` for Wilson scores; (2) feedback/route.ts — `save` events now also update the aesthetic EMA centroid (treated as `like`); previously only like/dislike updated the profile; (3) run.ts — `estimateReadTime()` added (238 WPM, min 1 min), `Article.readTime` populated at pipeline time for all article types; (4) data/sources.json — expanded from 8 to 12 active RSS sources: Psyche, The Baffler, Noema, Works in Progress; (5) .gitignore — push.sh added; (6) types/node-html-parser.d.ts — minimal type stub for offline TypeScript resolution; (7) bodyExtractor.ts — explicit HTMLElement type annotation on `el` forEach callback. npx tsc --noEmit passes clean. |
+| 2026-06-13 | Claude Code | Review remediation (Round 1 + Round 2) doc sync (D-03): refreshed the stale facts in this file — Next.js 14+→16, cron 07:00→08:00 UTC, 8→12 sources, in-memory cooldown→Postgres cooldown+run-lock, added `OWNER_EMAIL`/`ALLOWED_BASE_URLS` to the env table — and added the **Post-review updates** section documenting the rate limiter, run-lock, blind-spot prober wiring, migration runner, migrations 014–019, new shared modules (bodyClean, promptSafety, llm.ts, concurrency, useModalA11y, HeroImage), and the 8 removed v1 components. Per-finding detail in `agents/review/REVIEW_TRACKER.md`. |
 
