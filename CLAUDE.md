@@ -42,11 +42,26 @@ It rests on four foundational pillars, to be built in sequence:
 - Version control: GitHub
 - Platform: Web (desktop browser) + installable on mobile via PWA — no app stores
 
-## Required Environment Variables
-- `ANTHROPIC_API_KEY` — **required**. Used by the aesthetic scorer, concept extractor, and LLM content evaluator. Without it, aesthetic scoring silently skips and articles are ranked by source score only.
+## Environment Variables
+Copy `.env.example` to `.env.local` and fill in the values. Full reference:
+
+**Required**
+- `ANTHROPIC_API_KEY` — Used by the aesthetic scorer, concept extractor, LLM content evaluator, and theme generator. Without it, aesthetic scoring/concept extraction silently skip and articles are ranked by source score only.
 - `DATABASE_URL` — Neon serverless Postgres connection string.
-- `BRAVE_SEARCH_API_KEY` — Used by the proactive discovery pipeline.
-- See `.env.local.example` (if present) for the full list.
+
+**Discovery / pipeline**
+- `BRAVE_SEARCH_API_KEY` — Used by the proactive discovery pipeline (Brave Search + Small Web).
+- `CRON_SECRET` — Bearer token authenticating the daily cron trigger at `/api/pipeline/run` (set in Vercel env). Generate with `openssl rand -hex 32`.
+- `NEWSAPI_KEY` — Optional; for the dormant NewsAPI adapter (not used by default).
+
+**Single-user / auth (auth is currently OFF)**
+- `OWNER_EMAIL` — Owner email shown in the account menu. Server-only — never hardcode in source.
+- `NEXTAUTH_URL` — Base URL used to build verification / reset email links.
+- `ALLOWED_BASE_URLS` — Optional comma-separated allowlist of origins permitted in email links; when set, `NEXTAUTH_URL`'s origin must be a member or email sending fails.
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` — Transactional email (verification / reset).
+
+**Optional tuning knobs** (parsed in `lib/pipeline/config.ts`; fall back to defaults if unset/invalid)
+- `MAX_ARTICLES_PER_SOURCE` (default 5), `MIN_SOURCES_PER_BATCH` (default 3), `REFRESH_COOLDOWN_MINUTES` (default 15).
 
 ## Key Implementation Notes
 
@@ -59,8 +74,9 @@ It rests on four foundational pillars, to be built in sequence:
 - `ArticleCard` renders a violet badge for exploration-slot articles: **Stretch**, **Blind spot**, or **Wildcard** depending on `explorationSlotType`.
 
 ### Database migrations
-- Migration 011 (`lib/db/migrations/011_serendipity.sql`) — fixed a typo that referenced `user_feedback` instead of `feedback`. This caused every feedback upsert to fail with HTTP 500.
-- Migration 012 (`lib/db/migrations/012_fix_feedback_dwell.sql`) — safe `IF NOT EXISTS` corrective migration. Apply this to any already-deployed database to add the missing `dwell_seconds` and `receptivity_score` / `exploration_budget` columns.
+- Schema lives in `lib/db/migrations/` as numbered `NNN_*.sql` files (001–019). Apply with **`npm run db:migrate`** (preview with `npm run db:migrate:status`). The runner (`scripts/migrate.mjs`) applies pending files in order — each in a transaction — and records them in a `schema_migrations` table; migrations use `IF [NOT] EXISTS`, so re-running against an already-provisioned DB is safe. Never run schema-changing SQL against the live DB by hand.
+- Migration 011 (`011_serendipity.sql`) adds the serendipity schema: the `blind_spot_clusters` table, `feedback.dwell_seconds`, and `user_aesthetic_profiles.receptivity_score` / `exploration_budget`. Its `dwell_seconds` statement originally targeted a non-existent `user_feedback` table, so that column was never created.
+- Migration 012 (`012_fix_feedback_dwell.sql`) is the corrective follow-up to 011: it re-adds the missing `feedback.dwell_seconds` to the correct table (idempotent `ADD COLUMN IF NOT EXISTS`). It does **not** touch `receptivity_score` / `exploration_budget` — those are added in 011.
 
 ## Agent Pipeline
 This project is developed using a four-agent system. Each agent has a defined role
@@ -78,9 +94,6 @@ Never delete files here. Append, update, or create new versioned files only.
 The full product vision is at `agents/ba/vision_discovery_companion.md`. All agents
 should reference this document when making design decisions to ensure alignment
 with the long-term direction.
-
-## Environment Variables
-- `CRON_SECRET` — must be set in Vercel environment variables to authenticate the daily cron trigger at `/api/pipeline/run`. Generate with `openssl rand -hex 32`.
 
 ## Ground Rules
 - Make incremental progress. Never try to complete large features in one pass.

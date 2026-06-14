@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 29 DONE (R2-01–R2-28, D-01) · 6 TODO (D-02–D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
+  Progress: 30 DONE (R2-01–R2-28, D-01, D-02) · 5 TODO (D-03–D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: D-02**
+- Current branch: `main` · **Last resume point: D-03**
 
 ---
 
@@ -796,7 +796,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 
 ### Round 2 — Documentation
 - [x] **D-01** · 🔴 High · README.md is still create-next-app boilerplate. Rewrite: product blurb, prereqs, `.env.example`→`.env.local`, `npm run db:migrate`, `npm run dev`, cron, pointers to CLAUDE.md/ARCHITECTURE.md. · DONE (commit pending): replaced the boilerplate with a Tangent README — product blurb + "not a news aggregator", how-it-works, tech stack (Next 16 / React 19 / Tailwind v4 / Neon / Claude), prerequisites (Node 22+), getting-started (`npm install` → `cp .env.example .env.local` → `npm run db:migrate` → `npm run dev`), an env-var table (required vs optional, sourced from the real `.env.example`), scripts table, migrations section, deployment (Vercel cron `0 8 * * *` at 08:00 UTC + `CRON_SECRET`), and pointers to CLAUDE.md / ARCHITECTURE.md / the vision doc. All facts verified against package.json, .env.example, vercel.json. Gate green.
-- [ ] **D-02** · 🔴 High · CLAUDE.md env list incomplete (omits OWNER_EMAIL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, NEXTAUTH_URL, tuning knobs); duplicate "Environment Variables" heading; migration notes only cover 011/012 of 001–019 and never mention `npm run db:migrate`; misattributes receptivity/exploration cols to 012 (they're in 011). · TODO
+- [x] **D-02** · 🔴 High · CLAUDE.md env list incomplete (omits OWNER_EMAIL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, NEXTAUTH_URL, tuning knobs); duplicate "Environment Variables" heading; migration notes only cover 011/012 of 001–019 and never mention `npm run db:migrate`; misattributes receptivity/exploration cols to 012 (they're in 011). · DONE (commit pending): merged the two env headings into one complete `## Environment Variables` section (required / discovery / auth / optional tuning), adding OWNER_EMAIL, NEXTAUTH_URL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, CRON_SECRET, and the `config.ts` tuning knobs; fixed the `.env.local.example`→`.env.example` reference and removed the duplicate bottom heading. Rewrote the Database-migrations note: it now points to `npm run db:migrate` / `:status` + the `schema_migrations` runner, describes 011 as adding the serendipity schema (incl. receptivity/exploration), and corrects 012 to be the dwell-only corrective re-add (no longer misattributing receptivity/exploration to 012). Gate green. (decodeEntities note + Next version left for D-06.)
 - [ ] **D-03** · 🔴 High · ARCHITECTURE.md (Last Updated 2026-04-20) stale: in-memory cooldown (now Postgres+run-lock), "8 sources" (now 12), "07:00 UTC" cron (actually 08:00), "Next.js 14+" (now 16), missing OWNER_EMAIL/ALLOWED_BASE_URLS, lists deleted components as shipped, omits rateLimit/run-lock/blind-spot-wiring/bodyClean/promptSafety/llm.ts and migrations 014–019. · TODO
 - [ ] **D-04** · 🟡 Medium · REVIEW_TRACKER.md: 45 Round-1 findings still say `Commit: pending` (never back-filled from Session Log hashes). Back-fill or add a top note deferring to the Session Log. · TODO
 - [ ] **D-05** · 🟡 Medium · Cron schedule contradiction: `vercel.json` 08:00 UTC vs ARCHITECTURE.md 07:00 UTC (×3). Fix the doc. · TODO
@@ -1132,5 +1132,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **All 28 Round-2 code/UX findings (R2-01–R2-28) DONE + pushed.** Remaining: docs D-01–D-06, ops S-01.
 - **D-01** → DONE: README rewritten from create-next-app boilerplate to a real Tangent README
   (blurb, stack, prereqs, setup, env table, scripts, migrations, Vercel cron, doc pointers). Gate
-  green. Commit: pending.
-- RESUME AT: **D-02**
+  green. Commit: cfb9fd7.
+- **D-02** → DONE: CLAUDE.md env section completed + de-duplicated; migration notes now reference
+  `npm run db:migrate` and correctly attribute 011 (serendipity schema incl. receptivity/exploration)
+  vs 012 (dwell-only corrective). Gate green. Commit: pending.
+- RESUME AT: **D-03**
