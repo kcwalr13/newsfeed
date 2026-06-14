@@ -27,9 +27,9 @@ export interface RateLimitRule {
  *      peer and not overridable by the client.
  *   2. Else take the RIGHT-most `x-forwarded-for` entry — the one appended by
  *      the trusted proxy nearest us, which the client cannot control.
- *   3. Else `x-real-ip`, else 'unknown'.
+ *   3. Else `x-real-ip`, else null (no identifiable client IP).
  */
-export function clientIp(req: NextRequest): string {
+export function clientIp(req: NextRequest): string | null {
   const vercel = req.headers.get('x-vercel-forwarded-for');
   if (vercel) {
     const first = vercel.split(',')[0]?.trim();
@@ -40,7 +40,7 @@ export function clientIp(req: NextRequest): string {
     const parts = xff.split(',').map((s) => s.trim()).filter(Boolean);
     if (parts.length > 0) return parts[parts.length - 1]!;
   }
-  return req.headers.get('x-real-ip') ?? 'unknown';
+  return req.headers.get('x-real-ip') ?? null;
 }
 
 export interface RateLimitResult {
@@ -92,7 +92,15 @@ export async function enforceRateLimit(
   rule: RateLimitRule,
   extraIdentity?: string
 ): Promise<NextResponse | null> {
-  const identity = extraIdentity ? `${clientIp(req)}:${extraIdentity}` : clientIp(req);
+  const ip = clientIp(req);
+  // No identifiable client IP (local dev, or a proxy that strips forwarding
+  // headers): without an extra identity every caller would collapse into one
+  // shared bucket and limit each other. Fail open there instead, consistent
+  // with the limiter's fail-open stance (R2-22). When an extraIdentity (e.g. a
+  // device id) is present it still differentiates callers, so keep limiting.
+  if (ip === null && !extraIdentity) return null;
+  const base = ip ?? 'unknown';
+  const identity = extraIdentity ? `${base}:${extraIdentity}` : base;
   const result = await checkRateLimit(rule, identity);
   if (result.allowed) return null;
   return NextResponse.json(
