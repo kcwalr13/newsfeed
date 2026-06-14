@@ -79,9 +79,9 @@ npm run dev           # for manual/browser spot-checks
   > Round-1 commit hashes rather than the `pending` markers.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 33 DONE (R2-01–R2-28, D-01–D-05) · 2 TODO (D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
+  Progress: 34 DONE (R2-01–R2-28, D-01–D-06) · 1 TODO (S-01 ops — owner action). **All 28 code/UX + all 6 docs findings complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: D-06**
+- Current branch: `main` · **Last resume point: S-01** (SKIP — owner secret rotation)
 
 ---
 
@@ -805,7 +805,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **D-03** · 🔴 High · ARCHITECTURE.md (Last Updated 2026-04-20) stale: in-memory cooldown (now Postgres+run-lock), "8 sources" (now 12), "07:00 UTC" cron (actually 08:00), "Next.js 14+" (now 16), missing OWNER_EMAIL/ALLOWED_BASE_URLS, lists deleted components as shipped, omits rateLimit/run-lock/blind-spot-wiring/bodyClean/promptSafety/llm.ts and migrations 014–019. · DONE (commit pending): the file is `agents/architect/ARCHITECTURE.md` (not repo root). Fixed all cited stale facts inline — Last Updated → 2026-06-13, Next.js 14+ → 16 (+React 19), cron 07:00 → 08:00 UTC (`0 8 * * *`), 8 → 12 sources (in 3 places: structure, decisions, body), in-memory cooldown → Postgres `rate_limits` cooldown + token-scoped run-lock (structure + cooldown.ts line + decisions table), Storage(v1) row, env table gains `OWNER_EMAIL` + `ALLOWED_BASE_URLS`. Added a **Post-review updates** section documenting the omitted systems (rate limiter, run-lock, blind-spot wiring, migration runner, bodyClean/promptSafety/llm.ts/concurrency/useModalA11y/HeroImage, migrations 014–019) and the 8 removed v1 components (verified MISSING: FeedbackButtons/FeedSkeleton/ErrorState/BatchLabel/ViewSourceLink/LastUpdatedLabel/RefreshButton/AccountIcon) whose "Shipped" rows are now flagged historical; plus a 2026-06-13 changelog entry. Also corrected the README links from D-01 (`ARCHITECTURE.md` → `agents/architect/ARCHITECTURE.md`). Facts verified against sources.json (12) + migrations dir. Gate green.
 - [x] **D-04** · 🟡 Medium · REVIEW_TRACKER.md: 45 Round-1 findings still say `Commit: pending` (never back-filled from Session Log hashes). Back-fill or add a top note deferring to the Session Log. · DONE (commit pending): chose the report's "add a top note" option over back-filling 45 individual hashes (brittle, error-prone cross-referencing). Added a callout under the Round-1 line in the Progress summary stating that the authoritative Round-1 commit hashes live in the Session Log (Session 1 / Session 3 entries) and the `Commit: pending` per-finding markers should be ignored. Round-2 findings carry their real hash inline.
 - [x] **D-05** · 🟡 Medium · Cron schedule contradiction: `vercel.json` 08:00 UTC vs ARCHITECTURE.md 07:00 UTC (×3). Fix the doc. · DONE (commit pending): corrected the remaining two factual `07:00 UTC` claims in ARCHITECTURE.md (the build-table cron row + the 2026-04-20 changelog entry) to `08:00 UTC (0 8 * * *)`, matching `vercel.json`. The third occurrence (the decisions table) was already fixed in D-03. Only the D-03 changelog entry now mentions `07:00` — as `07:00→08:00`, i.e. describing the fix. Verified: `grep 07:00` shows just that entry. Gate green.
-- [ ] **D-06** · 🟢 Low · CLAUDE.md `decodeEntities` note now imprecise (shared named+numeric decoder; `htmlToPlainText` now strips chrome); "Next.js 14+" → 16. · TODO
+- [x] **D-06** · 🟢 Low · CLAUDE.md `decodeEntities` note now imprecise (shared named+numeric decoder; `htmlToPlainText` now strips chrome); "Next.js 14+" → 16. · DONE (commit pending): updated the RSS-adapter helper notes — `htmlToPlainText(html, title?)` now documented as also stripping page chrome via the shared `cleanBodyParagraphs` (bodyClean.ts, PIPE-Q1), and `decodeEntities` as an alias for the shared `decodeHtmlEntities` (htmlEntities.ts) that handles both named and numeric entities at ingest + display (FE-L5/PIPE-M7). CLAUDE.md had no literal "Next.js 14+" (that was ARCHITECTURE.md, fixed in D-03); set the Tech Stack framework line to "Next.js 16 (App Router) + React 19" for precision. Gate green.
 
 ### Round 2 — Security (operational)
 - [ ] **S-01** · 🔴 High (ops) · Rotate secrets surfaced during review. `.env.local` (gitignored, never committed — verified) holds live ANTHROPIC_API_KEY, Neon `DATABASE_URL` w/ password, BRAVE_SEARCH_API_KEY, NEWSAPI_KEY, CRON_SECRET; values were read in-band during these review sessions. Rotate all five + update Vercel env; keep `.env.local` out of future review scope. (Not a code change.) · TODO
@@ -1150,5 +1150,9 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   are in the Session Log (not the `Commit: pending` per-finding markers); didn't back-fill 45 hashes.
   Commit: ac98f87.
 - **D-05** → DONE: corrected the two remaining `07:00 UTC` cron claims in ARCHITECTURE.md
-  (build-table row + 2026-04-20 changelog) to `08:00 UTC (0 8 * * *)`, matching vercel.json. Commit: pending.
-- RESUME AT: **D-06**
+  (build-table row + 2026-04-20 changelog) to `08:00 UTC (0 8 * * *)`, matching vercel.json. Commit: 1722aaf.
+- **D-06** → DONE: CLAUDE.md RSS-helper notes corrected (htmlToPlainText strips chrome via bodyClean;
+  decodeEntities is the shared named+numeric decoder) + Tech Stack set to Next.js 16 / React 19. Commit: pending.
+- **All 28 code/UX (R2-01–R2-28) + all 6 docs (D-01–D-06) findings DONE + pushed.** Only S-01
+  (owner secret rotation — not a code task) remains.
+- RESUME AT: **S-01** (operational SKIP — see below)

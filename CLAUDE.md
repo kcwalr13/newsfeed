@@ -33,7 +33,7 @@ It rests on four foundational pillars, to be built in sequence:
    learning to test blind spots, structured randomness
 
 ## Tech Stack
-- Framework: Next.js (App Router) with TypeScript
+- Framework: Next.js 16 (App Router) + React 19, with TypeScript
 - Styling: Tailwind CSS
 - Database: Neon serverless Postgres (with pgvector for future embeddings)
 - LLM: Claude API (for content evaluation, taste modeling, agent orchestration)
@@ -66,8 +66,8 @@ Copy `.env.example` to `.env.local` and fill in the values. Full reference:
 ## Key Implementation Notes
 
 ### RSS Adapter helpers (`lib/pipeline/adapters/rssAdapter.ts`)
-- `htmlToPlainText(html)` — strips HTML tags from RSS `content:encoded` fields before storing as `bodyText`. Required because RSS feeds often embed raw HTML.
-- `decodeEntities(str)` — decodes numeric HTML entities (e.g. `&#8217;` → `'`) that `rss-parser` does not handle. Applied to `title`, `description`, and `bodyText` at ingest time.
+- `htmlToPlainText(html, title?)` — strips HTML tags from RSS `content:encoded` fields **and** removes page chrome (share bars, "Featured Video", repeated title/byline/dateline, trailing related-article lists) via the shared `cleanBodyParagraphs` from `lib/utils/bodyClean.ts` (PIPE-Q1), before storing as `bodyText`.
+- `decodeEntities(str)` — an alias for the shared `decodeHtmlEntities` in `lib/utils/htmlEntities.ts`, which decodes **both named and numeric** HTML entities (astral-safe, order-correct; e.g. `&#8217;` → `'`, `&amp;` → `&`) that `rss-parser` does not fully handle. The same decoder is used at ingest (`title`, `description`, `bodyText`) and at display time (FE-L5 / PIPE-M7).
 
 ### Exploration slot badges (`app/components/ArticleCard.tsx`)
 - `explorationSlotType` is now passed through the feed API response (it was previously stripped).
