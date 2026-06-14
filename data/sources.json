@@ -94,5 +94,104 @@
     "type": "rss",
     "feedUrl": "https://www.worksinprogress.news/feed",
     "active": true
+  },
+  {
+    "slug": "the-quietus",
+    "name": "The Quietus",
+    "url": "https://thequietus.com",
+    "type": "rss",
+    "feedUrl": "https://thequietus.com/feed",
+    "active": true,
+    "category": "music"
+  },
+  {
+    "slug": "aquarium-drunkard",
+    "name": "Aquarium Drunkard",
+    "url": "https://aquariumdrunkard.com",
+    "type": "rss",
+    "feedUrl": "https://aquariumdrunkard.com/feed",
+    "active": true,
+    "category": "music"
+  },
+  {
+    "slug": "the-honest-broker",
+    "name": "The Honest Broker",
+    "url": "https://www.honest-broker.com",
+    "type": "rss",
+    "feedUrl": "https://www.honest-broker.com/feed",
+    "active": true,
+    "category": "music"
+  },
+  {
+    "slug": "bandcamp-daily",
+    "name": "Bandcamp Daily",
+    "url": "https://daily.bandcamp.com",
+    "type": "rss",
+    "feedUrl": "https://daily.bandcamp.com/feed",
+    "active": true,
+    "category": "music"
+  },
+  {
+    "slug": "colossal",
+    "name": "Colossal",
+    "url": "https://www.thisiscolossal.com",
+    "type": "rss",
+    "feedUrl": "https://www.thisiscolossal.com/feed",
+    "active": true,
+    "category": "art"
+  },
+  {
+    "slug": "hyperallergic",
+    "name": "Hyperallergic",
+    "url": "https://hyperallergic.com",
+    "type": "rss",
+    "feedUrl": "https://hyperallergic.com/rss",
+    "active": true,
+    "category": "art"
+  },
+  {
+    "slug": "dezeen",
+    "name": "Dezeen",
+    "url": "https://www.dezeen.com",
+    "type": "rss",
+    "feedUrl": "https://www.dezeen.com/feed",
+    "active": true,
+    "category": "design"
+  },
+  {
+    "slug": "senses-of-cinema",
+    "name": "Senses of Cinema",
+    "url": "https://www.sensesofcinema.com",
+    "type": "rss",
+    "feedUrl": "https://www.sensesofcinema.com/feed",
+    "active": true,
+    "category": "film"
+  },
+  {
+    "slug": "public-domain-review",
+    "name": "The Public Domain Review",
+    "url": "https://publicdomainreview.org",
+    "type": "rss",
+    "feedUrl": "https://publicdomainreview.org/rss.xml",
+    "active": true,
+    "category": "culture"
+  },
+  {
+    "slug": "paris-review",
+    "name": "The Paris Review",
+    "url": "https://www.theparisreview.org",
+    "type": "rss",
+    "feedUrl": "https://www.theparisreview.org/blog/feed",
+    "active": true,
+    "category": "literature"
+  },
+  {
+    "slug": "tedium",
+    "name": "Tedium",
+    "url": "https://tedium.co",
+    "type": "rss",
+    "feedUrl": "https://tedium.co/feed",
+    "active": true,
+    "category": "culture"
   }
 ]
