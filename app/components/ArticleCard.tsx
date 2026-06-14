@@ -204,6 +204,8 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
         {/* Feedback row: Pass / Underline / Read later */}
         <div className="mt-5">
           <div
+            role="radiogroup"
+            aria-label="Your response to this piece"
             className="flex items-stretch justify-around"
             style={{ borderTop: '1px solid var(--rule)', paddingTop: '12px' }}
           >
@@ -214,7 +216,8 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
                 <button
                   key={verb}
                   onClick={() => handleVerb(verb)}
-                  aria-pressed={isActive}
+                  role="radio"
+                  aria-checked={isActive}
                   className="ql-verb-btn flex-1 flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
                   style={isActive ? { color: 'var(--accent)' } : undefined}
                 >
