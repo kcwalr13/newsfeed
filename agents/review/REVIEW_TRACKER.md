@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 17 DONE (R2-01–R2-16, R2-19) · 18 TODO. **All 5 Round-2 Highs complete.**
+  Progress: 18 DONE (R2-01–R2-17, R2-19) · 17 TODO. **All 5 Round-2 Highs + all Mediums complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-17**
+- Current branch: `main` · **Last resume point: R2-18**
 
 ---
 
@@ -781,7 +781,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **R2-16** · 🟡 Medium · `IssueCover` is `role="button"` wrapping a full dialog (`IssueCover.tsx:63-81`); use `role="dialog" aria-modal`. · DONE (commit pending): outer container is now `role="dialog" aria-modal="true" aria-labelledby="ql-cover-title"` (id added to the masthead `<h1>`), `tabIndex={-1}`. The "OPEN TODAY'S ISSUE" CTA — previously a non-interactive `<div>` — is now a real `<button type="button">` (the dialog's focusable dismiss control; `useModalA11y` focuses it on open and Tab-traps to it). Backdrop click still dismisses; Escape dismiss handled by `useModalA11y`; dropped the container's bespoke Enter/Space handler (the button + Escape cover keyboard dismissal). Gate green; interactive behavior to spot-check on deploy (FE-M4 precedent).
 
 ### Round 2 — Low (may batch into one `chore(R2-L)` commit)
-- [ ] **R2-17** · 🟢 Low · `bodyClean.ts` over-strips punctuated Title-Case closing sentences + short ledes; require `!TERMINAL_PUNCT` before headline-case trim. · TODO
+- [x] **R2-17** · 🟢 Low · `bodyClean.ts` over-strips punctuated Title-Case closing sentences + short ledes; require `!TERMINAL_PUNCT` before headline-case trim. · DONE (commit pending): the tail-trim `chromeish` headline branch is now `isHeadlineCase(line) && !TERMINAL_PUNCT_RE.test(line)`, so a punctuated Title-Case line ("The Future Is Already Here.", "What Will We Choose To Remember?") is treated as real closing prose and kept; unpunctuated Title-Case headlines, short labels, and datelines are still trimmed. Gate green + 8/8 predicate matrix.
 - [ ] **R2-18** · 🟢 Low · Discovery body+LLM loop fully sequential (`discovery/run.ts:253-313`) → fragile under latency; bounded concurrency (p-limit 3-4). · TODO
 - [x] **R2-19** · 🟢 Low · Run-lock TTL == maxDuration; set ~280s (part of R2-03). · DONE (in R2-03, commit e9d9a69): TTL raised 300→360s (ABOVE maxDuration 300), not the finding's suggested 280s — 280 < maxDuration would let a still-alive run lose its lock and re-open the steal race R2-03 fixes. See R2-03 Notes + Decisions Log.
 - [ ] **R2-20** · 🟢 Low · `themeGenerator.ts:16-19` lacks the ANTHROPIC_API_KEY guard the other 5 LLM modules got (PIPE-H1 consistency). · TODO
@@ -1097,5 +1097,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **R2-15** → DONE: archive `daysAgo` returns 'today' for `diff <= 0` (future-dated batches no
   longer render "-1 days ago"). Gate green. Commit: 4fa2abd.
 - **R2-16** → DONE: `IssueCover` outer is now `role="dialog" aria-modal aria-labelledby`; CTA
-  converted to a real `<button>` (focusable dismiss control). Gate green. Commit: pending.
-- RESUME AT: **R2-17**
+  converted to a real `<button>` (focusable dismiss control). Gate green. Commit: e716939.
+- **R2-17** → DONE: bodyClean tail-trim no longer eats punctuated Title-Case closing sentences
+  (headline-case branch now requires `!TERMINAL_PUNCT`). Gate green + 8/8 predicate matrix. Commit: pending.
+- RESUME AT: **R2-18**

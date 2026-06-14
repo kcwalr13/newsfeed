@@ -141,7 +141,11 @@ export function cleanBodyParagraphs(paragraphs: string[], title?: string): strin
     const line = result[end - 1];
     const chromeish =
       (line.length <= 90 && !TERMINAL_PUNCT_RE.test(line)) ||
-      isHeadlineCase(line) ||
+      // Only treat a Title-Case line as a stray next-article headline when it
+      // lacks sentence punctuation. A punctuated Title-Case line is almost
+      // always a real closing sentence ("The Future Is Already Here."), not a
+      // recirculation headline — don't strip it (R2-17).
+      (isHeadlineCase(line) && !TERMINAL_PUNCT_RE.test(line)) ||
       DATELINE_RES.some((re) => re.test(line));
     if (!chromeish) break;
     end--;
