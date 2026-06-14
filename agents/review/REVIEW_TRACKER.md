@@ -79,9 +79,9 @@ npm run dev           # for manual/browser spot-checks
   > Round-1 commit hashes rather than the `pending` markers.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 32 DONE (R2-01–R2-28, D-01–D-04) · 3 TODO (D-05–D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
+  Progress: 33 DONE (R2-01–R2-28, D-01–D-05) · 2 TODO (D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: D-05**
+- Current branch: `main` · **Last resume point: D-06**
 
 ---
 
@@ -804,7 +804,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **D-02** · 🔴 High · CLAUDE.md env list incomplete (omits OWNER_EMAIL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, NEXTAUTH_URL, tuning knobs); duplicate "Environment Variables" heading; migration notes only cover 011/012 of 001–019 and never mention `npm run db:migrate`; misattributes receptivity/exploration cols to 012 (they're in 011). · DONE (commit pending): merged the two env headings into one complete `## Environment Variables` section (required / discovery / auth / optional tuning), adding OWNER_EMAIL, NEXTAUTH_URL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, CRON_SECRET, and the `config.ts` tuning knobs; fixed the `.env.local.example`→`.env.example` reference and removed the duplicate bottom heading. Rewrote the Database-migrations note: it now points to `npm run db:migrate` / `:status` + the `schema_migrations` runner, describes 011 as adding the serendipity schema (incl. receptivity/exploration), and corrects 012 to be the dwell-only corrective re-add (no longer misattributing receptivity/exploration to 012). Gate green. (decodeEntities note + Next version left for D-06.)
 - [x] **D-03** · 🔴 High · ARCHITECTURE.md (Last Updated 2026-04-20) stale: in-memory cooldown (now Postgres+run-lock), "8 sources" (now 12), "07:00 UTC" cron (actually 08:00), "Next.js 14+" (now 16), missing OWNER_EMAIL/ALLOWED_BASE_URLS, lists deleted components as shipped, omits rateLimit/run-lock/blind-spot-wiring/bodyClean/promptSafety/llm.ts and migrations 014–019. · DONE (commit pending): the file is `agents/architect/ARCHITECTURE.md` (not repo root). Fixed all cited stale facts inline — Last Updated → 2026-06-13, Next.js 14+ → 16 (+React 19), cron 07:00 → 08:00 UTC (`0 8 * * *`), 8 → 12 sources (in 3 places: structure, decisions, body), in-memory cooldown → Postgres `rate_limits` cooldown + token-scoped run-lock (structure + cooldown.ts line + decisions table), Storage(v1) row, env table gains `OWNER_EMAIL` + `ALLOWED_BASE_URLS`. Added a **Post-review updates** section documenting the omitted systems (rate limiter, run-lock, blind-spot wiring, migration runner, bodyClean/promptSafety/llm.ts/concurrency/useModalA11y/HeroImage, migrations 014–019) and the 8 removed v1 components (verified MISSING: FeedbackButtons/FeedSkeleton/ErrorState/BatchLabel/ViewSourceLink/LastUpdatedLabel/RefreshButton/AccountIcon) whose "Shipped" rows are now flagged historical; plus a 2026-06-13 changelog entry. Also corrected the README links from D-01 (`ARCHITECTURE.md` → `agents/architect/ARCHITECTURE.md`). Facts verified against sources.json (12) + migrations dir. Gate green.
 - [x] **D-04** · 🟡 Medium · REVIEW_TRACKER.md: 45 Round-1 findings still say `Commit: pending` (never back-filled from Session Log hashes). Back-fill or add a top note deferring to the Session Log. · DONE (commit pending): chose the report's "add a top note" option over back-filling 45 individual hashes (brittle, error-prone cross-referencing). Added a callout under the Round-1 line in the Progress summary stating that the authoritative Round-1 commit hashes live in the Session Log (Session 1 / Session 3 entries) and the `Commit: pending` per-finding markers should be ignored. Round-2 findings carry their real hash inline.
-- [ ] **D-05** · 🟡 Medium · Cron schedule contradiction: `vercel.json` 08:00 UTC vs ARCHITECTURE.md 07:00 UTC (×3). Fix the doc. · TODO
+- [x] **D-05** · 🟡 Medium · Cron schedule contradiction: `vercel.json` 08:00 UTC vs ARCHITECTURE.md 07:00 UTC (×3). Fix the doc. · DONE (commit pending): corrected the remaining two factual `07:00 UTC` claims in ARCHITECTURE.md (the build-table cron row + the 2026-04-20 changelog entry) to `08:00 UTC (0 8 * * *)`, matching `vercel.json`. The third occurrence (the decisions table) was already fixed in D-03. Only the D-03 changelog entry now mentions `07:00` — as `07:00→08:00`, i.e. describing the fix. Verified: `grep 07:00` shows just that entry. Gate green.
 - [ ] **D-06** · 🟢 Low · CLAUDE.md `decodeEntities` note now imprecise (shared named+numeric decoder; `htmlToPlainText` now strips chrome); "Next.js 14+" → 16. · TODO
 
 ### Round 2 — Security (operational)
@@ -1148,5 +1148,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   Commit: 9267a8a.
 - **D-04** → DONE: added a Progress-summary callout that the authoritative Round-1 commit hashes
   are in the Session Log (not the `Commit: pending` per-finding markers); didn't back-fill 45 hashes.
-  Commit: pending.
-- RESUME AT: **D-05**
+  Commit: ac98f87.
+- **D-05** → DONE: corrected the two remaining `07:00 UTC` cron claims in ARCHITECTURE.md
+  (build-table row + 2026-04-20 changelog) to `08:00 UTC (0 8 * * *)`, matching vercel.json. Commit: pending.
+- RESUME AT: **D-06**
