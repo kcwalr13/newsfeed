@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 20 DONE (R2-01–R2-20) · 15 TODO. **All 5 Round-2 Highs + all Mediums complete.**
+  Progress: 21 DONE (R2-01–R2-21) · 14 TODO. **All 5 Round-2 Highs + all Mediums complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-21**
+- Current branch: `main` · **Last resume point: R2-22**
 
 ---
 
@@ -785,7 +785,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **R2-18** · 🟢 Low · Discovery body+LLM loop fully sequential (`discovery/run.ts:253-313`) → fragile under latency; bounded concurrency (p-limit 3-4). · DONE (commit pending): split the loop into Phase 1 (sequential, cheap: gates + dedup — `seenCanonical` now resolved up-front so the concurrent phase is race-free) and Phase 2 (body extraction + LLM eval via `forEachWithConcurrency`, `DISCOVERY_LLM_CONCURRENCY=4`). Extracted the chunked-concurrency helper from `lib/pipeline/run.ts` to a shared `lib/utils/concurrency.ts` (no behavior change for the pipeline; avoids a circular import). `qualified` is sorted by composite afterward so completion order is irrelevant; stats/qualified mutations are atomic between awaits. Behavior note: a duplicate URL is now deduped on first sight (was: only after a successful score), avoiding redundant fetch/LLM work. Verified: tsc + lint + build green (both call sites compile); 3/3 concurrency-helper check (bound respected, parallelizes to 4, failure isolated). Live discovery validated on next pipeline run. See Decisions Log.
 - [x] **R2-19** · 🟢 Low · Run-lock TTL == maxDuration; set ~280s (part of R2-03). · DONE (in R2-03, commit e9d9a69): TTL raised 300→360s (ABOVE maxDuration 300), not the finding's suggested 280s — 280 < maxDuration would let a still-alive run lose its lock and re-open the steal race R2-03 fixes. See R2-03 Notes + Decisions Log.
 - [x] **R2-20** · 🟢 Low · `themeGenerator.ts:16-19` lacks the ANTHROPIC_API_KEY guard the other 5 LLM modules got (PIPE-H1 consistency). · DONE (commit pending): `getClient()` now throws `'ANTHROPIC_API_KEY is not set'` before `new Anthropic()`, matching the other LLM modules. The caller already skips when the key is absent and catches throws → fallback theme, so this is defense-in-depth. Gate green.
-- [ ] **R2-21** · 🟢 Low · `REFRESH_COOLDOWN_MINUTES` non-numeric → NaN → `make_interval` throws → cooldown fails open (`config.ts:27-29`). Validate parse. · TODO
+- [x] **R2-21** · 🟢 Low · `REFRESH_COOLDOWN_MINUTES` non-numeric → NaN → `make_interval` throws → cooldown fails open (`config.ts:27-29`). Validate parse. · DONE (commit pending): added `parseIntEnv(value, fallback)` (returns fallback unless the parse is a finite `>= 0` integer) and applied it to `REFRESH_COOLDOWN_MINUTES` plus the two siblings with the identical NaN-prone pattern (`MAX_ARTICLES_PER_SOURCE`, `MIN_SOURCES_PER_BATCH`). A bad `REFRESH_COOLDOWN_MINUTES` now falls back to 15 instead of NaN reaching `make_interval`. Gate green + 7/7 parse matrix.
 - [ ] **R2-22** · 🟢 Low · `clientIp` returns literal `'unknown'` with no proxy headers (`rateLimit.ts:25`) → all share one bucket locally. · TODO
 - [ ] **R2-23** · 🟢 Low · `getValidatedBaseUrl` throws into fire-and-forget `.catch` on register/forgot → user gets "email sent" while none sent. Surface/ document. · TODO
 - [ ] **R2-24** · 🟢 Low · `useModalA11y` initial-focus target not visibility-filtered like the Tab list; brittle shared abstraction. · TODO
@@ -1107,5 +1107,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   Commit: ea4bab8. (R2-19 already DONE in R2-03.)
 - **R2-20** → DONE: `themeGenerator` `getClient()` now guards `ANTHROPIC_API_KEY` before
   `new Anthropic()` (PIPE-H1 consistency; defense-in-depth, caller already guards). Gate green.
-  Commit: pending.
-- RESUME AT: **R2-21**
+  Commit: 74747ef.
+- **R2-21** → DONE: `parseIntEnv` validates `REFRESH_COOLDOWN_MINUTES` (+ MAX_ARTICLES_PER_SOURCE,
+  MIN_SOURCES_PER_BATCH) so a non-numeric value falls back instead of NaN reaching `make_interval`.
+  Gate green + 7/7 parse matrix. Commit: pending.
+- RESUME AT: **R2-22**
