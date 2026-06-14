@@ -39,7 +39,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await createToken(token, user.user_id, 'password_reset', expiresAt);
 
-    sendPasswordResetEmail(normalizedEmail, token).catch(console.error);
+    // Fire-and-forget; the generic response above is independent of delivery (by
+    // design, to avoid account enumeration). A send failure — including a
+    // misconfigured NEXTAUTH_URL throwing in getValidatedBaseUrl — is logged here
+    // but not surfaced (R2-23).
+    sendPasswordResetEmail(normalizedEmail, token).catch((err) =>
+      console.error('[auth] password reset email failed (check NEXTAUTH_URL/SMTP):', err)
+    );
   } catch (err) {
     console.error('[POST /api/auth/forgot-password]', err);
   }

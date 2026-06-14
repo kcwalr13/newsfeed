@@ -55,7 +55,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await createToken(token, userId, 'email_verification', expiresAt);
 
-    sendVerificationEmail(normalizedEmail, token).catch(console.error);
+    // Fire-and-forget: the response below does not wait on or reflect delivery.
+    // A misconfigured NEXTAUTH_URL makes getValidatedBaseUrl throw inside the
+    // sender; that (and any send failure) is logged server-side but deliberately
+    // not surfaced to the caller. If a user reports a missing email, check logs
+    // for this line (R2-23).
+    sendVerificationEmail(normalizedEmail, token).catch((err) =>
+      console.error('[auth] verification email send failed (check NEXTAUTH_URL/SMTP):', err)
+    );
 
     return NextResponse.json(
       { message: 'Verification email sent. Please check your inbox.' },

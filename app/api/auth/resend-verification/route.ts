@@ -39,7 +39,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await createToken(token, user.user_id, 'email_verification', expiresAt);
 
-    sendVerificationEmail(normalizedEmail, token).catch(console.error);
+    // Fire-and-forget; the generic response above is independent of delivery (by
+    // design, to avoid account enumeration). A send failure — including a
+    // misconfigured NEXTAUTH_URL throwing in getValidatedBaseUrl — is logged here
+    // but not surfaced (R2-23).
+    sendVerificationEmail(normalizedEmail, token).catch((err) =>
+      console.error('[auth] resend verification email failed (check NEXTAUTH_URL/SMTP):', err)
+    );
   } catch (err) {
     console.error('[POST /api/auth/resend-verification]', err);
   }
