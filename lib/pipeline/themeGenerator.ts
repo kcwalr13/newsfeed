@@ -13,8 +13,16 @@ import { appendLog } from '@/lib/pipeline/storage';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 import { LLM_MODEL } from '@/lib/config/llm';
 
+// Lazy client with an explicit key guard, consistent with the other LLM modules
+// (PIPE-H1 / R2-20): constructing Anthropic() without ANTHROPIC_API_KEY throws a
+// less obvious SDK error. The caller (buildIssueMetadata) already skips when the
+// key is absent, and any throw here is caught → fallback theme, so this is
+// defense-in-depth for any future caller.
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not set');
+  }
   if (!_client) _client = new Anthropic();
   return _client;
 }
