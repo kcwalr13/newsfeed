@@ -69,15 +69,10 @@ export default function IssueCover({ issue }: Props) {
         animation: 'ql-fade-in 0.5s ease-out forwards',
       }}
       onClick={dismiss}
-      role="button"
-      tabIndex={0}
-      aria-label="Dismiss cover and open today's issue"
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
-          e.preventDefault();
-          dismiss();
-        }
-      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ql-cover-title"
+      tabIndex={-1}
     >
       {/* Volume + issue number */}
       <p
@@ -89,6 +84,7 @@ export default function IssueCover({ issue }: Props) {
 
       {/* Masthead */}
       <h1
+        id="ql-cover-title"
         className="ql-serif mb-2"
         style={{
           fontSize: '48px',
@@ -161,19 +157,24 @@ export default function IssueCover({ issue }: Props) {
         </p>
       )}
 
-      {/* CTA */}
-      <div
+      {/* CTA — the explicit, focusable dismiss control for the dialog */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); dismiss(); }}
         className="ql-mono"
         style={{
           fontSize: '9px',
           color: 'var(--accent)',
           letterSpacing: '0.18em',
+          background: 'none',
+          border: 'none',
           borderBottom: '1px solid var(--accent)',
-          paddingBottom: '1px',
+          padding: '0 0 1px',
+          cursor: 'pointer',
         }}
       >
         OPEN TODAY&rsquo;S ISSUE →
-      </div>
+      </button>
     </div>
   );
 }
