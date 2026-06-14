@@ -81,13 +81,28 @@ async function main() {
     for (const file of pending) {
       const sqlText = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
       process.stdout.write(`Applying ${file} ... `);
+      // Run each migration AND its schema_migrations insert inside ONE
+      // transaction, so a multi-statement file that fails partway rolls back
+      // cleanly and never leaves a partially-applied, unrecorded migration
+      // (R2-10). A file that opens its own top-level transaction (legacy 016:
+      // `BEGIN; … COMMIT;`) is run as-is to avoid nesting; new migrations should
+      // NOT include transaction control and let the runner own it. The regex
+      // matches only a standalone `BEGIN;`/`BEGIN TRANSACTION;` statement — not
+      // a plpgsql block opener like `DO $$ BEGIN … END $$;` (no trailing `;`).
+      const selfManagesTxn = /^\s*BEGIN(\s+(transaction|work))?\s*;/im.test(sqlText);
       try {
-        // Each file is executed as a single script; files that need atomicity
-        // wrap themselves in BEGIN/COMMIT (e.g. 016).
-        await client.query(sqlText);
-        await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [file]);
+        if (selfManagesTxn) {
+          await client.query(sqlText);
+          await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [file]);
+        } else {
+          await client.query('BEGIN');
+          await client.query(sqlText);
+          await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [file]);
+          await client.query('COMMIT');
+        }
         console.log('ok');
       } catch (err) {
+        try { await client.query('ROLLBACK'); } catch { /* no active transaction to roll back */ }
         console.log('FAILED');
         console.error(`\nMigration ${file} failed:\n${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
