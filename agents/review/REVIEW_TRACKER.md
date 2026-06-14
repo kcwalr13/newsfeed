@@ -78,7 +78,12 @@ npm run dev           # for manual/browser spot-checks
   > findings (R2-/D-) carry their real hash inline. Treat the Session Log as the source of truth for
   > Round-1 commit hashes rather than the `pending` markers.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
-  See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
+  See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops. ✅ complete.
+- **Round 3 (Product — vision alignment, 2026-06-13): 17 NEW items, all TODO.** Precise plan:
+  `agents/architect/design_product_round3_vision_alignment.md`. Five workstreams — broaden the source
+  palette (B), make discovery actually surface (A), surprise rebalance (C), instrumentation/dashboard (D),
+  onboarding taste-calibration (E). Operational order **B → A → C → D → E** (B is a quick visible win).
+  **Last resume point: P3-B1.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -812,6 +817,44 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 
 ---
 
+## ROUND 3 — Product (vision alignment, 2026-06-13)
+
+Implements the PM product evaluation: make the *experience* match the *taste* — broad, novel, surfaces
+unfamiliar sources, leans esoteric/cultural, mixes culture/music/art/science/opinion, surprising as often
+as comforting. **Guiding principle: fix the supply, not the brain.** Full detail, rationale, acceptance
+criteria, sequencing, and risks: `agents/architect/design_product_round3_vision_alignment.md`. These are
+feature/config items, not bug fixes — same workflow (atomic commit, gate green, push). Only P3-D4 needs a
+migration (`BLOCKED-ON-APPLY`); everything else is config/logic/UI. Operational order **B → A → C → D → E**.
+
+### B — Broaden the fixed palette (quick visible win)
+- [ ] **P3-B1** · Add 11 verified sources to `data/sources.json` (schema `slug,name,url,type:"rss",feedUrl,active,category`). Exact list in the design doc §3 (The Quietus, Aquarium Drunkard, The Honest Broker, Bandcamp Daily, Colossal, Hyperallergic, Dezeen, Senses of Cinema, The Public Domain Review, The Paris Review, Tedium). Re-verify each feed resolves at build (adapter isolates dead feeds). Acceptance: a dev pipeline run ingests articles from the new sources. · TODO
+- [ ] **P3-B2** · Add a `category` field to every source (old + new) — science/philosophy/ideas/economics/psychology/culture/music/art/design/film/literature (mapping in design §3). Extend the `Source` type; thread category onto `Article` (or resolve by slug at rank time). · TODO
+- [ ] **P3-B3** · Per-source + per-category diversity caps so the 14 fixed-pipeline slots span many sources/categories (tune `MAX_ARTICLES_PER_SOURCE` + a soft per-category cap). Acceptance: fixed portion spans ≥6 sources, ≥4 categories. · TODO
+
+### A — Discovery actually surfaces (highest leverage)
+- [ ] **P3-A1** · Hard-floor the discovery quota: fill `DISCOVERY_ARTICLES_PER_DAY` down to `LLM_EVAL_FLOOR`, then top-by-composite as last resort rather than shipping an empty quota; emit a structured yield log (candidatesFound/gatePassed/scored/slotsFilled/belowFloor). (`lib/discovery/run.ts`, `lib/pipeline/run.ts`, `lib/config/feed.ts`) Acceptance: discovery contributes `min(6, novelAvailable)`; empty result logs loudly. · TODO
+- [ ] **P3-A2** · Strengthen candidate supply: confirm the Small-Web crawler runs + seeds are fetched; rotate the full 12-topic query bank (not 2); widen Brave results; raise the candidate cap — within the DAT-H2 wall-clock budget (R2-18 concurrency). Acceptance: candidate pool ≥ ~40/run; Small-Web seeds appear. · TODO
+- [ ] **P3-A3** · Novelty filter — drop discovered candidates whose registrable domain is in the fixed-source set or appeared in the last K≈14 issues (compute `seen_source_domains` from recent batches; no new table). Acceptance: discovered domains ∉ fixed ∧ ∉ last-K. · TODO
+- [ ] **P3-A4** · Record `discoveryCount` + discovered source domains in batch/issue metadata for the dashboard. Acceptance: exposed via issue meta / feed API. · TODO
+
+### C — Surprise rebalance
+- [ ] **P3-C1** · Adaptive aesthetic weight: ramp source/aesthetic `0.70/0.30 → ~0.50/0.50` as `feedback_count` grows (trust source early, taste later); keep the blend-weight startup assertion. (`lib/config/aesthetic.ts`, `ranker.ts`) Acceptance: 0 feedback ≈ today; ample feedback → aesthetic ≥0.45. · TODO
+- [ ] **P3-C2** · Guarantee ≥2 of the displayed 7 come from a never-before-shown source (prefer discovered/novel; fall back to least-recently-shown fixed). Acceptance: ≥2 unfamiliar sources in the shown set when the pool allows. · TODO
+- [ ] **P3-C3** · Category diversity in the displayed 7 — span ≥4 categories (no all-science issue). Acceptance: displayed issues span ≥4 categories when possible. · TODO
+
+### D — Instrumentation & dashboard
+- [ ] **P3-D1** · Metrics computed on the fly (no migration) from `article_batches` + `feedback`: % discovery vs fixed (today/7d/30d), distinct sources/week, category distribution, exploration-acceptance rate, taste maturity (feedback_count, is_drifting, short-term count). (`lib/db/metrics.ts`) · TODO
+- [ ] **P3-D2** · `GET /api/metrics` behind the solo gate; returns the D1 JSON; cheap projected SQL. · TODO
+- [ ] **P3-D3** · `/dashboard` page in the editorial style (discovery-share gauge, sources-this-week, category bar, exploration acceptance, taste maturity); reachable from the account menu/colophon. · TODO
+- [ ] **P3-D4** · (Optional) daily metrics-snapshot table for trend lines — **migration → BLOCKED-ON-APPLY**. Defer unless trends wanted; D1–D3 work without it. · TODO (optional)
+
+### E — Onboarding taste-calibration (largest lift, last)
+- [ ] **P3-E1** · Build a ~16-piece calibration set spanning categories AND tonal poles (contemplative↔propulsive, playful↔serious, specialist↔generalist…), drawn live from the first assembled batch (preferred) or a small committed seed fallback. · TODO
+- [ ] **P3-E2** · First-run calibration UI (title·dek·source·category, like/pass, optional tone preference), gated by the existing `tangent_onboarding_dismissed` flag. (`app/onboarding/*`) · TODO
+- [ ] **P3-E3** · Seed the model — route calibration responses through the existing feedback path to populate the aesthetic EMA + concept graph + source Wilson scores, crossing `SHORT_TERM_MIN_EVENTS=3` / receptivity ≥3 on day one (reuse `feedback` table, no migration). Acceptance: onboarding yields a non-trivial centroid + ≥3 short-term events; first issue is visibly shaped. · TODO
+
+---
+
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
 
@@ -1159,4 +1202,15 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   campaign policy, Code does not touch `.env.local` or rotate keys. Commit: pending.
 - **✅ ROUND 2 COMPLETE** — 34 findings DONE, 1 SKIPPED (S-01 owner action), 0 TODO. Whole tracker
   cleared except the operational secret rotation, which is Kyle's manual step.
-- RESUME AT: **—** (nothing left for Code; S-01 awaits Kyle)
+- **✅ ROUND 2 COMPLETE.** RESUME AT (Round 2): — (S-01 awaits Kyle).
+
+### Session 4 — 2026-06-13 — Round 3 Product plan (reviewer/PM, Cowork)
+- Ran a PM product evaluation of how well Tangent meets its vision (learn taste, surface novel/unfamiliar
+  sources, wide esoteric/cultural range, surprising+comforting). Verdict: excellent taste *criteria*, but
+  a narrow source palette and a discovery engine surfacing ~0 — the promise is unmet in the **supply layer**.
+- Opened **Round 3 — Product** (17 items, all TODO): broaden palette (B), make discovery surface (A),
+  surprise rebalance (C), instrumentation/dashboard (D), onboarding calibration (E). Curated + **feed-verified**
+  11 bold/eclectic sources (music/art/film/design/literary/zeitgeist) — list in the design doc.
+- Precise plan: `agents/architect/design_product_round3_vision_alignment.md`. No migrations except the
+  optional P3-D4. These are features, not bug fixes.
+- RESUME AT: **P3-B1**

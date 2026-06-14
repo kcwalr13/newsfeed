@@ -32,12 +32,14 @@ per-finding loop defined in the tracker:
 ## Policy (already decided — don't re-litigate)
 - **Scope:** the entire tracker, in order — **except items marked `DEFERRED`**, which are out of
   scope (single-user project; see the tracker's *Future state — multi-user rollout* section). Skip
-  them; do not re-open them. We are now on the **ROUND 2 backlog** — the next actionable finding is
-  **R2-01** (Round-1 items are all DONE/VERIFIED/DEFERRED/SKIPPED). Don't skip ahead otherwise or
-  batch unrelated findings into one commit. (Trivial Low items — the R2-L band — may share one
-  `chore(R2-L)` commit.)
-- **S-01 is NOT a code task.** It's an operational reminder for Kyle to rotate secrets; do not touch
-  `.env.local` or attempt any rotation. Mark it `SKIPPED` with a note "owner action — rotate keys + update Vercel env" and move on.
+  them; do not re-open them. We are now on the **ROUND 3 — Product backlog** (Rounds 1 & 2 are complete).
+  The next actionable item is **P3-B1**. These are **feature/config items, not bug fixes** — read the
+  precise plan first: `agents/architect/design_product_round3_vision_alignment.md` (it has the exact
+  source list, acceptance criteria, sequencing B→A→C→D→E, and risks). Don't skip ahead or batch unrelated
+  items into one commit. Follow the design doc's acceptance criteria, not just a green gate.
+- **These are product changes — verify product impact, not only the gate.** After B+A land, trigger a
+  refresh and confirm the new batch draws from ≥10 sources across ≥5 categories and includes ≥3
+  never-before-seen sources, and that the discovery yield log shows a filled quota. Use `commit -m "feat(P3-XX): …"`.
 - **Push after every finding.** Each push deploys to Vercel and is used for live re-validation,
   so the build **must be green before you push.** Never push a red build.
 - **Autonomy:** proceed using the report's recommended fix on every item. For any judgment call
@@ -73,7 +75,7 @@ When you stop, print a concise summary:
 
 Verification commands (recap): `npx tsc --noEmit` · `npm run lint` · `npm run build` · `npm run dev`.
 
-Start now: open `agents/review/REVIEW_TRACKER.md`, read the **ROUND 2** section, find the first
-`TODO` (currently **R2-01**), and begin the loop. Note: R2-01 through R2-05 are the High-severity
-regressions — several are one-line fixes (e.g. R2-01 adds a `::float8` cast). Re-confirm each against
-current code before changing it.
+Start now: read `agents/architect/design_product_round3_vision_alignment.md` (the precise plan), then open
+`agents/review/REVIEW_TRACKER.md`, find the first `TODO` in the **ROUND 3 — Product** section (currently
+**P3-B1**), and begin the loop. P3-B1 (add the 11 verified sources) is a quick, high-impact first win.
+Work the operational order B → A → C → D → E.
