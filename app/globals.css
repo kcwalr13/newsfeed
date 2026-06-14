@@ -19,6 +19,15 @@
   --font-sans:   system-ui, sans-serif; /* UI chrome only — content uses serif/mono (FE-L8) */
 }
 
+/* ─── Alternate themes — DEFINED BUT NOT YET LIVE (R2-13) ──────────
+   The dark / sepia / paper palettes below are intentionally inactive: nothing
+   sets `data-theme` and there is no `prefers-color-scheme` hook, so only the
+   default light theme above ever renders today. They are kept (not deleted) on
+   purpose — each was darkened to clear WCAG AA 4.5:1 in FE-H3, so they are
+   ready to switch on the day a theme switcher (or a system-preference hook)
+   ships, without redoing that contrast work. Activating them is a deliberate
+   future product/design decision, not a wiring bug. (See Decisions Log FE-L1.) */
+
 /* Dark theme */
 [data-theme="dark"] {
   --bg:          #14130F;
