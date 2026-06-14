@@ -23,6 +23,14 @@ if (PIPELINE_ARTICLES_PER_DAY + DISCOVERY_ARTICLES_PER_DAY !== ARTICLES_PER_DAY)
 export const DISCOVERY_MAX_AGE_HOURS = 72;
 
 /**
+ * How many recent issues the discovery novelty filter looks back over (P3-A3).
+ * A discovered candidate is dropped if its registrable domain is a fixed source
+ * or appeared in any of the last this-many issues — this is what makes discovery
+ * surface *unfamiliar* sources rather than re-finding Aeon or yesterday's blog.
+ */
+export const NOVELTY_LOOKBACK_ISSUES = 14;
+
+/**
  * Number of distinct topics probed per pipeline run via Brave Search.
  * Raised 6 → 12 (the full topic bank) so every run spans all editorial domains
  * rather than a weighted subset (P3-A2). Paired with DISCOVERY_QUERIES_PER_TOPIC

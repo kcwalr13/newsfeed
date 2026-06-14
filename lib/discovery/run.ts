@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 import type { Article } from '@/lib/types/article';
-import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_QUERIES_PER_TOPIC, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_MAX_EVAL_CANDIDATES, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR, DISCOVERY_LLM_CONCURRENCY } from '@/lib/config/feed';
+import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_QUERIES_PER_TOPIC, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_MAX_EVAL_CANDIDATES, DISCOVERY_ARTICLES_PER_DAY, NOVELTY_LOOKBACK_ISSUES, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR, DISCOVERY_LLM_CONCURRENCY } from '@/lib/config/feed';
 import { forEachWithConcurrency } from '@/lib/utils/concurrency';
 import { DISCOVERY_TOPICS } from './topics';
 import type { DiscoveryTopic } from './topics';
@@ -16,7 +16,8 @@ import type { LLMScores } from './llmEvaluator';
 import { loadQueryBanks, loadRotationState, saveRotationState, selectNextQueries } from './queryBank';
 import { runSmallWebCrawl } from './smallWeb/crawler';
 import { appendLog, readLatestBatch } from '@/lib/pipeline/storage';
-import { canonicalizeUrlForDedup } from '@/lib/utils/url';
+import { canonicalizeUrlForDedup, registrableDomain } from '@/lib/utils/url';
+import { loadSeenSourceDomains } from './novelty';
 import {
   getTopicWeightsForUser,
   getAllTopicWeightsAveraged,
@@ -252,18 +253,33 @@ export async function runDiscovery(
     qualified: 0,
   };
 
-  // Phase 1 (sequential, cheap): synchronous gates + dedup. Resolving dedup
-  // up-front — adding each canonical URL to seenCanonical on first sight, before
-  // any I/O — keeps it deterministic and race-free so the expensive body+LLM
-  // work below can run concurrently (R2-18). (Previously a URL was only marked
-  // seen after a successful score, so a duplicate could be re-fetched if the
-  // first attempt failed; deduping here also avoids that wasted work.)
+  // Novelty filter support (P3-A3): the set of registrable domains the user
+  // already knows (fixed sources) or has seen in the last K issues. Discovery's
+  // whole promise is *unfamiliar* sources, so candidates on these domains are
+  // dropped before the expensive eval. Loaded once per run; degrades to the
+  // fixed-source set on any DB error.
+  const seenDomains = await loadSeenSourceDomains(NOVELTY_LOOKBACK_ISSUES);
+  let notNovelCount = 0;
+
+  // Phase 1 (sequential, cheap): synchronous gates + novelty + dedup. Resolving
+  // dedup up-front — adding each canonical URL to seenCanonical on first sight,
+  // before any I/O — keeps it deterministic and race-free so the expensive
+  // body+LLM work below can run concurrently (R2-18). (Previously a URL was only
+  // marked seen after a successful score, so a duplicate could be re-fetched if
+  // the first attempt failed; deduping here also avoids that wasted work.)
   const toProcess: CandidatePair[] = [];
   for (const pair of allCandidatePairs) {
     const { topic, result } = pair;
     const gateResult = evaluateCandidate(result);
     if (!gateResult.pass) {
       appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- ${gateResult.reason}`);
+      continue;
+    }
+    // Novelty (P3-A3): drop known / recently-shown source domains.
+    const domain = registrableDomain(result.sourceUrl || result.url);
+    if (seenDomains.has(domain)) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- NOT_NOVEL (${domain})`);
+      notNovelCount++;
       continue;
     }
     const canonical = canonicalizeUrl(result.url);
@@ -389,7 +405,7 @@ export async function runDiscovery(
   // below-floor count when the last-resort backfill had to dip under the floor.
   const yieldLine =
     `[discovery] YIELD candidatesFound=${allCandidatePairs.length} ` +
-    `gatePassed=${toProcess.length} evaluated=${toEvaluate.length} scored=${qualified.length} ` +
+    `notNovel=${notNovelCount} gatePassed=${toProcess.length} evaluated=${toEvaluate.length} scored=${qualified.length} ` +
     `aboveThreshold=${aboveThreshold.length} aboveFloor=${aboveFloor.length} ` +
     `slotsFilled=${top.length}/${DISCOVERY_ARTICLES_PER_DAY} belowFloor=${belowFloorFilled} ` +
     `(threshold=${LLM_EVAL_THRESHOLD} floor=${LLM_EVAL_FLOOR})`;
