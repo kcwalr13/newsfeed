@@ -87,9 +87,39 @@ const HOUSEKEEPING_RES = [
   /^subscriber\s+(thread|drive)\b/i,
 ];
 
-/** Short announcement-style titles mentioning a meetup ("Berkeley Meetup"). */
+/**
+ * Meetup detection. Community-calendar announcements ("Berkeley Meetup",
+ * "ACX Meetup this Saturday") are low-value for a curated feed, but essays that
+ * merely *discuss* meetups are not. The old rule — the bare word "meetup" plus
+ * a 60-char length cap — dropped real essays like "Why Meetup Culture Died in
+ * Silicon Valley" (R2-05). We now require either an announcement signal
+ * (date / day-of-week / clock time / RSVP / "this weekend"…) or a short
+ * event-label shape where "meetup" is the leading or trailing noun and the
+ * title doesn't open like an essay headline. When unsure we keep the article —
+ * a stray announcement is far cheaper than dropping a genuine essay.
+ */
 const MEETUP_RE = /\bmeetups?\b/i;
-const MEETUP_TITLE_MAX = 60;
+const MEETUP_ANNOUNCEMENT_SIGNAL_RE = new RegExp(
+  [
+    '\\brsvp\\b',
+    '\\bregister\\b',
+    '\\bsign[\\s-]?up\\b',
+    '\\bjoin us\\b',
+    '\\bhosted by\\b',
+    '\\bvenue\\b',
+    '\\b\\d{1,2}\\s*[ap]m\\b',                          // 7pm, 7 pm
+    '\\b\\d{1,2}:\\d{2}\\b',                            // 19:30
+    '\\b(mon|tues|wednes|thurs|fri|satur|sun)day\\b',  // day of week
+    '\\b(this|next)\\s+(week|weekend|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|evening|night)\\b',
+    '\\b(tonight|tomorrow)\\b',
+  ].join('|'),
+  'i'
+);
+/** Short event-label shape: "Berkeley Meetup" / "Meetup: NYC" (not a sentence). */
+const MEETUP_LABEL_MAX = 30;
+const MEETUP_LABEL_RE = /(^\s*meetups?\b|\bmeetups?\s*$)/i;
+/** Essay/headline openers — titles starting this way are prose, not event labels. */
+const MEETUP_ESSAY_OPENER_RE = /^(why|how|what|when|where|who|whose|is|are|was|were|the|a|an|in|on|of|my|our|against)\b/i;
 
 /** Pure-video items: explicit title prefix or a /video(s)/ URL path. */
 const VIDEO_TITLE_RE = /^(video|watch)\s*[:\-–]/i;
@@ -103,7 +133,7 @@ const VIDEO_PATH_RE = /^\/videos?\//i;
 export function classifyLowValuePost(title: string, url?: string): string | null {
   const t = title.trim();
   if (HOUSEKEEPING_RES.some((re) => re.test(t))) return 'HOUSEKEEPING';
-  if (t.length <= MEETUP_TITLE_MAX && MEETUP_RE.test(t)) return 'HOUSEKEEPING';
+  if (MEETUP_RE.test(t) && isMeetupAnnouncement(t)) return 'HOUSEKEEPING';
   if (VIDEO_TITLE_RE.test(t)) return 'PURE_VIDEO';
   if (url) {
     try {
@@ -113,6 +143,21 @@ export function classifyLowValuePost(title: string, url?: string): string | null
     }
   }
   return null;
+}
+
+/**
+ * Given a title that already contains "meetup", decides whether it's an event
+ * announcement (drop) rather than an essay about meetups (keep). True when the
+ * title carries a scheduling/RSVP signal, or is a short event label ("Berkeley
+ * Meetup") that doesn't open like a headline.
+ */
+function isMeetupAnnouncement(t: string): boolean {
+  if (MEETUP_ANNOUNCEMENT_SIGNAL_RE.test(t)) return true;
+  return (
+    t.length <= MEETUP_LABEL_MAX &&
+    MEETUP_LABEL_RE.test(t) &&
+    !MEETUP_ESSAY_OPENER_RE.test(t)
+  );
 }
 
 function extractDomain(url: string): string {
