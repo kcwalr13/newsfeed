@@ -95,9 +95,11 @@ export async function POST(req: NextRequest) {
       count: result.count,
     });
   } catch (err) {
+    // Log the detail server-side; don't echo internal error text to the
+    // (unauthenticated) caller — matches pipeline/run (SEC-H3 / R2-06).
     const message = err instanceof Error ? err.message : 'Unknown error';
     appendLog(`[refresh] Manual refresh failed. userId=${userId} error=${message}`);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
   } finally {
     await releasePipelineRunLock(lock.token);
   }

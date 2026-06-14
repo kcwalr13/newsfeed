@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 6 DONE (R2-01–R2-05, R2-19) · 29 TODO. **All 5 Round-2 Highs complete.**
+  Progress: 7 DONE (R2-01–R2-06, R2-19) · 28 TODO. **All 5 Round-2 Highs complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-06**
+- Current branch: `main` · **Last resume point: R2-07**
 
 ---
 
@@ -765,10 +765,10 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
     6 essays kept (incl. the regression title, "The Sociology of Meetups", "What I Learned From
     Running a Meetup for 10 Years") and 7 announcements dropped ("Berkeley Meetup", "ACX Meetup",
     "Meetup: NYC", "SSC Meetup this Saturday", "Austin Meetup — RSVP here", "Meetup tonight at 7pm",
-    "Bay Area Meetup, Sunday"). Verified: tsc + lint + build green. See Decisions Log.
+    "Bay Area Meetup, Sunday"). Verified: tsc + lint + build green. Commit: 7c07549. See Decisions Log.
 
 ### Round 2 — Medium
-- [ ] **R2-06** · 🟡 Medium · [REGRESSION SEC-H3] `feed/refresh` leaks raw `err.message` to unauth caller (`app/api/feed/refresh/route.ts:97`). Return generic 'Internal server error' like `pipeline/run`. · TODO
+- [x] **R2-06** · 🟡 Medium · [REGRESSION SEC-H3] `feed/refresh` leaks raw `err.message` to unauth caller (`app/api/feed/refresh/route.ts:97`). Return generic 'Internal server error' like `pipeline/run`. · DONE (commit pending): catch block still `appendLog`s the real message server-side but the 500 response now returns `{ ok:false, error:'Internal server error' }` instead of `err.message`. Gate green.
 - [ ] **R2-07** · 🟡 Medium · [REGRESSION SEC-H1] `feed/refresh` uses raw `dd_device_id` cookie (`route.ts:58`); use `extractDeviceId(req)`. · TODO
 - [ ] **R2-08** · 🟡 Medium · [SEC-H2 incomplete] Rate limiter bypassed via spoofed `X-Forwarded-For` (`lib/rateLimit.ts:24` reads left-most token). Read the Vercel-trusted right-most/`x-vercel-forwarded-for`. (Future-state severity.) · TODO
 - [ ] **R2-09** · 🟡 Medium · [DAT-M4 high-end] No upper bound on `paragraph_index`/`dwellSeconds` → INTEGER/NUMERIC overflow → 500. Clamp to ceilings. (reading-position + feedback routes) · TODO
@@ -1063,6 +1063,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **R2-05** → DONE: meetup low-value filter no longer drops essays. Replaced `word + length≤60`
   with `isMeetupAnnouncement` (announcement signal — date/day/time/RSVP — or short event-label
   shape, biased toward keep). Verified: gate green + ad-hoc 13/13 case matrix (6 essays kept incl.
-  the regression title, 7 announcements dropped). Commit: pending.
+  the regression title, 7 announcements dropped). Commit: 7c07549.
 - **All 5 Round-2 High regressions (R2-01–R2-05) are now DONE + pushed.**
-- RESUME AT: **R2-06**
+- **R2-06** → DONE: `feed/refresh` 500 now returns generic 'Internal server error' (real message
+  still logged via `appendLog`), matching `pipeline/run` (SEC-H3 sibling). Gate green. Commit: pending.
+- RESUME AT: **R2-07**
