@@ -2,7 +2,8 @@
 
 import crypto from 'crypto';
 import type { Article } from '@/lib/types/article';
-import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR } from '@/lib/config/feed';
+import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR, DISCOVERY_LLM_CONCURRENCY } from '@/lib/config/feed';
+import { forEachWithConcurrency } from '@/lib/utils/concurrency';
 import { DISCOVERY_TOPICS } from './topics';
 import type { DiscoveryTopic } from './topics';
 import { searchBrave } from './braveSearch';
@@ -250,15 +251,20 @@ export async function runDiscovery(
     qualified: 0,
   };
 
-  for (const { topic, result } of allCandidatePairs) {
-    // Gate 1–3: synchronous pre-filter
+  // Phase 1 (sequential, cheap): synchronous gates + dedup. Resolving dedup
+  // up-front — adding each canonical URL to seenCanonical on first sight, before
+  // any I/O — keeps it deterministic and race-free so the expensive body+LLM
+  // work below can run concurrently (R2-18). (Previously a URL was only marked
+  // seen after a successful score, so a duplicate could be re-fetched if the
+  // first attempt failed; deduping here also avoids that wasted work.)
+  const toProcess: CandidatePair[] = [];
+  for (const pair of allCandidatePairs) {
+    const { topic, result } = pair;
     const gateResult = evaluateCandidate(result);
     if (!gateResult.pass) {
       appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- ${gateResult.reason}`);
       continue;
     }
-
-    // Dedup check (before the expensive LLM call)
     const canonical = canonicalizeUrl(result.url);
     if (fixedArticleUrls.has(canonical)) {
       appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- DUPLICATE_FIXED`);
@@ -268,7 +274,16 @@ export async function runDiscovery(
       appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- DUPLICATE_DISCOVERY`);
       continue;
     }
+    seenCanonical.add(canonical);
+    toProcess.push(pair);
+  }
 
+  // Phase 2 (bounded concurrency): body extraction + LLM evaluation. JS is
+  // single-threaded, so the shared `stats` increments and `qualified.push` are
+  // atomic between awaits; `qualified` is sorted by composite below, so its
+  // completion-order here doesn't matter. (`llmWallTimeMs` now sums per-call
+  // durations across overlapping calls — a cumulative figure, not wall time.)
+  await forEachWithConcurrency(toProcess, DISCOVERY_LLM_CONCURRENCY, async ({ topic, result }) => {
     stats.candidatesAttempted++;
 
     // Group B: body text extraction
@@ -276,7 +291,7 @@ export async function runDiscovery(
     if (!extractResult.success) {
       appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- extraction:${extractResult.reason}`);
       stats.extractionFailed[extractResult.reason] = (stats.extractionFailed[extractResult.reason] ?? 0) + 1;
-      continue;
+      return;
     }
 
     // Group C: LLM evaluation
@@ -288,7 +303,7 @@ export async function runDiscovery(
     if (!llmResult.success) {
       appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- llm:${llmResult.reason}`);
       stats.llmFailed[llmResult.reason] = (stats.llmFailed[llmResult.reason] ?? 0) + 1;
-      continue;
+      return;
     }
 
     if (llmResult.scores.composite < LLM_EVAL_THRESHOLD) {
@@ -308,9 +323,8 @@ export async function runDiscovery(
 
     // Keep every successfully scored candidate; the adaptive threshold below
     // decides what actually ships.
-    seenCanonical.add(canonical);
     qualified.push({ result, topic, llmScores: llmResult.scores, bodyText: extractResult.bodyText });
-  }
+  });
 
   // Adaptive threshold: prefer candidates at/above LLM_EVAL_THRESHOLD; if they
   // don't fill the quota, top up by composite score from those at/above

@@ -9,6 +9,7 @@ import {
 } from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
 import { canonicalizeUrlForDedup } from '@/lib/utils/url';
+import { forEachWithConcurrency } from '@/lib/utils/concurrency';
 import { writeBatch, readBatch, readLatestBatchBefore, appendLog } from './storage';
 import {
   identifyBlindSpotClusters,
@@ -142,20 +143,6 @@ async function fetchFromSource(source: Source) {
 }
 
 type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
-
-/**
- * Runs fn over items in chunks of `concurrency`. Per-item failures are
- * isolated (fn is expected to handle its own errors; allSettled is a backstop).
- */
-async function forEachWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<void>
-): Promise<void> {
-  for (let i = 0; i < items.length; i += concurrency) {
-    await Promise.allSettled(items.slice(i, i + concurrency).map(fn));
-  }
-}
 
 function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle[] {
   const countBySource = new Map<string, number>();
