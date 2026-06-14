@@ -327,12 +327,12 @@ export async function updateDriftState(
     UPDATE user_aesthetic_profiles
     SET
       is_drifting = CASE
-        WHEN ${driftScore} IS NULL OR ${driftScore} < ${DRIFT_THRESHOLD} THEN FALSE
+        WHEN ${driftScore}::float8 IS NULL OR ${driftScore}::float8 < ${DRIFT_THRESHOLD} THEN FALSE
         ELSE TRUE
       END,
       drift_detected_at = CASE
-        WHEN ${driftScore} IS NULL OR ${driftScore} < ${DRIFT_THRESHOLD} THEN NULL
-        WHEN is_drifting = FALSE AND ${driftScore} >= ${DRIFT_THRESHOLD} THEN NOW()
+        WHEN ${driftScore}::float8 IS NULL OR ${driftScore}::float8 < ${DRIFT_THRESHOLD} THEN NULL
+        WHEN is_drifting = FALSE AND ${driftScore}::float8 >= ${DRIFT_THRESHOLD} THEN NOW()
         ELSE drift_detected_at
       END
     WHERE (user_id = ${userId} OR (user_id IS NULL AND ${userId}::text IS NULL))

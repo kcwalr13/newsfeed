@@ -72,10 +72,11 @@ npm run dev           # for manual/browser spot-checks
 ## Progress summary
 
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
-- **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items, all TODO.**
+- **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
+  Progress: 1 DONE (R2-01) · 34 TODO.
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-01** (start of Round 2)
+- Current branch: `main` · **Last resume point: R2-02**
 
 ---
 
@@ -686,10 +687,21 @@ directly in code. Full write-up: `Tangent_Adversarial_Re-Review.docx` (Kyle's Co
 Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain out of scope.
 
 ### Round 2 — High
-- [ ] **R2-01** · 🔴 High · [REGRESSION DAT-L1 / blocks PIPE-H2] Drift state never persists — untyped null SQL param throws
+- [x] **R2-01** · 🔴 High · [REGRESSION DAT-L1 / blocks PIPE-H2] Drift state never persists — untyped null SQL param throws
   - Where: `lib/db/aesthetics.ts:330,334` · `lib/utils/driftScore.ts:20-25`
   - Fix: `computeDriftScore` returns `number|null` (null < 3 short-term events); cast the param — `driftScore::float8 IS NULL` / `< DRIFT_THRESHOLD` (lines 330,334 + two later refs). Throw is swallowed, so PIPE-H2's drift blend never activates. DAT-L1 was mis-closed.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Confirmed live — `computeDriftScore` returns
+    `number|null` (null when `short_term_feedback_count < SHORT_TERM_MIN_EVENTS`), and
+    `updateDriftState` interpolated that null into `$1 IS NULL` / `$1 < $2` under the
+    `@neondatabase/serverless` parameterized protocol → "could not determine data type of
+    parameter" → swallowed by the try/catch at `app/api/feedback/route.ts:220` → drift state
+    never persisted → PIPE-H2's drift blend never activated. Fix: cast all 5 `${driftScore}`
+    refs to `${driftScore}::float8` (lines 330, 334, 335) — same pattern PIPE-H3 used for
+    `${userId}::text IS NULL` (already present on lines 311, 338). `DRIFT_THRESHOLD` on the
+    right of `< float8` / `>= float8` is inferred as float8 by operator resolution. Verified:
+    tsc + lint + build green; targeted live-Neon check (0-row UPDATE on a nonexistent device,
+    non-destructive) — both `null` and `0.8` driftScore now prepare+execute with no param-type
+    error (previously the `null` case threw).
 - [ ] **R2-02** · 🔴 High · [REGRESSION DAT-M5 × DAT-H3] Likes/saves on archived articles silently skip concept learning
   - Where: `app/api/feedback/route.ts:175-176` · `lib/pipeline/storage.ts:154-167`
   - Fix: feedback route resolves via `findArticleInLatestBatch` (scoped `MAX(batch_date)`), so non-today articles → null → `after()` concept-extraction returns early; probeInfo never recorded. Use `findArticleAcrossBatches(id)` (exists, GIN-indexed) or a `findArticleInAnyBatch` slim projection.
@@ -972,3 +984,12 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   SQLi closed, prompt fencing complete, 016 migration correct).
 - **S-01: recommend rotating the 5 secrets in `.env.local`** (read in-band during review).
 - RESUME AT: **R2-01**
+
+### Session 4 — 2026-06-13 — Claude Code (Round 2 campaign start)
+- **R2-01** → DONE: cast all 5 `${driftScore}` refs in `updateDriftState` to `::float8`
+  (`lib/db/aesthetics.ts:330,334,335`). The null driftScore (returned for short-term windows
+  < SHORT_TERM_MIN_EVENTS) was an untyped Neon param → "could not determine data type" → swallowed
+  by the feedback route's try/catch → drift never persisted → PIPE-H2 drift blend inert. Verified:
+  tsc + lint + build green; live-Neon targeted check (non-destructive 0-row UPDATE) confirms null &
+  numeric scores now execute without the param-type error. Commit: pending.
+- RESUME AT: **R2-02**
