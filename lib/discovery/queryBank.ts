@@ -90,20 +90,24 @@ export async function saveRotationState(state: Map<string, number>): Promise<voi
 }
 
 /**
- * Selects the next two queries from a query bank using the rotation cursor.
+ * Selects the next `count` queries from a query bank using the rotation cursor,
+ * advancing the cursor so subsequent runs continue through the bank. Never
+ * returns more than the bank holds (no duplicates within a single selection).
  * Returns the selected queries and the new cursor position.
  */
-export function selectNextTwoQueries(
+export function selectNextQueries(
   queries: string[],
-  cursor: number
+  cursor: number,
+  count: number
 ): { selected: string[]; newCursor: number } {
   const N = queries.length;
-  if (N === 0) return { selected: [], newCursor: cursor };
-  if (N === 1) {
-    appendLog('[queryBank] Warning: topic has only 1 query in bank; running single query');
-    return { selected: [queries[0]], newCursor: 0 };
+  if (N === 0 || count <= 0) return { selected: [], newCursor: cursor };
+  const take = Math.min(count, N);
+  const selected: string[] = [];
+  let c = cursor;
+  for (let i = 0; i < take; i++) {
+    c = (c + 1) % N;
+    selected.push(queries[c]);
   }
-  const i1 = (cursor + 1) % N;
-  const i2 = (cursor + 2) % N;
-  return { selected: [queries[i1], queries[i2]], newCursor: i2 };
+  return { selected, newCursor: c };
 }

@@ -22,11 +22,39 @@ if (PIPELINE_ARTICLES_PER_DAY + DISCOVERY_ARTICLES_PER_DAY !== ARTICLES_PER_DAY)
 /** Maximum age in hours for a discovery candidate article. Default: 72 (3 days). */
 export const DISCOVERY_MAX_AGE_HOURS = 72;
 
-/** Number of distinct topics probed per pipeline run via Brave Search. */
-export const DISCOVERY_TOPICS_PER_RUN = 6;
+/**
+ * Number of distinct topics probed per pipeline run via Brave Search.
+ * Raised 6 → 12 (the full topic bank) so every run spans all editorial domains
+ * rather than a weighted subset (P3-A2). Paired with DISCOVERY_QUERIES_PER_TOPIC
+ * = 1 so the Brave query count stays at 12 — budget-neutral on the serialized
+ * Brave latency that dominates the discovery wall clock (DAT-H2).
+ */
+export const DISCOVERY_TOPICS_PER_RUN = 12;
 
-/** Number of raw search results requested per topic query (Brave count param). */
-export const DISCOVERY_CANDIDATES_PER_TOPIC = 10;
+/**
+ * Brave queries issued per topic per run. 1 keeps the per-run Brave query count
+ * equal to DISCOVERY_TOPICS_PER_RUN (the rotation cursor still cycles each
+ * topic's multi-query bank across runs, so query variety accrues over days
+ * without inflating any single run's wall clock). (P3-A2)
+ */
+export const DISCOVERY_QUERIES_PER_TOPIC = 1;
+
+/**
+ * Number of raw search results requested per topic query (Brave count param).
+ * Raised 10 → 20 to thicken the candidate pool (one Brave call returns more
+ * results at no extra latency), giving the quality gate real choice (P3-A2).
+ */
+export const DISCOVERY_CANDIDATES_PER_TOPIC = 20;
+
+/**
+ * Hard cap on how many gate-passed candidates proceed to the expensive
+ * body-extraction + LLM-evaluation phase in a single run (P3-A2). Bounds the
+ * discovery wall clock deterministically (≈ cap / DISCOVERY_LLM_CONCURRENCY
+ * sequential body+LLM round-trips) so a widened raw pool can never push a run
+ * past the DAT-H2 budget. The gate chooses these from the full (now ~240+) raw
+ * pool, interleaved by topic so Small-Web candidates are represented.
+ */
+export const DISCOVERY_MAX_EVAL_CANDIDATES = 40;
 
 /** Magnitude of topic weight adjustment per feedback event (like or dislike). */
 export const TOPIC_WEIGHT_STEP = 0.1;

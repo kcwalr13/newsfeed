@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 import type { Article } from '@/lib/types/article';
-import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR, DISCOVERY_LLM_CONCURRENCY } from '@/lib/config/feed';
+import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_QUERIES_PER_TOPIC, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_MAX_EVAL_CANDIDATES, DISCOVERY_ARTICLES_PER_DAY, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR, DISCOVERY_LLM_CONCURRENCY } from '@/lib/config/feed';
 import { forEachWithConcurrency } from '@/lib/utils/concurrency';
 import { DISCOVERY_TOPICS } from './topics';
 import type { DiscoveryTopic } from './topics';
@@ -13,7 +13,7 @@ import { extractBodyText } from './bodyExtractor';
 import type { ExtractionFailureReason } from './bodyExtractor';
 import { evaluateWithLLM } from './llmEvaluator';
 import type { LLMScores } from './llmEvaluator';
-import { loadQueryBanks, loadRotationState, saveRotationState, selectNextTwoQueries } from './queryBank';
+import { loadQueryBanks, loadRotationState, saveRotationState, selectNextQueries } from './queryBank';
 import { runSmallWebCrawl } from './smallWeb/crawler';
 import { appendLog, readLatestBatch } from '@/lib/pipeline/storage';
 import { canonicalizeUrlForDedup } from '@/lib/utils/url';
@@ -83,9 +83,10 @@ function selectTopics(
 
 /**
  * Runs the proactive content discovery pipeline:
- * selects topics, searches Brave (2 queries per topic), filters through quality gate
- * (Gates 1-3, body extraction, LLM evaluation), deduplicates, enforces quota,
- * and returns Article[] ready to merge with the fixed pipeline.
+ * selects topics, searches Brave (DISCOVERY_QUERIES_PER_TOPIC queries per topic),
+ * filters through quality gate (Gates 1-3, body extraction, LLM evaluation),
+ * deduplicates, enforces quota, and returns Article[] ready to merge with the
+ * fixed pipeline.
  *
  * @param fixedArticleUrls - Canonical URLs of articles already in the fixed pipeline.
  * @param userId - Optional user ID for user-specific topic weights.
@@ -181,15 +182,15 @@ export async function runDiscovery(
   const rotationState = await loadRotationState();
   const updatedRotationState = new Map<string, number>(rotationState);
 
-  // Issue two queries per selected topic, serialized ~1.1s apart so the
-  // Brave free tier (1 req/s) never sees a concurrent burst.
+  // Issue DISCOVERY_QUERIES_PER_TOPIC queries per selected topic, serialized
+  // ~1.1s apart so the Brave free tier (1 req/s) never sees a concurrent burst.
   const BRAVE_QUERY_SPACING_MS = 1100;
   const searchResults: { topic: DiscoveryTopic; results: BraveSearchResult[] }[] = [];
   const plannedQueries: { topic: DiscoveryTopic; query: string }[] = [];
   for (const topic of topicsToProbe) {
     const queries = queryBanks.get(topic.id) ?? topic.searchQueries;
     const cursor = rotationState.get(topic.id) ?? -1;
-    const { selected, newCursor } = selectNextTwoQueries(queries, cursor);
+    const { selected, newCursor } = selectNextQueries(queries, cursor, DISCOVERY_QUERIES_PER_TOPIC);
     updatedRotationState.set(topic.id, newCursor);
     for (const query of selected) {
       plannedQueries.push({ topic, query });
@@ -278,12 +279,42 @@ export async function runDiscovery(
     toProcess.push(pair);
   }
 
+  // Cap the expensive phase to protect the wall-clock budget (P3-A2 / DAT-H2).
+  // Interleave gate-passed candidates round-robin by topic first, so the capped
+  // set stays topic-diverse and Small-Web candidates (appended last) are
+  // represented rather than starved when the gate yields more than the cap.
+  const byTopic = new Map<string, CandidatePair[]>();
+  for (const pair of toProcess) {
+    const arr = byTopic.get(pair.topic.id);
+    if (arr) arr.push(pair);
+    else byTopic.set(pair.topic.id, [pair]);
+  }
+  const topicQueues = [...byTopic.values()];
+  const interleaved: CandidatePair[] = [];
+  for (let advanced = true; advanced; ) {
+    advanced = false;
+    for (const queue of topicQueues) {
+      const pair = queue.shift();
+      if (pair) {
+        interleaved.push(pair);
+        advanced = true;
+      }
+    }
+  }
+  const toEvaluate = interleaved.slice(0, DISCOVERY_MAX_EVAL_CANDIDATES);
+  if (toProcess.length > toEvaluate.length) {
+    appendLog(
+      `[discovery] Eval cap: ${toEvaluate.length}/${toProcess.length} gate-passed ` +
+      `candidates sent to body+LLM eval (DISCOVERY_MAX_EVAL_CANDIDATES=${DISCOVERY_MAX_EVAL_CANDIDATES})`
+    );
+  }
+
   // Phase 2 (bounded concurrency): body extraction + LLM evaluation. JS is
   // single-threaded, so the shared `stats` increments and `qualified.push` are
   // atomic between awaits; `qualified` is sorted by composite below, so its
   // completion-order here doesn't matter. (`llmWallTimeMs` now sums per-call
   // durations across overlapping calls — a cumulative figure, not wall time.)
-  await forEachWithConcurrency(toProcess, DISCOVERY_LLM_CONCURRENCY, async ({ topic, result }) => {
+  await forEachWithConcurrency(toEvaluate, DISCOVERY_LLM_CONCURRENCY, async ({ topic, result }) => {
     stats.candidatesAttempted++;
 
     // Group B: body text extraction
@@ -358,7 +389,7 @@ export async function runDiscovery(
   // below-floor count when the last-resort backfill had to dip under the floor.
   const yieldLine =
     `[discovery] YIELD candidatesFound=${allCandidatePairs.length} ` +
-    `gatePassed=${toProcess.length} scored=${qualified.length} ` +
+    `gatePassed=${toProcess.length} evaluated=${toEvaluate.length} scored=${qualified.length} ` +
     `aboveThreshold=${aboveThreshold.length} aboveFloor=${aboveFloor.length} ` +
     `slotsFilled=${top.length}/${DISCOVERY_ARTICLES_PER_DAY} belowFloor=${belowFloorFilled} ` +
     `(threshold=${LLM_EVAL_THRESHOLD} floor=${LLM_EVAL_FLOOR})`;
