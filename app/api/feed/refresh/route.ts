@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveSession } from '@/lib/auth/session';
+import { resolveSession, extractDeviceId } from '@/lib/auth/session';
 import { runPipeline } from '@/lib/pipeline/run';
 import {
   checkCooldown,
@@ -55,8 +55,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Read device ID for correct topic weight upsert keying
-  const deviceId = req.cookies.get('dd_device_id')?.value ?? null;
+  // Read device ID for correct topic weight upsert keying. Use the validating
+  // extractDeviceId (UUID-shape check) rather than the raw cookie so a malformed
+  // or injected value can't fabricate/probe an identity (SEC-H1 / R2-07).
+  const deviceId = extractDeviceId(req);
 
   appendLog(`[refresh] Manual refresh triggered. userId=${userId}`);
 
