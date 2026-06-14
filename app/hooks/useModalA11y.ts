@@ -11,6 +11,18 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+/**
+ * Visible focusable descendants of the dialog, in DOM order. Shared by both the
+ * initial-focus move and the Tab trap so they never disagree — initial focus
+ * used to skip the `offsetParent !== null` visibility filter and could land on a
+ * hidden control (R2-24).
+ */
+function focusableItems(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+  ).filter((el) => el.offsetParent !== null || el === container);
+}
+
 // Module-level body-scroll-lock ref count (R2-14). Each modal used to snapshot
 // and restore `body.style.overflow` independently, so two overlapping modals
 // clobbered each other's snapshot — the page could end up permanently
@@ -57,10 +69,8 @@ export function useModalA11y(
     const container = containerRef.current;
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
-    // Move focus into the dialog.
-    const focusables = container
-      ? Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-      : [];
+    // Move focus into the dialog (first VISIBLE focusable, else the container).
+    const focusables = container ? focusableItems(container) : [];
     (focusables[0] ?? container)?.focus();
 
     // Lock body scroll via the shared ref count (safe under overlapping modals).
@@ -74,9 +84,7 @@ export function useModalA11y(
       }
       if (e.key !== 'Tab' || !container) return;
 
-      const items = Array.from(
-        container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-      ).filter((el) => el.offsetParent !== null || el === container);
+      const items = focusableItems(container);
       if (items.length === 0) {
         // Nothing focusable but the container — keep focus pinned to it.
         e.preventDefault();
