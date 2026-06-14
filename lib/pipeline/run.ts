@@ -1,5 +1,11 @@
 import crypto from 'crypto';
-import { MAX_ARTICLES_PER_SOURCE, MIN_SOURCES_PER_BATCH, loadSources } from './config';
+import {
+  MAX_ARTICLES_PER_SOURCE,
+  MAX_ARTICLES_PER_CATEGORY,
+  MIN_SOURCES_PER_BATCH,
+  loadSources,
+} from './config';
+import { categoryForArticle } from './sourceCategory';
 import {
   ARTICLES_PER_DAY,
   PIPELINE_WALL_CLOCK_BUDGET_MS,
@@ -152,6 +158,57 @@ function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle
     countBySource.set(a.sourceName, count + 1);
     return true;
   });
+}
+
+/**
+ * Reorders capped candidates so the front of the list — which becomes the fixed
+ * portion of the batch after the trim — spans many sources and categories
+ * rather than being dominated by the first few prolific feeds (P3-B3).
+ *
+ * Source-grouped input (`results.flat()`) meant `slice(0, fixedTarget)` took
+ * ~MAX_ARTICLES_PER_SOURCE from each of only the first few sources. This instead
+ * round-robins one article per source per pass (front-loading source variety,
+ * keeping each source's newest-first order), and softly defers a category once
+ * it reaches `perCategoryCap` in the diverse core, pushing the overflow to the
+ * tail. Nothing is dropped — purely a reordering — so the downstream trim always
+ * has the same candidates available even when few sources or categories yield.
+ */
+function diversifyForSelection(
+  articles: PartialArticle[],
+  perCategoryCap: number
+): PartialArticle[] {
+  // Group by source, preserving each source's newest-first order.
+  const bySource = new Map<string, PartialArticle[]>();
+  for (const a of articles) {
+    const queue = bySource.get(a.sourceName);
+    if (queue) queue.push(a);
+    else bySource.set(a.sourceName, [a]);
+  }
+  const queues = [...bySource.values()];
+
+  const core: PartialArticle[] = [];
+  const deferred: PartialArticle[] = [];
+  const categoryCount = new Map<string, number>();
+
+  // Round-robin passes: one article per source per pass.
+  let advanced = true;
+  while (advanced) {
+    advanced = false;
+    for (const queue of queues) {
+      const a = queue.shift();
+      if (!a) continue;
+      advanced = true;
+      const cat = categoryForArticle(a) ?? 'uncategorized';
+      const count = categoryCount.get(cat) ?? 0;
+      if (count >= perCategoryCap) {
+        deferred.push(a); // soft cap: overflow to the tail, only fills if needed
+      } else {
+        core.push(a);
+        categoryCount.set(cat, count + 1);
+      }
+    }
+  }
+  return [...core, ...deferred];
 }
 
 /**
@@ -389,6 +446,11 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     // Per-source article cap (applied after dedup, per PM requirement)
     const capped = applySourceCap(editorial, MAX_ARTICLES_PER_SOURCE);
 
+    // Reorder so the fixed portion spans many sources/categories rather than
+    // the first few prolific feeds (P3-B3). Round-robin by source + soft
+    // per-category cap; purely a reordering (nothing dropped).
+    const diversified = diversifyForSelection(capped, MAX_ARTICLES_PER_CATEGORY);
+
     // Diversity check — log warning if below minimum (do not abort)
     const contributingSourceNames = new Set(capped.map((a) => a.sourceName));
     const contributingCount = contributingSourceNames.size;
@@ -406,7 +468,8 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
 
     // Validate (titles/URLs) and trim to target batch size.
     // We keep up to ARTICLES_PER_DAY so that if discovery yields 0, fixed sources can fill all 20 slots.
-    const validated = validateAndTrim(capped, ARTICLES_PER_DAY);
+    // Fed the diversified order so the kept front spans many sources/categories.
+    const validated = validateAndTrim(diversified, ARTICLES_PER_DAY);
 
     // Build URL set for discovery-vs-fixed deduplication (shared canonicalizer).
     const fixedArticleUrls = new Set(validated.map((a) => canonicalizeUrlForDedup(a.articleUrl)));

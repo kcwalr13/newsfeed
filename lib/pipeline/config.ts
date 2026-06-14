@@ -22,8 +22,19 @@ function parseIntEnv(value: string | undefined, fallback: number): number {
 /** Maximum number of articles any single source may contribute to one batch.
  *  Enforced after cross-source deduplication. Excess articles are discarded;
  *  the order returned by each adapter (newest-first) determines which are kept.
+ *  Tuned down 5 → 4 for diversity now that the palette is 23 sources (P3-B3):
+ *  no single prolific feed should fill a quarter of the fixed portion.
  */
-export const MAX_ARTICLES_PER_SOURCE: number = parseIntEnv(process.env.MAX_ARTICLES_PER_SOURCE, 5);
+export const MAX_ARTICLES_PER_SOURCE: number = parseIntEnv(process.env.MAX_ARTICLES_PER_SOURCE, 4);
+
+/** Soft cap on how many articles a single editorial category may contribute to
+ *  the diverse *core* of a batch's fixed portion (P3-B3). Once a category hits
+ *  this many in the round-robin selection, further articles of that category are
+ *  deferred to the tail and only fill slots that source/category diversity can't.
+ *  Keeps an issue from becoming all-science / all-ideas. Soft, not hard — nothing
+ *  is dropped, only reordered, so the batch still fills even from few categories.
+ */
+export const MAX_ARTICLES_PER_CATEGORY: number = parseIntEnv(process.env.MAX_ARTICLES_PER_CATEGORY, 4);
 
 /** Minimum number of distinct active sources that must each contribute at least
  *  one article to a batch. If fewer contribute, the batch is still written but
