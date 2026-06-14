@@ -9,10 +9,11 @@ import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthet
 import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
 import type { UserConcept } from '@/lib/types/concepts';
 import { EXPLORATION_BASELINE } from '@/lib/config/serendipity';
-import { ISSUE_DISPLAY_SIZE, MIN_UNFAMILIAR_IN_ISSUE } from '@/lib/config/feed';
+import { ISSUE_DISPLAY_SIZE, MIN_UNFAMILIAR_IN_ISSUE, MIN_CATEGORIES_IN_ISSUE } from '@/lib/config/feed';
 import { generateMissingRationales } from '@/lib/pipeline/rationaleGenerator';
 import { computeDiscoveryYield } from '@/lib/pipeline/discoveryMeta';
-import { promoteUnfamiliarSources } from '@/lib/pipeline/displayDiversity';
+import { promoteUnfamiliarSources, ensureCategorySpread, isNeverShown } from '@/lib/pipeline/displayDiversity';
+import { categoryForArticle } from '@/lib/pipeline/sourceCategory';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,9 +136,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Display-diversity safety net (P3-C2): make sure the issue's top pieces
-  // include sources the user has never been shown. Best-effort — degrades to a
-  // no-op on any DB error (the ranked order still stands).
+  // Display-diversity safety nets: make the issue's top pieces include sources
+  // the user has never been shown (P3-C2) and span several editorial categories
+  // (P3-C3). Best-effort reorders — degrade to a no-op on any DB error (the
+  // ranked order still stands). C3 runs after C2 and is told not to demote C2's
+  // unfamiliar pieces, so the two guarantees compose.
   let displayArticles = rankedArticles;
   try {
     const shownDomains = await getShownSourceDomains(batch.batchDate);
@@ -146,6 +149,13 @@ export async function GET(req: NextRequest) {
       shownDomains,
       ISSUE_DISPLAY_SIZE,
       MIN_UNFAMILIAR_IN_ISSUE
+    );
+    displayArticles = ensureCategorySpread(
+      displayArticles,
+      categoryForArticle,
+      ISSUE_DISPLAY_SIZE,
+      MIN_CATEGORIES_IN_ISSUE,
+      (a) => isNeverShown(a, shownDomains)
     );
   } catch (err) {
     console.error('[feed/today] display-diversity reorder skipped:', err);

@@ -5,11 +5,16 @@
 // can't satisfy the constraint. Kept out of the pure ranker so the historical
 // data they need (shown-source history) stays in the route's DB layer.
 
-import type { Article } from '@/lib/types/article';
+import type { Article, SourceCategory } from '@/lib/types/article';
 import { registrableDomain } from '@/lib/utils/url';
 
 function domainOf(a: Article): string {
   return registrableDomain(a.sourceUrl || a.articleUrl || '');
+}
+
+/** True when the article's source domain is absent from the shown-before map. */
+export function isNeverShown(a: Article, shownDomains: Map<string, string>): boolean {
+  return !shownDomains.has(domainOf(a));
 }
 
 /**
@@ -61,6 +66,65 @@ export function promoteUnfamiliarSources(
   }
 
   // Stable reorder: chosen top set first (original rank order), rest after.
+  const topArr = ranked.filter((a) => topSet.has(a));
+  const restArr = ranked.filter((a) => !topSet.has(a));
+  return [...topArr, ...restArr];
+}
+
+/**
+ * Guarantees that the displayed issue (top `displaySize`) spans at least
+ * `minCategories` distinct editorial categories (P3-C3), when the pool allows.
+ *
+ * `categoryOf` resolves an article's category (undefined for discovered/unknown
+ * sources — these don't count toward distinct categories). If the top is short
+ * of the target, promotes pieces of a missing category from below, each
+ * displacing the lowest-ranked top piece whose category is over-represented
+ * (count > 1, so no category the issue already has is lost) — never an
+ * exploration slot, and never a `protect`-ed piece (the route passes C2's
+ * never-shown predicate so this can't undo the unfamiliar-source guarantee).
+ * Pure reorder; no-op when already satisfied or the pool can't help.
+ */
+export function ensureCategorySpread(
+  ranked: Article[],
+  categoryOf: (a: Article) => SourceCategory | undefined,
+  displaySize: number,
+  minCategories: number,
+  protect: (a: Article) => boolean = () => false
+): Article[] {
+  const topSet = new Set(ranked.slice(0, displaySize));
+  const categoryCounts = (): Map<SourceCategory, number> => {
+    const counts = new Map<SourceCategory, number>();
+    for (const a of topSet) {
+      const c = categoryOf(a);
+      if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+    return counts;
+  };
+
+  let counts = categoryCounts();
+  if (counts.size >= minCategories) return ranked;
+
+  for (const cand of ranked.slice(displaySize)) {
+    if (counts.size >= minCategories) break;
+    const cat = categoryOf(cand);
+    if (!cat || counts.has(cat)) continue; // only a category the top lacks helps
+
+    // Free a slot by demoting the lowest-ranked top piece of an over-represented
+    // category (so we never drop a category the issue already covers).
+    const demote = ranked
+      .filter((a) => topSet.has(a))
+      .reverse()
+      .find((a) => {
+        const c = categoryOf(a);
+        return c != null && (counts.get(c) ?? 0) > 1 && a.explorationSlotType == null && !protect(a);
+      });
+    if (!demote) continue;
+
+    topSet.delete(demote);
+    topSet.add(cand);
+    counts = categoryCounts();
+  }
+
   const topArr = ranked.filter((a) => topSet.has(a));
   const restArr = ranked.filter((a) => !topSet.has(a));
   return [...topArr, ...restArr];
