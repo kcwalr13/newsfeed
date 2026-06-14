@@ -1,5 +1,34 @@
 import { sql } from '@/lib/db/client';
+import { registrableDomain } from '@/lib/utils/url';
 import type { ArticleBatch } from '../types/article';
+
+/**
+ * Returns, for every source domain shown in a batch dated strictly before
+ * `beforeBatchDate`, the most recent date it was shown — a `Map<registrable
+ * domain, last-shown YYYY-MM-DD>`. Used by the display-diversity reorder
+ * (P3-C2): a current-issue source whose domain is absent from this map has
+ * never been shown before; present entries' dates rank "least-recently-shown"
+ * for the fallback. Lean projection (source URLs only, no bodyText).
+ */
+export async function getShownSourceDomains(
+  beforeBatchDate: string
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  const rows = await sql`
+    SELECT elem->>'sourceUrl' AS source_url, MAX(ab.batch_date) AS last_shown
+    FROM article_batches ab
+    CROSS JOIN LATERAL jsonb_array_elements(ab.articles) AS elem
+    WHERE ab.batch_date < ${beforeBatchDate}
+    GROUP BY elem->>'sourceUrl'
+  `;
+  for (const r of rows as Array<{ source_url: string | null; last_shown: string }>) {
+    if (!r.source_url) continue;
+    const domain = registrableDomain(r.source_url);
+    const prev = result.get(domain);
+    if (!prev || r.last_shown > prev) result.set(domain, r.last_shown);
+  }
+  return result;
+}
 
 /**
  * `batch_date` is stored as TEXT, and every "newest wins" read (MAX(batch_date),

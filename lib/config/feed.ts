@@ -3,6 +3,18 @@
 /** Total articles in every daily batch. */
 export const ARTICLES_PER_DAY = 20;
 
+/** Number of pieces shown in a daily issue (the "displayed 7"). The feed page
+ *  renders the top this-many ranked articles. */
+export const ISSUE_DISPLAY_SIZE = 7;
+
+/** Minimum articles in the displayed issue that must come from a source the user
+ *  has never been shown (P3-C2) — enforced as a best-effort display reorder. */
+export const MIN_UNFAMILIAR_IN_ISSUE = 2;
+
+/** Minimum distinct editorial categories the displayed issue should span
+ *  (P3-C3) — enforced as a best-effort display reorder when the pool allows. */
+export const MIN_CATEGORIES_IN_ISSUE = 4;
+
 /** Fixed-source pipeline (RSS + NewsAPI) nominal contribution per day. */
 export const PIPELINE_ARTICLES_PER_DAY = 14;
 

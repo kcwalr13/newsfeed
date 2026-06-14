@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import type { FeedResponse } from '@/lib/types/article';
+import { ISSUE_DISPLAY_SIZE } from '@/lib/config/feed';
 import { initDeviceId } from '@/lib/identity/device';
 import { runMigrationIfNeeded, loadFromServer, drainQueue, getFeedback } from '@/lib/feedback/store';
 import ArticleCard from './components/ArticleCard';
@@ -179,8 +180,9 @@ export default function FeedPage() {
     })();
   }, [status, issueMetaStatus]);
 
-  // Show at most 7 articles ("seven a day" ritual) — the pipeline may return more candidates
-  const ISSUE_SIZE = 7;
+  // Show at most ISSUE_DISPLAY_SIZE articles ("seven a day" ritual) — the pipeline returns more
+  // candidates; the feed API has already reordered so the top span includes unfamiliar sources (P3-C2).
+  const ISSUE_SIZE = ISSUE_DISPLAY_SIZE;
   const displayArticles = data ? data.articles.slice(0, ISSUE_SIZE) : [];
   const total = displayArticles.length || ISSUE_SIZE;
   // "Read" = actioned: the reader has dealt with the piece — liked it, saved it,

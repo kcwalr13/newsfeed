@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { readBatch, readLatestBatch, patchBatchArticleFields } from '@/lib/pipeline/storage';
+import { readBatch, readLatestBatch, patchBatchArticleFields, getShownSourceDomains } from '@/lib/pipeline/storage';
 import { resolveSession } from '@/lib/auth/session';
 import { getFeedbackForUser, getFeedbackForDevice } from '@/lib/db/feedback';
 import type { DbFeedbackRow } from '@/lib/db/feedback';
@@ -9,8 +9,10 @@ import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthet
 import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
 import type { UserConcept } from '@/lib/types/concepts';
 import { EXPLORATION_BASELINE } from '@/lib/config/serendipity';
+import { ISSUE_DISPLAY_SIZE, MIN_UNFAMILIAR_IN_ISSUE } from '@/lib/config/feed';
 import { generateMissingRationales } from '@/lib/pipeline/rationaleGenerator';
 import { computeDiscoveryYield } from '@/lib/pipeline/discoveryMeta';
+import { promoteUnfamiliarSources } from '@/lib/pipeline/displayDiversity';
 
 export const dynamic = 'force-dynamic';
 
@@ -133,10 +135,26 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Display-diversity safety net (P3-C2): make sure the issue's top pieces
+  // include sources the user has never been shown. Best-effort — degrades to a
+  // no-op on any DB error (the ranked order still stands).
+  let displayArticles = rankedArticles;
+  try {
+    const shownDomains = await getShownSourceDomains(batch.batchDate);
+    displayArticles = promoteUnfamiliarSources(
+      rankedArticles,
+      shownDomains,
+      ISSUE_DISPLAY_SIZE,
+      MIN_UNFAMILIAR_IN_ISSUE
+    );
+  } catch (err) {
+    console.error('[feed/today] display-diversity reorder skipped:', err);
+  }
+
   // Strip internal fields before sending to client; keep explorationSlotType + rationale for
   // display. bodyText is stripped too — the feed renders cards only; the reader page loads the
   // body server-side via findArticleAcrossBatches.
-  const publicArticles = rankedArticles.map(article => {
+  const publicArticles = displayArticles.map(article => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, bodyText: _bt, ...rest } = article;
     return rest;
