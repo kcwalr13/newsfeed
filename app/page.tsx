@@ -107,15 +107,18 @@ export default function FeedPage() {
   );
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    // visibilitychange→visible and focus usually fire together when the user
+    // returns to the tab, so share one visibility-gated handler. drainQueue
+    // itself is also guarded (isDraining + empty-queue early-return), so a
+    // double-fire is a cheap no-op (R2-28).
+    const drainIfVisible = () => {
       if (document.visibilityState === 'visible') void drainQueue();
     };
-    const handleFocus = () => void drainQueue();
 
     async function initFeedback() {
       initDeviceId();
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', drainIfVisible);
+      window.addEventListener('focus', drainIfVisible);
       await runMigrationIfNeeded();
       await loadFromServer(); // falls back to localStorage on error — always resolves
       setFeedbackReady(true);
@@ -124,8 +127,8 @@ export default function FeedPage() {
     void initFeedback();
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', drainIfVisible);
+      window.removeEventListener('focus', drainIfVisible);
     };
   }, []);
 

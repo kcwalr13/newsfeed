@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 27 DONE (R2-01–R2-27) · 8 TODO. **All 5 Round-2 Highs + all Mediums complete.**
+  Progress: 28 DONE (R2-01–R2-28) · 7 TODO (D-01–D-06 docs + S-01 ops). **All 28 Round-2 code/UX findings complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-28**
+- Current branch: `main` · **Last resume point: D-01**
 
 ---
 
@@ -792,7 +792,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **R2-25** · 🟢 Low · Verb buttons use `aria-pressed` (toggle) for a mutually-exclusive 3-way group; `radiogroup` is more accurate. · DONE (commit pending): both verb groups (ArticleInteractions reader controls + ArticleCard feed controls) now wrap the dislike/like/save buttons in a `role="radiogroup" aria-label="Your response to this piece"` container, and each button is `role="radio" aria-checked={isActive}` instead of `aria-pressed`. Communicates mutual exclusivity rather than three independent toggles. (Re-clicking still clears the selection — a minor, intentional deviation from strict radio behavior.) Gate green; grep confirms no `aria-pressed` remains.
 - [x] **R2-26** · 🟢 Low · `<img>` has no `onError`/broken-image fallback (ArticleCard, article page) → empty duotone box. · DONE (commit pending): ArticleCard (client) tracks `imageError` and on `<img onError>` falls back to its existing drop-cap folio (the same no-image design) instead of an empty duotone box. The article page is a server component, so the hero `<img>` was extracted into a new client `app/components/HeroImage.tsx` that hides itself on error. Gate green (warning count unchanged — the no-img-element warning moved page.tsx → HeroImage.tsx).
 - [x] **R2-27** · 🟢 Low · Article page `publishedAt` uses raw `new Date()` (UTC) while archive got noon-anchoring (FE-M5 inconsistency). · DONE (commit pending): the reader's published-date now formats the calendar-date portion of `publishedAt` anchored at noon UTC with an explicit `timeZone:'UTC'`, so the (server) runtime timezone can't shift the displayed day — consistent with the archive's noon-anchoring. Added an invalid-date guard (was rendering "Invalid Date" on a bad value; now empty). Gate green + anchoring sanity check.
-- [ ] **R2-28** · 🟢 Low · Feed init effect + two listeners both call `drainQueue` (mild dev waste). · TODO
+- [x] **R2-28** · 🟢 Low · Feed init effect + two listeners both call `drainQueue` (mild dev waste). · DONE (commit pending): the separate init-effect `drainQueue` call cited by the finding is no longer in the code (the only call sites were the two listeners), and `drainQueue` is already guarded against overlapping/empty runs (`isDraining` + empty-queue early-return), so a double-fire is a cheap no-op. Consolidated the `visibilitychange` and `focus` handlers into one shared visibility-gated `drainIfVisible` handler (focus now also checks visibility). Gate green.
 
 ### Round 2 — Documentation
 - [ ] **D-01** · 🔴 High · README.md is still create-next-app boilerplate. Rewrite: product blurb, prereqs, `.env.example`→`.env.local`, `npm run db:migrate`, `npm run dev`, cron, pointers to CLAUDE.md/ARCHITECTURE.md. · TODO
@@ -1126,5 +1126,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **R2-26** → DONE: broken hero images fall back gracefully — ArticleCard → drop-cap folio (state),
   article page → new client `HeroImage` that hides on error. Gate green. Commit: d26b02b.
 - **R2-27** → DONE: article-page published date noon-anchored at UTC (explicit timeZone) + invalid
-  guard, consistent with archive (FE-M5). Gate green. Commit: pending.
-- RESUME AT: **R2-28**
+  guard, consistent with archive (FE-M5). Gate green. Commit: 06f272c.
+- **R2-28** → DONE: feed drain handlers consolidated into one visibility-gated handler; `drainQueue`
+  already guards overlapping/empty runs (no init-effect call remains). Gate green. Commit: pending.
+- **All 28 Round-2 code/UX findings (R2-01–R2-28) DONE + pushed.** Remaining: docs D-01–D-06, ops S-01.
+- RESUME AT: **D-01**
