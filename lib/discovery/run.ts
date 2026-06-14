@@ -326,25 +326,49 @@ export async function runDiscovery(
     qualified.push({ result, topic, llmScores: llmResult.scores, bodyText: extractResult.bodyText });
   });
 
-  // Adaptive threshold: prefer candidates at/above LLM_EVAL_THRESHOLD; if they
-  // don't fill the quota, top up by composite score from those at/above
-  // LLM_EVAL_FLOOR. A hard threshold previously rejected 100% of candidates on
-  // some runs, silently zeroing discovery.
+  // Hard-floor the discovery quota (P3-A1). Fill DISCOVERY_ARTICLES_PER_DAY in
+  // priority order, never shipping an empty/short quota silently:
+  //   1. candidates at/above LLM_EVAL_THRESHOLD (the editorial bar);
+  //   2. backfill the rest down to LLM_EVAL_FLOOR;
+  //   3. last resort — the best remaining by composite (below the floor) so a
+  //      run still fills its slots. An imperfect *discovered* piece advances the
+  //      core promise ("find sources you don't know") more than a 7th
+  //      fixed-source article. The below-floor count is always logged, so this
+  //      never happens silently and the floor stays a real, observable line.
+  // `qualified` is sorted desc, so slicing naturally honors that priority.
   qualified.sort((a, b) => b.llmScores.composite - a.llmScores.composite);
   const aboveThreshold = qualified.filter((c) => c.llmScores.composite >= LLM_EVAL_THRESHOLD);
+  const aboveFloor = qualified.filter((c) => c.llmScores.composite >= LLM_EVAL_FLOOR);
+
   if (qualified.length > 0 && aboveThreshold.length === 0) {
     const msg =
       `[discovery] 0% LLM pass rate: 0/${qualified.length} candidates met ` +
-      `LLM_EVAL_THRESHOLD=${LLM_EVAL_THRESHOLD}. Falling back to top-N >= ${LLM_EVAL_FLOOR}.`;
+      `LLM_EVAL_THRESHOLD=${LLM_EVAL_THRESHOLD}. Backfilling from floor/last-resort.`;
     console.error(msg);
     appendLog(msg);
   }
-  const pool = aboveThreshold.length >= DISCOVERY_ARTICLES_PER_DAY
-    ? aboveThreshold
-    : qualified.filter((c) => c.llmScores.composite >= LLM_EVAL_FLOOR);
-  const top = pool.slice(0, DISCOVERY_ARTICLES_PER_DAY);
+
+  const top = qualified.slice(0, DISCOVERY_ARTICLES_PER_DAY);
+  const belowFloorFilled = top.filter((c) => c.llmScores.composite < LLM_EVAL_FLOOR).length;
 
   stats.qualified = top.length;
+
+  // Structured yield log (P3-A1) — the discovery quota can never fail silently
+  // again. candidatesFound → gatePassed → scored → slotsFilled, plus the
+  // below-floor count when the last-resort backfill had to dip under the floor.
+  const yieldLine =
+    `[discovery] YIELD candidatesFound=${allCandidatePairs.length} ` +
+    `gatePassed=${toProcess.length} scored=${qualified.length} ` +
+    `aboveThreshold=${aboveThreshold.length} aboveFloor=${aboveFloor.length} ` +
+    `slotsFilled=${top.length}/${DISCOVERY_ARTICLES_PER_DAY} belowFloor=${belowFloorFilled} ` +
+    `(threshold=${LLM_EVAL_THRESHOLD} floor=${LLM_EVAL_FLOOR})`;
+  appendLog(yieldLine);
+  if (top.length === 0) {
+    // Genuinely found nothing this run — surface loudly, not silently.
+    console.error(`${yieldLine} — discovery surfaced 0 articles this run`);
+  } else if (top.length < DISCOVERY_ARTICLES_PER_DAY || belowFloorFilled > 0) {
+    console.warn(`${yieldLine} — quota under-filled or below-floor backfill used`);
+  }
 
   const extractFailSummary = Object.entries(stats.extractionFailed)
     .map(([k, v]) => `${v} ${k}`).join(', ') || '0';
