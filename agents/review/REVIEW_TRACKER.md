@@ -71,13 +71,11 @@ npm run dev           # for manual/browser spot-checks
 
 ## Progress summary
 
-- Tracked items (explicitly enumerated in this file, incl. all lows): 78
-- DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1 · TODO: 0 · BLOCKED: 0
-- **🎉 CAMPAIGN COMPLETE: every tracked finding is DONE, VERIFIED, DEFERRED (multi-user), or deliberately SKIPPED.**
-- (Earlier sessions used the report's coarser "47 findings" count; switched 2026-06-12 to
-  per-item counts because the lows are now being worked individually.)
+- Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
+- **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items, all TODO.**
+  See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · Last resume point: **— (campaign complete)**
+- Current branch: `main` · **Last resume point: R2-01** (start of Round 2)
 
 ---
 
@@ -680,6 +678,75 @@ threat models that don't apply yet. Revisit this whole section as step 1 of any 
 
 ---
 
+## ROUND 2 — Adversarial re-review backlog (2026-06-13)
+
+Fresh adversarial pass after Round 1 (four parallel deep-dive agents + live UX + documentation).
+Highest-value targets were **regressions the Round-1 fixes introduced**. Every High was re-verified
+directly in code. Full write-up: `Tangent_Adversarial_Re-Review.docx` (Kyle's Cowork outputs).
+Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain out of scope.
+
+### Round 2 — High
+- [ ] **R2-01** · 🔴 High · [REGRESSION DAT-L1 / blocks PIPE-H2] Drift state never persists — untyped null SQL param throws
+  - Where: `lib/db/aesthetics.ts:330,334` · `lib/utils/driftScore.ts:20-25`
+  - Fix: `computeDriftScore` returns `number|null` (null < 3 short-term events); cast the param — `driftScore::float8 IS NULL` / `< DRIFT_THRESHOLD` (lines 330,334 + two later refs). Throw is swallowed, so PIPE-H2's drift blend never activates. DAT-L1 was mis-closed.
+  - Status: TODO · Commit: — · Notes: —
+- [ ] **R2-02** · 🔴 High · [REGRESSION DAT-M5 × DAT-H3] Likes/saves on archived articles silently skip concept learning
+  - Where: `app/api/feedback/route.ts:175-176` · `lib/pipeline/storage.ts:154-167`
+  - Fix: feedback route resolves via `findArticleInLatestBatch` (scoped `MAX(batch_date)`), so non-today articles → null → `after()` concept-extraction returns early; probeInfo never recorded. Use `findArticleAcrossBatches(id)` (exists, GIN-indexed) or a `findArticleInAnyBatch` slim projection.
+  - Status: TODO · Commit: — · Notes: —
+- [ ] **R2-03** · 🔴 High · [REGRESSION DAT-H5] Pipeline run-lock can be stolen then deleted by a different run → concurrent batch writes
+  - Where: `lib/pipeline/cooldown.ts:82-84,21`
+  - Fix: `releasePipelineRunLock` is an unconditional `DELETE` (no owner token) and TTL(300s)==`maxDuration`. Store a random token at acquire, `DELETE … WHERE bucket_key=$1 AND token=$2`; raise TTL above maxDuration (~360s).
+  - Status: TODO · Commit: — · Notes: —
+- [ ] **R2-04** · 🔴 High · [REGRESSION FE-M9] Reading position lost on in-app navigation (no flush on unmount)
+  - Where: `app/components/ReadingPositionTracker.tsx:176-178`
+  - Fix: unmount cleanup only `clearTimeout` — a `<Link>` nav fires no blur/unload/visibility, so the last scroll+dwell is discarded. Flush synchronously on unmount if `currentIndexRef !== savedIndexRef` (keepalive), then clear the timer.
+  - Status: TODO · Commit: — · Notes: —
+- [ ] **R2-05** · 🔴 High · [REGRESSION PIPE-Q2] Low-value filter drops real "meetup" essays
+  - Where: `lib/discovery/qualityGate.ts:91,106`
+  - Fix: `\bmeetups?\b` + len≤60 drops "Why Meetup Culture Died in Silicon Valley" etc. (reproduced). Anchor the announcement shape (place/date/RSVP signal); add those titles as true-negative tests.
+  - Status: TODO · Commit: — · Notes: —
+
+### Round 2 — Medium
+- [ ] **R2-06** · 🟡 Medium · [REGRESSION SEC-H3] `feed/refresh` leaks raw `err.message` to unauth caller (`app/api/feed/refresh/route.ts:97`). Return generic 'Internal server error' like `pipeline/run`. · TODO
+- [ ] **R2-07** · 🟡 Medium · [REGRESSION SEC-H1] `feed/refresh` uses raw `dd_device_id` cookie (`route.ts:58`); use `extractDeviceId(req)`. · TODO
+- [ ] **R2-08** · 🟡 Medium · [SEC-H2 incomplete] Rate limiter bypassed via spoofed `X-Forwarded-For` (`lib/rateLimit.ts:24` reads left-most token). Read the Vercel-trusted right-most/`x-vercel-forwarded-for`. (Future-state severity.) · TODO
+- [ ] **R2-09** · 🟡 Medium · [DAT-M4 high-end] No upper bound on `paragraph_index`/`dwellSeconds` → INTEGER/NUMERIC overflow → 500. Clamp to ceilings. (reading-position + feedback routes) · TODO
+- [ ] **R2-10** · 🟡 Medium · `scripts/migrate.mjs:81-94` runs each multi-statement file outside a transaction (only 016 self-wraps); a mid-file failure leaves partial+unrecorded migration. Wrap each file + its `schema_migrations` insert in BEGIN/COMMIT. · TODO
+- [ ] **R2-11** · 🟡 Medium · `batch_date` is TEXT; "newest wins" relies on lexical=chronological order (`storage.ts` MAX/DISTINCT ON). Store as DATE or assert `^\d{4}-\d{2}-\d{2}$` on write. · TODO
+- [ ] **R2-12** · 🟡 Medium · Dot-strip `read` excludes dislikes (`app/page.tsx:183`), so "All N pieces read" is unreachable once any piece is passed. Count actioned (like/save/dislike) or reword. · TODO
+- [ ] **R2-13** · 🟡 Medium · Three CSS themes (dark/sepia/paper) are dead code — nothing sets `data-theme`, no `prefers-color-scheme` (`globals.css:23-53`); the "AA across 4 themes" work is unwired. Wire it or mark not-yet-live. · TODO
+- [ ] **R2-14** · 🟡 Medium · `useModalA11y` scroll-lock can leak (page stuck) if two modals overlap — per-instance `overflow` snapshot (`useModalA11y.ts:43-44,84`). Use a global ref-count lock. · TODO
+- [ ] **R2-15** · 🟡 Medium · [FE-M5 gap] `daysAgo` renders "−1 days ago" for future-dated batches (`archive/page.tsx:46-55`). `if (diff<0) return 'today'`. · TODO
+- [ ] **R2-16** · 🟡 Medium · `IssueCover` is `role="button"` wrapping a full dialog (`IssueCover.tsx:63-81`); use `role="dialog" aria-modal`. · TODO
+
+### Round 2 — Low (may batch into one `chore(R2-L)` commit)
+- [ ] **R2-17** · 🟢 Low · `bodyClean.ts` over-strips punctuated Title-Case closing sentences + short ledes; require `!TERMINAL_PUNCT` before headline-case trim. · TODO
+- [ ] **R2-18** · 🟢 Low · Discovery body+LLM loop fully sequential (`discovery/run.ts:253-313`) → fragile under latency; bounded concurrency (p-limit 3-4). · TODO
+- [ ] **R2-19** · 🟢 Low · Run-lock TTL == maxDuration; set ~280s (part of R2-03). · TODO
+- [ ] **R2-20** · 🟢 Low · `themeGenerator.ts:16-19` lacks the ANTHROPIC_API_KEY guard the other 5 LLM modules got (PIPE-H1 consistency). · TODO
+- [ ] **R2-21** · 🟢 Low · `REFRESH_COOLDOWN_MINUTES` non-numeric → NaN → `make_interval` throws → cooldown fails open (`config.ts:27-29`). Validate parse. · TODO
+- [ ] **R2-22** · 🟢 Low · `clientIp` returns literal `'unknown'` with no proxy headers (`rateLimit.ts:25`) → all share one bucket locally. · TODO
+- [ ] **R2-23** · 🟢 Low · `getValidatedBaseUrl` throws into fire-and-forget `.catch` on register/forgot → user gets "email sent" while none sent. Surface/ document. · TODO
+- [ ] **R2-24** · 🟢 Low · `useModalA11y` initial-focus target not visibility-filtered like the Tab list; brittle shared abstraction. · TODO
+- [ ] **R2-25** · 🟢 Low · Verb buttons use `aria-pressed` (toggle) for a mutually-exclusive 3-way group; `radiogroup` is more accurate. · TODO
+- [ ] **R2-26** · 🟢 Low · `<img>` has no `onError`/broken-image fallback (ArticleCard, article page) → empty duotone box. · TODO
+- [ ] **R2-27** · 🟢 Low · Article page `publishedAt` uses raw `new Date()` (UTC) while archive got noon-anchoring (FE-M5 inconsistency). · TODO
+- [ ] **R2-28** · 🟢 Low · Feed init effect + two listeners both call `drainQueue` (mild dev waste). · TODO
+
+### Round 2 — Documentation
+- [ ] **D-01** · 🔴 High · README.md is still create-next-app boilerplate. Rewrite: product blurb, prereqs, `.env.example`→`.env.local`, `npm run db:migrate`, `npm run dev`, cron, pointers to CLAUDE.md/ARCHITECTURE.md. · TODO
+- [ ] **D-02** · 🔴 High · CLAUDE.md env list incomplete (omits OWNER_EMAIL, ALLOWED_BASE_URLS, SMTP*, NEWSAPI_KEY, NEXTAUTH_URL, tuning knobs); duplicate "Environment Variables" heading; migration notes only cover 011/012 of 001–019 and never mention `npm run db:migrate`; misattributes receptivity/exploration cols to 012 (they're in 011). · TODO
+- [ ] **D-03** · 🔴 High · ARCHITECTURE.md (Last Updated 2026-04-20) stale: in-memory cooldown (now Postgres+run-lock), "8 sources" (now 12), "07:00 UTC" cron (actually 08:00), "Next.js 14+" (now 16), missing OWNER_EMAIL/ALLOWED_BASE_URLS, lists deleted components as shipped, omits rateLimit/run-lock/blind-spot-wiring/bodyClean/promptSafety/llm.ts and migrations 014–019. · TODO
+- [ ] **D-04** · 🟡 Medium · REVIEW_TRACKER.md: 45 Round-1 findings still say `Commit: pending` (never back-filled from Session Log hashes). Back-fill or add a top note deferring to the Session Log. · TODO
+- [ ] **D-05** · 🟡 Medium · Cron schedule contradiction: `vercel.json` 08:00 UTC vs ARCHITECTURE.md 07:00 UTC (×3). Fix the doc. · TODO
+- [ ] **D-06** · 🟢 Low · CLAUDE.md `decodeEntities` note now imprecise (shared named+numeric decoder; `htmlToPlainText` now strips chrome); "Next.js 14+" → 16. · TODO
+
+### Round 2 — Security (operational)
+- [ ] **S-01** · 🔴 High (ops) · Rotate secrets surfaced during review. `.env.local` (gitignored, never committed — verified) holds live ANTHROPIC_API_KEY, Neon `DATABASE_URL` w/ password, BRAVE_SEARCH_API_KEY, NEWSAPI_KEY, CRON_SECRET; values were read in-band during these review sessions. Rotate all five + update Vercel env; keep `.env.local` out of future review scope. (Not a code change.) · TODO
+
+---
+
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
 
@@ -891,7 +958,17 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - **PIPE-L7** → DONE: X-Api-Key header + 10s timeout on the dormant NewsAPI adapter.
   Commit: f1738be.
 - **PIPE-L9** → DONE: LLM_MODEL constant in lib/config/llm.ts; 7 files migrated. Commit: pending.
-- **CAMPAIGN COMPLETE** — no TODO findings remain. RESUME AT: — (nothing to resume; next session
-  should live-validate on the Vercel deploy: focus rings, modal a11y, tap targets, dot-strip
-  seeding on a fresh device, and the next cron run's logs for the budget/lock/canonicalizer
-  log lines).
+- **ROUND 1 COMPLETE** — all 78 items DONE/VERIFIED/DEFERRED/SKIPPED.
+
+### Session 3 — 2026-06-13 — adversarial re-review (reviewer, Cowork)
+- Fresh adversarial pass after Round 1: four parallel deep-dive agents (pipeline, data/security,
+  frontend, docs) + live UX + documentation. Every High re-verified directly in code.
+- Opened **Round 2**: 28 code/UX + 6 docs + 1 security = 35 new TODO items (see the ROUND 2 section).
+  Headline: 4 of the 5 Highs are **regressions Round-1 fixes introduced** — R2-01 drift param (PIPE-H2
+  inert), R2-02 archive likes skip concept learning, R2-03 run-lock stealable (DAT-H5), R2-04 reading
+  position lost on nav (FE-M9); plus R2-05 meetup over-filter (PIPE-Q2). Several "missed siblings" of
+  VERIFIED security fixes (R2-06/07/08). Docs largely stale (README boilerplate, ARCHITECTURE pre-campaign).
+- Gate still green (tsc + lint); all Round-1 wins re-confirmed intact (v4 ring syntax, darkened --dim,
+  SQLi closed, prompt fencing complete, 016 migration correct).
+- **S-01: recommend rotating the 5 secrets in `.env.local`** (read in-band during review).
+- RESUME AT: **R2-01**
