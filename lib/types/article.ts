@@ -116,6 +116,24 @@ export interface ArticleBatch {
   degraded?: boolean;
 }
 
+/**
+ * Editorial domain a fixed source belongs to. Used for per-category diversity
+ * caps (P3-B3), display diversity (P3-C3), and the metrics category breakdown
+ * (P3-D1). Discovered (non-fixed) articles have no category.
+ */
+export type SourceCategory =
+  | 'science'
+  | 'philosophy'
+  | 'ideas'
+  | 'economics'
+  | 'psychology'
+  | 'culture'
+  | 'music'
+  | 'art'
+  | 'design'
+  | 'film'
+  | 'literature';
+
 /** A content source entry from data/sources.json. */
 export interface Source {
   /** URL-safe unique identifier for this source (e.g. "bbc-news"). */
@@ -132,6 +150,8 @@ export interface Source {
   feedUrl?: string;
   /** Search query or endpoint hint. Used by the newsapi adapter. */
   query?: string;
+  /** Editorial domain of this source. Absent on legacy entries until backfilled. */
+  category?: SourceCategory;
 }
 
 /** A single feedback record stored per article in localStorage. */

@@ -5,7 +5,8 @@
     "url": "https://www.quantamagazine.org",
     "type": "rss",
     "feedUrl": "https://api.quantamagazine.org/feed/",
-    "active": true
+    "active": true,
+    "category": "science"
   },
   {
     "slug": "aeon",
@@ -13,7 +14,8 @@
     "url": "https://aeon.co",
     "type": "rss",
     "feedUrl": "https://aeon.co/feed.rss",
-    "active": true
+    "active": true,
+    "category": "philosophy"
   },
   {
     "slug": "nautilus",
@@ -21,7 +23,8 @@
     "url": "https://nautil.us",
     "type": "rss",
     "feedUrl": "https://nautil.us/feed/",
-    "active": true
+    "active": true,
+    "category": "science"
   },
   {
     "slug": "astral-codex-ten",
@@ -29,7 +32,8 @@
     "url": "https://www.astralcodexten.com",
     "type": "rss",
     "feedUrl": "https://www.astralcodexten.com/feed",
-    "active": true
+    "active": true,
+    "category": "ideas"
   },
   {
     "slug": "ribbonfarm",
@@ -37,7 +41,8 @@
     "url": "https://www.ribbonfarm.com",
     "type": "rss",
     "feedUrl": "https://www.ribbonfarm.com/feed/",
-    "active": true
+    "active": true,
+    "category": "ideas"
   },
   {
     "slug": "lesswrong",
@@ -45,7 +50,8 @@
     "url": "https://www.lesswrong.com",
     "type": "rss",
     "feedUrl": "https://www.lesswrong.com/feed.xml",
-    "active": true
+    "active": true,
+    "category": "ideas"
   },
   {
     "slug": "marginal-revolution",
@@ -53,7 +59,8 @@
     "url": "https://marginalrevolution.com",
     "type": "rss",
     "feedUrl": "https://marginalrevolution.com/feed",
-    "active": true
+    "active": true,
+    "category": "economics"
   },
   {
     "slug": "the-marginalian",
@@ -61,7 +68,8 @@
     "url": "https://www.themarginalian.org",
     "type": "rss",
     "feedUrl": "https://www.themarginalian.org/feed/",
-    "active": true
+    "active": true,
+    "category": "culture"
   },
   {
     "slug": "psyche",
@@ -69,7 +77,8 @@
     "url": "https://psyche.co",
     "type": "rss",
     "feedUrl": "https://psyche.co/feed.rss",
-    "active": true
+    "active": true,
+    "category": "psychology"
   },
   {
     "slug": "the-baffler",
@@ -77,7 +86,8 @@
     "url": "https://thebaffler.com",
     "type": "rss",
     "feedUrl": "https://thebaffler.com/feed",
-    "active": true
+    "active": true,
+    "category": "culture"
   },
   {
     "slug": "noema",
@@ -85,7 +95,8 @@
     "url": "https://www.noemamag.com",
     "type": "rss",
     "feedUrl": "https://www.noemamag.com/?feed=noemarss",
-    "active": true
+    "active": true,
+    "category": "ideas"
   },
   {
     "slug": "works-in-progress",
@@ -93,7 +104,8 @@
     "url": "https://www.worksinprogress.news",
     "type": "rss",
     "feedUrl": "https://www.worksinprogress.news/feed",
-    "active": true
+    "active": true,
+    "category": "science"
   },
   {
     "slug": "the-quietus",
