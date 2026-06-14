@@ -18,10 +18,28 @@ export interface RateLimitRule {
   windowSeconds: number;
 }
 
-/** Best-effort client IP from proxy headers (Vercel sets x-forwarded-for). */
+/**
+ * Best-effort client IP from proxy headers, hardened against X-Forwarded-For
+ * spoofing (R2-08). The LEFT-most XFF token is whatever the client sent and is
+ * trivially forgeable (`X-Forwarded-For: 1.2.3.4, <real ip>`), so a limiter
+ * keyed off it can be bypassed by rotating that value. We therefore:
+ *   1. Prefer `x-vercel-forwarded-for` — set by Vercel's edge from the real TCP
+ *      peer and not overridable by the client.
+ *   2. Else take the RIGHT-most `x-forwarded-for` entry — the one appended by
+ *      the trusted proxy nearest us, which the client cannot control.
+ *   3. Else `x-real-ip`, else 'unknown'.
+ */
 export function clientIp(req: NextRequest): string {
+  const vercel = req.headers.get('x-vercel-forwarded-for');
+  if (vercel) {
+    const first = vercel.split(',')[0]?.trim();
+    if (first) return first;
+  }
   const xff = req.headers.get('x-forwarded-for');
-  if (xff) return xff.split(',')[0]!.trim();
+  if (xff) {
+    const parts = xff.split(',').map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1]!;
+  }
   return req.headers.get('x-real-ip') ?? 'unknown';
 }
 
