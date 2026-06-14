@@ -2,11 +2,27 @@ import { sql } from '@/lib/db/client';
 import type { ArticleBatch } from '../types/article';
 
 /**
+ * `batch_date` is stored as TEXT, and every "newest wins" read (MAX(batch_date),
+ * DISTINCT ON … ORDER BY batch_date DESC, batch_date < $1) relies on lexical
+ * order matching chronological order — which only holds for the zero-padded
+ * `YYYY-MM-DD` shape. We assert that shape on write rather than migrating the
+ * column to DATE: every existing value already conforms, and a DATE column would
+ * make the driver return JS Date objects instead of strings, breaking the many
+ * read sites (and URL `?batch=` params) that treat batch_date as a string (R2-11).
+ */
+export const BATCH_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
  * Writes a batch to the article_batches table.
  * When force is false (default), does NOT overwrite an existing row.
  * Returns true if the batch was written.
  */
 export async function writeBatch(batch: ArticleBatch, force = false): Promise<boolean> {
+  if (!BATCH_DATE_RE.test(batch.batchDate)) {
+    throw new Error(
+      `Refusing to write batch with non-YYYY-MM-DD batch_date: ${JSON.stringify(batch.batchDate)}`
+    );
+  }
   if (!force) {
     const existing = await readBatch(batch.batchDate);
     if (existing) return false;
