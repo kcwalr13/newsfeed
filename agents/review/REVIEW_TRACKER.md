@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 2 DONE (R2-01, R2-02) · 33 TODO.
+  Progress: 4 DONE (R2-01, R2-02, R2-03, R2-19) · 31 TODO.
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-03**
+- Current branch: `main` · **Last resume point: R2-04**
 
 ---
 
@@ -717,11 +717,24 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
     Net effect: archived likes/saves now resolve the article → `after()` concept extraction runs
     (`article.bodyText` present) and `probeInfo` routing fires. Verified: tsc + lint + build green;
     live-Neon read-only check — a 2026-04-20-batch article returns 0 rows under the old latest-only
-    query but 1 row (with bodyText) under the new any-batch query. See Decisions Log.
-- [ ] **R2-03** · 🔴 High · [REGRESSION DAT-H5] Pipeline run-lock can be stolen then deleted by a different run → concurrent batch writes
+    query but 1 row (with bodyText) under the new any-batch query. Commit: 2d92867. See Decisions Log.
+- [x] **R2-03** · 🔴 High · [REGRESSION DAT-H5] Pipeline run-lock can be stolen then deleted by a different run → concurrent batch writes
   - Where: `lib/pipeline/cooldown.ts:82-84,21`
   - Fix: `releasePipelineRunLock` is an unconditional `DELETE` (no owner token) and TTL(300s)==`maxDuration`. Store a random token at acquire, `DELETE … WHERE bucket_key=$1 AND token=$2`; raise TTL above maxDuration (~360s).
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: **Also resolves R2-19** (same TTL line).
+    `acquirePipelineRunLock()` now returns `{ acquired, token }` and stores a fresh random token
+    (`crypto.getRandomValues`, range [1,2147483647]) in the lock row's otherwise-unused `count`
+    INTEGER column — no schema migration needed (consistent with DAT-H5's "reuse rate_limits"
+    decision). The conflict update now also sets `count = EXCLUDED.count` so a stolen expired lock
+    carries the new holder's token. `releasePipelineRunLock(token)` deletes `WHERE bucket_key=$1
+    AND count=$2`, so a run whose lock expired and was re-claimed can no longer delete the new
+    holder's lock (the "stolen then deleted → concurrent writes" cascade). TTL raised 300→**360s**
+    (above maxDuration 300) so a still-alive run never loses its lock — chose R2-03's ~360s over
+    R2-19's ~280s because 280 < maxDuration would re-open the exact race (see Decisions Log). Both
+    callers (`pipeline/run`, `feed/refresh`) updated to capture `lock.token` and pass it to release.
+    Verified: tsc + lint + build green; live-Neon check on an isolated test key (7/7 assertions:
+    mutual exclusion, wrong-token release no-ops, correct-token release deletes, expired-steal
+    cascade broken) — test key cleaned up, real lock row untouched.
 - [ ] **R2-04** · 🔴 High · [REGRESSION FE-M9] Reading position lost on in-app navigation (no flush on unmount)
   - Where: `app/components/ReadingPositionTracker.tsx:176-178`
   - Fix: unmount cleanup only `clearTimeout` — a `<Link>` nav fires no blur/unload/visibility, so the last scroll+dwell is discarded. Flush synchronously on unmount if `currentIndexRef !== savedIndexRef` (keepalive), then clear the timer.
@@ -747,7 +760,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 ### Round 2 — Low (may batch into one `chore(R2-L)` commit)
 - [ ] **R2-17** · 🟢 Low · `bodyClean.ts` over-strips punctuated Title-Case closing sentences + short ledes; require `!TERMINAL_PUNCT` before headline-case trim. · TODO
 - [ ] **R2-18** · 🟢 Low · Discovery body+LLM loop fully sequential (`discovery/run.ts:253-313`) → fragile under latency; bounded concurrency (p-limit 3-4). · TODO
-- [ ] **R2-19** · 🟢 Low · Run-lock TTL == maxDuration; set ~280s (part of R2-03). · TODO
+- [x] **R2-19** · 🟢 Low · Run-lock TTL == maxDuration; set ~280s (part of R2-03). · DONE (in R2-03, commit pending): TTL raised 300→360s (ABOVE maxDuration 300), not the finding's suggested 280s — 280 < maxDuration would let a still-alive run lose its lock and re-open the steal race R2-03 fixes. See R2-03 Notes + Decisions Log.
 - [ ] **R2-20** · 🟢 Low · `themeGenerator.ts:16-19` lacks the ANTHROPIC_API_KEY guard the other 5 LLM modules got (PIPE-H1 consistency). · TODO
 - [ ] **R2-21** · 🟢 Low · `REFRESH_COOLDOWN_MINUTES` non-numeric → NaN → `make_interval` throws → cooldown fails open (`config.ts:27-29`). Validate parse. · TODO
 - [ ] **R2-22** · 🟢 Low · `clientIp` returns literal `'unknown'` with no proxy headers (`rateLimit.ts:25`) → all share one bucket locally. · TODO
@@ -791,6 +804,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-12 | PIPE-M6 | Canonicalizer applied to dedup passes only, NOT the article id hash (report suggested both) | Article ids key feedback + reading-position rows; rehashing canonicalized URLs would orphan all existing user data for any article whose URL carries query params. Dedup-only captures the user-facing win (no duplicate articles in a batch) at zero migration cost. |
 | 2026-06-12 | (scope) | Deferred remaining security hardening (SEC-M2/M3/L1/L2) + the SEC-C1 password-protection recommendation to a new *Future state — multi-user rollout* section; not enabling Vercel password protection | Kyle confirmed Tangent is private/single-user. These defend multi-user/abuse threat models that don't apply yet; production password protection is a ~$150/mo Vercel Pro feature. Revisit at multi-user rollout. |
 | 2026-06-13 | R2-02 | Added a new `findArticleInAnyBatch` slim SQL-side JSONB projection rather than reusing the existing `findArticleAcrossBatches`; removed the now-orphaned `findArticleInLatestBatch` | The finding offered either option. `findArticleAcrossBatches` returns the whole batch `articles` array (all bodyText) — calling it on every like/save would undo the DAT-M5 wire-cost win (the very kind of regression this Round-2 campaign targets). The slim projection resolves across all batches while transferring only the one matching element, satisfying both R2-02 and DAT-M5. The old latest-only helper was dead after the swap (no repo-wide references), so it was removed instead of left as dead code. |
+| 2026-06-13 | R2-03 / R2-19 | Run-lock TTL set to **360s** (above maxDuration 300), NOT R2-19's suggested ~280s; owner token stored in the `rate_limits.count` column instead of adding a `token` column via migration | R2-03 (High, authoritative) and R2-19 (Low) gave contradictory TTL numbers. 280s is *below* maxDuration — a run still alive at t∈[280,300] would have its lock auto-expire and could be stolen, re-opening the very race R2-03 closes; the safety net must outlive the longest possible run. Storing the token in the unused `count` INTEGER (random [1,2147483647]) keeps the zero-migration approach DAT-H5 chose for this lock, so the fix is deploy-safe immediately with no `BLOCKED-ON-APPLY`. Resolved R2-19 inside the R2-03 commit because it is literally the same line, not a separate change. |
 
 ---
 
@@ -1011,5 +1025,11 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   → null for archive articles → `after()` concept extraction returned early + probeInfo unread).
   Removed the orphaned latest-only helper; chose the slim projection over `findArticleAcrossBatches`
   to preserve the DAT-M5 wire-cost win (see Decisions Log). Verified: gate green + live-Neon check
-  (old-batch article: 0 rows latest-only, 1 row with bodyText any-batch). Commit: pending.
-- RESUME AT: **R2-03**
+  (old-batch article: 0 rows latest-only, 1 row with bodyText any-batch). Commit: 2d92867.
+- **R2-03** (+ **R2-19**) → DONE: pipeline run-lock is now token-scoped. Random token stored in the
+  lock row's `count` column (no migration); `releasePipelineRunLock(token)` only deletes the row it
+  owns, breaking the "expired lock stolen by run B, then deleted by zombie run A → concurrent batch
+  writes" cascade. TTL 300→360s (above maxDuration). Both pipeline entry routes pass `lock.token`.
+  Verified: gate green + live-Neon isolated-test-key check (7/7: mutual exclusion, token-scoped
+  release, expired-steal cascade broken). Commit: pending.
+- RESUME AT: **R2-04**

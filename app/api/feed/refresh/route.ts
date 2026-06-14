@@ -47,7 +47,8 @@ export async function POST(req: NextRequest) {
 
   // Global run lock: never let two pipeline runs (refresh × refresh, or
   // refresh × cron) execute concurrently and clobber each other's batch.
-  if (!(await acquirePipelineRunLock())) {
+  const lock = await acquirePipelineRunLock();
+  if (!lock.acquired) {
     return NextResponse.json(
       { error: 'A pipeline run is already in progress' },
       { status: 409 }
@@ -98,6 +99,6 @@ export async function POST(req: NextRequest) {
     appendLog(`[refresh] Manual refresh failed. userId=${userId} error=${message}`);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   } finally {
-    await releasePipelineRunLock();
+    await releasePipelineRunLock(lock.token);
   }
 }

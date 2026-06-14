@@ -24,7 +24,8 @@ function authorize(req: NextRequest): boolean {
 async function handleRun() {
   // Same global lock as /api/feed/refresh: a manual refresh and the cron run
   // must never execute the pipeline concurrently (DAT-H5).
-  if (!(await acquirePipelineRunLock())) {
+  const lock = await acquirePipelineRunLock();
+  if (!lock.acquired) {
     return NextResponse.json(
       { ok: false, error: 'A pipeline run is already in progress' },
       { status: 409 }
@@ -61,7 +62,7 @@ async function handleRun() {
     console.error('[pipeline/run] run failed:', err);
     return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
   } finally {
-    await releasePipelineRunLock();
+    await releasePipelineRunLock(lock.token);
   }
 }
 
