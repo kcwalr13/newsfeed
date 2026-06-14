@@ -74,9 +74,9 @@ npm run dev           # for manual/browser spot-checks
 - Round 1 (original review): 78 items — DONE/VERIFIED: 73 · DEFERRED (multi-user): 4 · SKIPPED: 1. ✅ complete.
 - **Round 2 (adversarial re-review, 2026-06-13): 28 code/UX + 6 docs + 1 security = 35 NEW items.**
   See the "ROUND 2" section below. 5 High (4 are regressions the Round-1 fixes introduced), 11 Medium, 12 Low, 6 Docs, 1 Security-ops.
-  Progress: 12 DONE (R2-01–R2-11, R2-19) · 23 TODO. **All 5 Round-2 Highs complete.**
+  Progress: 13 DONE (R2-01–R2-12, R2-19) · 22 TODO. **All 5 Round-2 Highs complete.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
-- Current branch: `main` · **Last resume point: R2-12**
+- Current branch: `main` · **Last resume point: R2-13**
 
 ---
 
@@ -774,7 +774,7 @@ Same campaign policy/workflow as Round 1. Work in order; `DEFERRED` items remain
 - [x] **R2-09** · 🟡 Medium · [DAT-M4 high-end] No upper bound on `paragraph_index`/`dwellSeconds` → INTEGER/NUMERIC overflow → 500. Clamp to ceilings. (reading-position + feedback routes) · DONE (commit pending): added shared ceilings `MAX_DWELL_SECONDS=99_999` + `MAX_PARAGRAPH_INDEX=100_000` to `lib/config/aesthetic.ts`. reading-position route clamps both before upsert (`reading_positions.{paragraph_index,dwell_seconds}` are INTEGER); feedback route clamps `parsedDwell` (`feedback.dwell_seconds` is NUMERIC(7,2), max 99999.99 — the binding limit). Verified: gate green + live-Neon read-only boundary check (99999 fits NUMERIC(7,2)/INTEGER; 100000 → "numeric field overflow", the 500 prevented). Clamp not reject (report default); see Decisions Log.
 - [x] **R2-10** · 🟡 Medium · `scripts/migrate.mjs:81-94` runs each multi-statement file outside a transaction (only 016 self-wraps); a mid-file failure leaves partial+unrecorded migration. Wrap each file + its `schema_migrations` insert in BEGIN/COMMIT. · DONE (commit pending): the apply loop now wraps each migration + its `schema_migrations` insert in a runner-owned `BEGIN`…`COMMIT` with `ROLLBACK` on error, so a partial file rolls back and is never recorded. A file that opens its own top-level transaction (legacy 016) is detected via `^\s*BEGIN(\s+transaction|work)?\s*;` and run as-is to avoid nesting — the regex deliberately ignores plpgsql `DO $$ BEGIN … END $$` block openers (009/018). Verified: `node --check`; classification check (only 016 self-manages, 18 wrapped incl. 009/018); gate green; `db:migrate:status` connects and shows all 19 applied / 0 pending. See Decisions Log.
 - [x] **R2-11** · 🟡 Medium · `batch_date` is TEXT; "newest wins" relies on lexical=chronological order (`storage.ts` MAX/DISTINCT ON). Store as DATE or assert `^\d{4}-\d{2}-\d{2}$` on write. · DONE (commit pending): chose the **assert-on-write** option (not the DATE migration). `writeBatch` now throws unless `batch.batchDate` matches `BATCH_DATE_RE = /^\d{4}-\d{2}-\d{2}$/`, so the only insert path can never persist a value that breaks lexical=chronological ordering. No schema change / no BLOCKED-ON-APPLY: every existing value already conforms (`todayUTC()` = `toISOString().slice(0,10)`), and converting to DATE would make the Neon driver return JS `Date` objects instead of the strings all the read sites + `?batch=` params depend on. The assert is a pure safety net (never fires on legit runs). Verified: gate green + regex sanity matrix. See Decisions Log.
-- [ ] **R2-12** · 🟡 Medium · Dot-strip `read` excludes dislikes (`app/page.tsx:183`), so "All N pieces read" is unreachable once any piece is passed. Count actioned (like/save/dislike) or reword. · TODO
+- [x] **R2-12** · 🟡 Medium · Dot-strip `read` excludes dislikes (`app/page.tsx:183`), so "All N pieces read" is unreachable once any piece is passed. Count actioned (like/save/dislike) or reword. · DONE (commit pending): took the report's primary option — `read` now counts any actioned piece (`like`/`save`/`dislike`), so passing on a piece counts toward progress and "All N pieces read. Well done." (and the dot strip / `read`/total / "N more to go") becomes reachable. Gate green.
 - [ ] **R2-13** · 🟡 Medium · Three CSS themes (dark/sepia/paper) are dead code — nothing sets `data-theme`, no `prefers-color-scheme` (`globals.css:23-53`); the "AA across 4 themes" work is unwired. Wire it or mark not-yet-live. · TODO
 - [ ] **R2-14** · 🟡 Medium · `useModalA11y` scroll-lock can leak (page stuck) if two modals overlap — per-instance `overflow` snapshot (`useModalA11y.ts:43-44,84`). Use a global ref-count lock. · TODO
 - [ ] **R2-15** · 🟡 Medium · [FE-M5 gap] `daysAgo` renders "−1 days ago" for future-dated batches (`archive/page.tsx:46-55`). `if (diff<0) return 'today'`. · TODO
@@ -1084,5 +1084,8 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   classification check, gate green, `db:migrate:status` healthy. Commit: c86aac8.
 - **R2-11** → DONE: `writeBatch` asserts `batch_date` matches `^\d{4}-\d{2}-\d{2}$` (chose
   assert-on-write over a TEXT→DATE migration to avoid the driver returning Date objects across all
-  read sites). Safety net — never fires on legit runs. Gate green + regex matrix. Commit: pending.
-- RESUME AT: **R2-12**
+  read sites). Safety net — never fires on legit runs. Gate green + regex matrix. Commit: 4a00512.
+- **R2-12** → DONE: feed "read" count now includes dislikes (counts actioned like/save/dislike), so
+  "All N pieces read. Well done." and the dot-strip completion state are reachable after passing on
+  pieces. Gate green. Commit: pending.
+- RESUME AT: **R2-13**

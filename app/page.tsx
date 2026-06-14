@@ -180,7 +180,14 @@ export default function FeedPage() {
   const ISSUE_SIZE = 7;
   const displayArticles = data ? data.articles.slice(0, ISSUE_SIZE) : [];
   const total = displayArticles.length || ISSUE_SIZE;
-  const read = displayArticles.filter(a => feedbackSnapshot[a.id] === 'like' || feedbackSnapshot[a.id] === 'save').length;
+  // "Read" = actioned: the reader has dealt with the piece — liked it, saved it,
+  // or passed on it (dislike). Counting only like/save left disliked pieces
+  // permanently "unread", so "All N pieces read" was unreachable once any piece
+  // was passed (R2-12).
+  const read = displayArticles.filter(a => {
+    const v = feedbackSnapshot[a.id];
+    return v === 'like' || v === 'save' || v === 'dislike';
+  }).length;
   const remaining = total - read;
 
   const handleFeedbackChange = useCallback((articleId: string, value: string | null) => {
