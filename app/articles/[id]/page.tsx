@@ -42,11 +42,18 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   const folio = Number.isInteger(parsedPos) && parsedPos > 0 ? parsedPos : articleIndex + 1;
   const total = Number.isInteger(parsedTotal) && parsedTotal > 0 ? parsedTotal : batchTotal;
 
-  const publishedDate = new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(article.publishedAt));
+  // Format from the calendar-date portion anchored at noon UTC, with an explicit
+  // timeZone, so the (server) runtime timezone can't shift the displayed day —
+  // consistent with the archive's noon-anchoring (FE-M5 / R2-27).
+  const publishedAtDate = new Date(article.publishedAt);
+  const publishedDate = Number.isNaN(publishedAtDate.getTime())
+    ? ''
+    : new Intl.DateTimeFormat('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(new Date(`${publishedAtDate.toISOString().slice(0, 10)}T12:00:00Z`));
 
   const bodyText = article.bodyText
     ? decodeHtmlEntities(cleanBodyText(article.bodyText))
