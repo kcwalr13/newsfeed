@@ -105,10 +105,11 @@ export interface FeedResponse {
    */
   discoveryCount?: number;
   /**
-   * Unique registrable domains of the discovery-sourced articles (P3-A4).
-   * Powers the discovery-share / sources metrics (Workstream D).
+   * Unique discovered sources — domain + human-readable name (P3-A4 / R4-02).
+   * Powers the discovery-share / sources metrics (Workstream D) and lets the UI
+   * show "Art Walkway" rather than "artwalkway.com".
    */
-  discoverySources?: string[];
+  discoverySources?: Array<{ domain: string; name: string }>;
 }
 
 /** The on-disk representation of a daily article batch. */
