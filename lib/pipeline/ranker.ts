@@ -8,8 +8,7 @@ import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthet
 import {
   vectorToArray,
   centerAestheticArray,
-  AESTHETIC_WEIGHT,
-  SOURCE_SCORE_WEIGHT,
+  aestheticWeightForFeedback,
   SHORT_TERM_WEIGHT,
   LONG_TERM_WEIGHT,
   DRIFT_SHORT_TERM_WEIGHT,
@@ -220,6 +219,13 @@ export function rankFeed(
     ? centerAestheticArray(vectorToArray(blendedCentroid))
     : null;
 
+  // Adaptive blend weight (P3-C1): trust source reputation when feedback is
+  // sparse, the learned taste as the model matures. Ramps the aesthetic weight
+  // up with the total feedback-event count; the source weight is its complement,
+  // so the blend always sums to 1. Computed once — constant across the batch.
+  const aestheticWeight = aestheticWeightForFeedback(feedbackRows.length);
+  const sourceWeight = 1 - aestheticWeight;
+
   // Returns the blended rank score for an article.
   // When aestheticProfile is absent, collapses to source score only.
   function blendedScore(article: Article): number {
@@ -233,7 +239,7 @@ export function rankFeed(
       ? cosineSimilarity(centroidArray, centerAestheticArray(vectorToArray(scoreVec)))
       : 0.0;
 
-    return SOURCE_SCORE_WEIGHT * ss + AESTHETIC_WEIGHT * aestheticProximity;
+    return sourceWeight * ss + aestheticWeight * aestheticProximity;
   }
 
   // Step 3: Sort non-suppressed articles by (blendedScore DESC, publishedAt DESC)

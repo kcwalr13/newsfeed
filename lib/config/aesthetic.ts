@@ -8,10 +8,14 @@ import type { AestheticScoreVector } from '@/lib/types/aesthetic';
  *  contributes 20% weight; the accumulated prior contributes 80%. */
 export const AESTHETIC_ALPHA = 0.2;
 
-/** Weight of aesthetic proximity signal in the blended rank score (0–1). */
+/** Weight of aesthetic proximity signal in the blended rank score (0–1).
+ *  This is the *base* weight, used when feedback is sparse (cold start). The
+ *  effective weight ramps up with taste-model maturity — see
+ *  `aestheticWeightForFeedback` (P3-C1). */
 export const AESTHETIC_WEIGHT = 0.3;
 
-/** Weight of source Wilson-score signal in the blended rank score (0–1). */
+/** Weight of source Wilson-score signal in the blended rank score (0–1).
+ *  Base (cold-start) complement of AESTHETIC_WEIGHT. */
 export const SOURCE_SCORE_WEIGHT = 0.7;
 
 // Invariant: must sum to 1.0. Asserted at module load time.
@@ -20,6 +24,38 @@ if (Math.abs(AESTHETIC_WEIGHT + SOURCE_SCORE_WEIGHT - 1.0) > 1e-10) {
     `[config/aesthetic] Blend weight mismatch: AESTHETIC_WEIGHT (${AESTHETIC_WEIGHT}) ` +
     `+ SOURCE_SCORE_WEIGHT (${SOURCE_SCORE_WEIGHT}) must equal 1.0`
   );
+}
+
+/** Aesthetic weight at full taste-model maturity (ample feedback). The blend
+ *  ramps from AESTHETIC_WEIGHT up to this as the user teaches the system, so a
+ *  mature model trusts the learned taste over raw source reputation (P3-C1). */
+export const AESTHETIC_WEIGHT_MAX = 0.5;
+
+/** Number of feedback events at which the aesthetic weight reaches
+ *  AESTHETIC_WEIGHT_MAX. The ramp is linear from 0 events to this count. */
+export const AESTHETIC_WEIGHT_SATURATION_COUNT = 50;
+
+// Invariant: the ramp must move the aesthetic weight UP with maturity (never
+// below the cold-start base, never above 1.0). Asserted at module load time so
+// a bad edit fails fast — the design's "ramp aesthetic weight UP, not down" risk.
+if (AESTHETIC_WEIGHT_MAX < AESTHETIC_WEIGHT || AESTHETIC_WEIGHT_MAX > 1.0) {
+  throw new Error(
+    `[config/aesthetic] AESTHETIC_WEIGHT_MAX (${AESTHETIC_WEIGHT_MAX}) must be in ` +
+    `[AESTHETIC_WEIGHT (${AESTHETIC_WEIGHT}), 1.0]`
+  );
+}
+
+/**
+ * Adaptive aesthetic blend weight (P3-C1). Ramps linearly from AESTHETIC_WEIGHT
+ * (sparse feedback → trust source reputation) up to AESTHETIC_WEIGHT_MAX (ample
+ * feedback → trust the learned taste), saturating at
+ * AESTHETIC_WEIGHT_SATURATION_COUNT feedback events. The complementary source
+ * weight is `1 - this`, so the blend always sums to 1.0 at any maturity.
+ */
+export function aestheticWeightForFeedback(feedbackCount: number): number {
+  const n = Number.isFinite(feedbackCount) && feedbackCount > 0 ? feedbackCount : 0;
+  const t = Math.min(1, n / AESTHETIC_WEIGHT_SATURATION_COUNT);
+  return AESTHETIC_WEIGHT + (AESTHETIC_WEIGHT_MAX - AESTHETIC_WEIGHT) * t;
 }
 
 // ── Scale bounds ──────────────────────────────────────────────────────────────
