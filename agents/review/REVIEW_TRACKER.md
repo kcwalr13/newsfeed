@@ -90,8 +90,8 @@ npm run dev           # for manual/browser spot-checks
 - **Round 4 (post-Round-3 adversarial review, 2026-06-14): 13 NEW items, all TODO.** See the "ROUND 4"
   section below. 2 High (R4-01 colophon/theme credits the wrong 7 — live-confirmed; R4-08 onboarding seed
   fallback writes phantom rows + doesn't seed the EMA), 6 Medium, 5 Low. **Docs were brought current in
-  this session** (README, CLAUDE.md, ARCHITECTURE.md — uncommitted working-tree edits; commit them).
-  **Last resume point: R4-01.**
+  this session** (README, CLAUDE.md, ARCHITECTURE.md — committed in `33d6b18`).
+  Round-4 progress: **1 DONE (R4-01) · 12 TODO.** **Last resume point: R4-08.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -893,7 +893,28 @@ Operational order: the two Highs first.
   - Where: `app/api/issue/meta/route.ts` (`buildSourceCredits`, `generateTheme` over `batch.articles` raw order) vs `app/api/feed/today/route.ts:144-159` (rank + C2/C3 reorder) + `app/page.tsx:215`
   - **Live-confirmed:** reader sees Quanta/Aeon/Prism News/Aquarium Drunkard/Nautilus/The Baffler/The Marginalian, but the colophon credits "Quanta ×5, Aeon ×2" and the theme reads "science and philosophy" — the framing undersells the breadth Round 3 created.
   - Fix: apply the same rank + display-diversity reorder in `/api/issue/meta` (share a single "resolve displayed 7" helper with the feed route), or persist the final displayed order/folio once at assembly time and read it in both. Acceptance: colophon credits + theme match the displayed 7.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Extracted the displayed-order resolution into a single
+    shared helper `lib/pipeline/displayedFeed.ts` (`resolveDisplayedFeed(req, batch)`): resolves
+    identity + feedback/profile/scores/concepts, runs `rankFeed`, then the C2/C3 display-diversity
+    reorders — returning the full reordered list (NOT sliced). `app/api/feed/today/route.ts` is
+    refactored to use it (behavior-equivalent: same rank → C2/C3 → rationale gen → strip; rationale
+    gen moved after the diversity reorder, which is order-independent since both are pure reorders of
+    the same Article references). `app/api/issue/meta/route.ts` now builds the colophon/theme from
+    `resolveDisplayedFeed(...).articles` (buildIssueMetadata slices its arg to the first 7 for BOTH
+    `generateTheme` and `buildSourceCredits`), so credits + theme reflect the displayed seven. Added
+    `ISSUE_META_VERSION=2` + an optional `DailyIssue.metaVersion`; issue/meta treats cached metadata
+    with `metaVersion < 2` (raw-order, pre-R4-01) as a miss and regenerates it exactly once, so the
+    fix is verifiable on the live deploy without waiting for the next cron. `Colophon`/`IssueCover`
+    consume `issueMeta.sources`/`.theme` directly (no parallel credit path). **Product-outcome
+    verification:** by construction both routes resolve the same first-7 via the identical helper
+    with the same inputs → identical credits + theme; an adversarial-review subagent confirmed
+    behavior-equivalence on both the success and identity-failure paths, a bounded single
+    regeneration (no infinite loop / null-deref), and that theme+credits share one `slice(0,7)`. The
+    R3 known gap (`/api/issue/meta` crediting a different 7 than displayed) is closed. Live two-route
+    compare deferred to the deploy (the device cookie resolves Kyle's identity; running it here would
+    write anonymous-order metadata to the live colophon — same precedent as P3-E3). Files:
+    `lib/pipeline/displayedFeed.ts` (new), `app/api/feed/today/route.ts`, `app/api/issue/meta/route.ts`,
+    `lib/pipeline/themeGenerator.ts`, `lib/types/article.ts`. Verified: tsc + lint (0 errors) + build green.
 - [ ] **R4-08** · 🔴 High · [REGRESSION from P3-E1/E3] Onboarding seed-set fallback writes phantom feedback rows and never seeds the aesthetic EMA
   - Where: `app/api/onboarding/calibration/route.ts:34-42` (synthetic `seed-…` IDs), `app/page.tsx` handler → `setFeedback` → `POST /api/feedback`; `app/api/feedback/route.ts:55-60` (`getArticleAestheticScore('seed-…')` → null → EMA skipped); `feedback.article_id` is FK-less.
   - Impact: when the seed fallback fires (no batch OR any DB hiccup in `getArticleAestheticScores`), calibration inserts ~16 feedback rows for non-existent articles (permanently inflating metrics) AND the aesthetic centroid is never seeded — the headline P3-E feature silently no-ops for the centroid.
@@ -952,6 +973,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-14 | P3-A2 | Read "rotate the full 12-topic query bank, not 2" as *probe all 12 topics, 1 query each* (`DISCOVERY_TOPICS_PER_RUN=12`, `DISCOVERY_QUERIES_PER_TOPIC=1`); widen via results-per-query (10→20) + a bounded eval cap (`DISCOVERY_MAX_EVAL_CANDIDATES=40`) | The phrase is ambiguous, but the binding constraint is the DAT-H2 wall-clock budget, and the dominant discovery latency is the *serialized* Brave queries (1.1s apart for the free-tier 1 req/s limit). 12 topics × 1 query keeps the per-run Brave query count at 12 — identical to today's 6 × 2 — so full topic-bank coverage costs **zero extra Brave latency**, while results-per-query 10→20 thickens the raw pool to ~240 at no latency cost. The eval cap is the real budget protector (bounds the body+LLM phase deterministically rather than relying on the blunt Promise.race cut-short), and it *is* the design's "candidate cap … so the gate has real choice" — the gate now picks 40 from ~240, interleaved by topic so Small-Web is represented. Reversible: all four are config constants. |
 | 2026-06-14 | P3-B2 | Resolve source category on demand from `data/sources.json` (`categoryForArticle`) rather than persisting `category` onto each `Article` | The design doc sanctions either. Persisting would require a pipeline re-run to backfill every existing batch, and discovered articles (the whole point of the supply work) have no fixed source anyway. A memoized resolver keyed on the verbatim `sourceName` (+ homepage host) works uniformly for in-memory candidates, stored batches (P3-D1 reads category from historical JSON), and sources later deactivated — zero migration, zero re-run, and `undefined` for discovered/unknown sources is exactly the right signal for the diversity/metrics consumers (B3/C3/D1). |
 | 2026-06-14 | P3-B1 | Kept dezeen + paris-review in `data/sources.json` despite a fresh HTTP 403 on re-verification (both UAs) | The 403 came from this sandbox's datacenter egress and reproduced under a real browser UA too, so it's IP/TLS-fingerprint bot protection, not a UA block — weak evidence that Vercel (which feed-verified both on 2026-06-13) is permanently blocked. The RSS adapter already isolates dead feeds (PIPE-H6: `parseURL` throws → caught → `[]`), so a still-blocked feed costs nothing (0 articles, no crash, MIN_SOURCES_PER_BATCH trivially met by 21 others) — exactly the resilience the design relies on. Substituting unverified feeds would deviate from the curated §3 list and require fresh verification of the replacement. The post-A+B refresh check + the per-source Wilson score will reveal real yield on the deploy. |
+| 2026-06-14 | R4-01 | Shared a single `resolveDisplayedFeed` helper between the feed + issue/meta routes (report's first option), AND added an `ISSUE_META_VERSION` cache-bust so already-cached (raw-order) metadata regenerates once | The report offered "share a helper" or "persist the displayed order at assembly time". Persisting at assembly can't work: the displayed order is *personalized* (rankFeed) + depends on shown-domain history, both unknown to the pipeline at batch-write time — only the per-request route can compute it. The shared helper makes both routes resolve the identical seven from one code path. The cache-bust is necessary because issue metadata is cached per-batch in `article_batches.issue_metadata`; without it, batches generated before the fix (incl. the live-confirmed "Quanta ×5/Aeon ×2" one) would keep serving raw-order credits until the next uncached batch, making the fix un-verifiable on today's issue. A `metaVersion` guard regenerates each stale batch exactly once (one Haiku call, bounded by views) then re-caches at v2. Did NOT run the live two-route compare from the session: issue/meta *writes* the resolved order to the live colophon, and an anonymous (no-cookie) local run would persist anonymous-ranked credits over Kyle's real ones — same write-pollution precedent as P3-E3. |
 | 2026-06-13 | R2-05 | Replaced the meetup "word + length≤60" rule with a signal/label classifier that **biases toward keeping** essays; did not add a committed test (no runner in repo) | The finding asked to "anchor the announcement shape (place/date/RSVP signal)". An announcement carries scheduling/RSVP cues or is a short event label; an essay merely discusses meetups. False positives (dropping essays) are the harm here, so when a meetup title lacks any announcement signal and isn't a short label, we keep it — a stray announcement slipping through is cheap (discovery still LLM-scores it; fixed-RSS just shows one extra item) versus silently dropping a real essay. Day-of-week/clock-time signals only apply once "meetup" is present, bounding their false-positive surface. The repo has no test framework (PIPE-Q2's "11-case test" was ad-hoc), so the true-positive/negative matrix was run as an ad-hoc script replicating the committed regexes rather than added as a committed test. |
 
 ---
@@ -1396,3 +1418,17 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   table, API routes, + a "Post-review updates (Round 3)" addendum). Uncommitted working-tree edits — commit them.
 - Gate: `tsc` + `lint` green; all 16 Round-3 deploys Ready (build green).
 - RESUME AT: **R4-01**
+
+### Session 7 — 2026-06-14 — Claude Code (Round 4 fix campaign start)
+- **R4-01** → DONE: closed the colophon/theme-vs-displayed-7 divergence. Extracted a single shared
+  `resolveDisplayedFeed(req, batch)` helper (`lib/pipeline/displayedFeed.ts`) — identity resolve +
+  rankFeed + C2/C3 display-diversity reorder, returning the full reordered list. Refactored
+  `app/api/feed/today/route.ts` to use it (behavior-equivalent; rationale gen moved after the
+  reorder — order-independent). `app/api/issue/meta/route.ts` now builds the colophon credits + theme
+  from that same helper's output, so both routes resolve the identical first 7. Added
+  `ISSUE_META_VERSION=2` + optional `DailyIssue.metaVersion`; pre-R4-01 cached metadata (raw order)
+  regenerates exactly once. Product outcome holds by construction (one helper, same inputs → same 7);
+  an adversarial-review subagent confirmed behavior-equivalence on both paths + a bounded single
+  regeneration. Live two-route compare deferred to the deploy (avoids writing anonymous-order
+  credits to Kyle's live colophon — P3-E3 precedent). Decision logged. Gate green. Commit: pending.
+- RESUME AT: **R4-08**

@@ -206,6 +206,12 @@ export interface DailyIssue {
   sources?: SourceCredit[];
   tomorrowTheme?: string;
   tomorrowArrivesAt?: string;
+  /**
+   * Schema/derivation version of this cached metadata. Bumped when the way the
+   * displayed seven are resolved changes, so already-cached batches regenerate
+   * once on next access instead of serving a stale colophon (R4-01).
+   */
+  metaVersion?: number;
 }
 
 /** Reading position bookmark for "I stopped here" feature. */

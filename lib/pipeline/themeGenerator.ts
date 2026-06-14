@@ -27,6 +27,14 @@ function getClient(): Anthropic {
   return _client;
 }
 
+/**
+ * Current derivation version for issue metadata. Bump when the displayed-seven
+ * resolution changes so cached batches regenerate on next access. v2 = built
+ * from the rank + display-diversity reordered seven (R4-01); v1 (or unset) was
+ * built from the raw stored batch order.
+ */
+export const ISSUE_META_VERSION = 2;
+
 interface ThemeResult {
   theme: string;       // two or three lowercase words, e.g. "quiet systems"
   themeNote: string;   // one sentence, ≤ 25 words
@@ -116,7 +124,10 @@ function formatIssueDateLong(dateStr: string): string {
 /**
  * Builds or refreshes the DailyIssue metadata object for a batch.
  *
- * @param articles  - Articles in the batch (full set, not just display-7)
+ * @param articles  - Articles in FINAL DISPLAY ORDER (rank + display-diversity
+ *                    reorder); the theme + colophon credits are derived from the
+ *                    first seven, so this must be the same order the reader sees
+ *                    (R4-01). The caller resolves it via `resolveDisplayedFeed`.
  * @param batchDate - YYYY-MM-DD
  * @param issueNumber - 1-based sequential issue number
  * @param arrivedAt   - ISO timestamp of when the batch was first written
@@ -161,5 +172,6 @@ export async function buildIssueMetadata(
     count: Math.min(displayArticles.length, 7),
     arrivedAt,
     sources: buildSourceCredits(displayArticles),
+    metaVersion: ISSUE_META_VERSION,
   };
 }
