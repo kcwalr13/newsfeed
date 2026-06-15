@@ -145,18 +145,15 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
           </Link>
         )}
 
-        {/* Slot badge (footnote dagger inline with title, caption below meta) */}
+        {/* Slot badge (footnote dagger inline with title, caption below meta).
+            The per-slot rationale sentence is gone — the curator note below now
+            carries the "why this" for every piece, slotted or not (R5-C2). */}
         {slotInfo && (
           <p className="ql-slot-caption mb-2" style={{ color: 'var(--accent)' }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.14em', textTransform: 'uppercase', marginRight: '6px' }}>
               {slotInfo.glyph} {slotInfo.label}
             </span>
             <span style={{ color: 'var(--muted)' }}>— {slotInfo.caption}</span>
-            {article.rationale && (
-              <span style={{ display: 'block', marginTop: '2px', color: 'var(--muted)', fontStyle: 'italic' }}>
-                {article.rationale}
-              </span>
-            )}
           </p>
         )}
 
@@ -195,7 +192,9 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
               </sup>
             )}
           </h2>
-          {article.description && (
+          {/* Blurb: the personalized curator note (R5-C) replaces the raw RSS
+              summary; fall back to the cleaned description when no note exists. */}
+          {(article.curatorNote || article.description) && (
             <p
               className="ql-serif"
               style={{
@@ -209,7 +208,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
                 overflow: 'hidden',
               }}
             >
-              {cleanDesc(article.description)}
+              {article.curatorNote ?? cleanDesc(article.description ?? '')}
             </p>
           )}
         </Link>
