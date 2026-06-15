@@ -2,12 +2,14 @@
 
 import { parse } from 'node-html-parser';
 import { cleanBodyParagraphs } from '@/lib/utils/bodyClean';
+import { detectPaywall } from '@/lib/utils/paywall';
 
 export type ExtractionFailureReason =
   | 'fetch_timeout'
   | 'http_error'
   | 'extraction_failed'
-  | 'below_minimum_length';
+  | 'below_minimum_length'
+  | 'paywalled';
 
 export interface ExtractionSuccess {
   success: true;
@@ -157,6 +159,14 @@ export function extractBodyTextFromHtml(html: string, _url: string): ExtractionR
     .split('\n')
     .map((line) => line.replace(/\s+/g, ' ').trim())
     .filter((line) => line.split(/\s+/).filter(Boolean).length >= 2);
+
+  // Paywall/teaser check (R5-B1) on the pre-clean paragraphs — cleanBodyParagraphs
+  // strips share-like CTA lines ("subscribe to read"), so detect before it runs.
+  // Reported as 'paywalled' (not 'below_minimum_length') so discovery's existing
+  // failure-discard path drops it and the run.ts backfill can exclude it.
+  if (detectPaywall(paragraphs.join('\n'))) {
+    return { success: false, reason: 'paywalled' };
+  }
 
   // Strip page chrome the DOM pass missed: repeated title/byline/dateline at
   // the top, share-bar lines, trailing related-article lists.

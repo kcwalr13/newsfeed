@@ -96,11 +96,14 @@ function estimateReadTime(text?: string): number | undefined {
  */
 const BODY_FETCH_CONCURRENCY = 3;
 
-async function fetchMissingBodyText(articles: Article[]): Promise<void> {
+async function fetchMissingBodyText(articles: Article[]): Promise<Set<string>> {
+  // Article ids whose full page was confirmed paywalled/teaser-only (R5-B1).
+  // The caller excludes these from the batch.
+  const paywalledIds = new Set<string>();
   const missing = articles.filter(
     (a) => !a.bodyText || a.bodyText.trim().length < AESTHETIC_BODY_MIN_CHARS
   );
-  if (missing.length === 0) return;
+  if (missing.length === 0) return paywalledIds;
 
   appendLog(`[pipeline] Fetching body text for ${missing.length}/${articles.length} articles...`);
   let fetched = 0;
@@ -117,6 +120,7 @@ async function fetchMissingBodyText(articles: Article[]): Promise<void> {
             article.readTime = estimateReadTime(result.bodyText);
             fetched++;
           } else {
+            if (result.reason === 'paywalled') paywalledIds.add(article.id);
             appendLog(
               `[pipeline] [body] SKIP id=${article.id} reason=${result.reason}`
             );
@@ -134,6 +138,7 @@ async function fetchMissingBodyText(articles: Article[]): Promise<void> {
   appendLog(
     `[pipeline] Body text fetch complete: fetched=${fetched} failed=${failed} total=${missing.length}`
   );
+  return paywalledIds;
 }
 
 function makeId(sourceName: string, articleUrl: string): string {
@@ -527,7 +532,7 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     const fixedTarget = ARTICLES_PER_DAY - discoveryCount;
     const finalFixedCandidates = validated.slice(0, fixedTarget);
 
-    const articles: Article[] = [
+    let articles: Article[] = [
       ...finalFixedCandidates.map((a) => ({
         ...a,
         id: makeId(a.sourceName, a.articleUrl),
@@ -549,7 +554,21 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
 
     // Fetch full body text for articles that only have a short excerpt (or none).
     // Must run before aesthetic scoring so the scorer gets the full text.
-    await fetchMissingBodyText(articles);
+    // Returns ids whose full page is paywalled/teaser-only (R5-B1).
+    const paywalledIds = await fetchMissingBodyText(articles);
+
+    // Exclude items whose full text isn't actually available — a paywalled
+    // Substack/member post would otherwise render as a misleading stub. The
+    // batch holds ARTICLES_PER_DAY (20) but only ISSUE_DISPLAY_SIZE (7) show,
+    // so dropping a few confirmed-paywalled items never starves the issue.
+    if (paywalledIds.size > 0) {
+      const before = articles.length;
+      articles = articles.filter((a) => !paywalledIds.has(a.id));
+      appendLog(
+        `[pipeline] PAYWALL excluded ${before - articles.length} item(s) (full text unavailable); ` +
+          `batch now ${articles.length}.`
+      );
+    }
 
     // Score all articles aesthetically before writing the batch.
     // One shared LLM budget covers scoring + concept extraction (PIPE-M5).

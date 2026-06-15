@@ -2,6 +2,7 @@ import Parser from 'rss-parser';
 import type { Article, Source } from '../../types/article';
 import { cleanBodyParagraphs } from '@/lib/utils/bodyClean';
 import { decodeHtmlEntities } from '@/lib/utils/htmlEntities';
+import { detectPaywall } from '@/lib/utils/paywall';
 
 type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
 
@@ -80,7 +81,12 @@ export async function fetchRssArticles(source: Source): Promise<PartialArticle[]
       const bodyCandidate = contentEncoded || item.content;
       const rawBody = bodyCandidate && bodyCandidate.length > 200 ? bodyCandidate : undefined;
       const decodedTitle = decodeEntities((item.title ?? '').trim());
-      const bodyText = rawBody ? htmlToPlainText(rawBody, decodedTitle) : undefined;
+      const parsedBody = rawBody ? htmlToPlainText(rawBody, decodedTitle) : undefined;
+      // Drop a paywall-flagged teaser so fetchMissingBodyText retries the full
+      // page (R5-B1). A genuinely free-but-truncated excerpt carries no paywall
+      // phrase, so it survives here and gets backfilled normally; only the full
+      // page being paywalled too leads to exclusion in assembly.
+      const bodyText = parsedBody && detectPaywall(parsedBody) ? undefined : parsedBody;
       const summary = anyItem['summary'] as string | undefined;
       const rawDescription = item.contentSnippet || summary;
 
