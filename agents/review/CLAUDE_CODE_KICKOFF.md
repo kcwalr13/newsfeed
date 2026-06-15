@@ -32,13 +32,12 @@ per-finding loop defined in the tracker:
 ## Policy (already decided — don't re-litigate)
 - **Scope:** the entire tracker, in order — **except items marked `DEFERRED`**, which are out of
   scope (single-user project; see the tracker's *Future state — multi-user rollout* section). Skip
-  them; do not re-open them. We are now on the **ROUND 4 backlog** (Rounds 1–3 are complete). The next
-  actionable item is **R4-01**. These are **bug fixes** introduced/surfaced by Round 3. Start with the two
-  Highs: **R4-01** (the colophon credits + editor theme are built from raw batch order, so they describe a
-  different 7 than the C2/C3-reordered displayed issue — live-confirmed) and **R4-08** (the onboarding
-  seed-set fallback writes phantom feedback rows and never seeds the aesthetic EMA). Don't skip ahead or
-  batch unrelated items into one commit (the R4 Lows may share one `chore(R4-L)` commit). Commit
-  `fix(R4-XX): …`.
+  them; do not re-open them. Round 4 (main, 13 items) is complete; **two minor follow-ups remain** —
+  the next actionable item is **R4-14**. Both are Low: **R4-14** (the R4-05 consecutive-source cap, run
+  after C2/C3, can drop the displayed 7 from 4 → 3 categories in a ~0.1% edge case — fix by running the cap
+  before C3 or making its break-pick category-aware) and **R4-15** (several `data/calibration_seed.json`
+  aesthetic vectors are semantically off — this one needs Kyle's taste judgement; flag it for him rather
+  than guessing). They may share one `chore(R4-followups)` commit. Commit `fix(R4-XX): …`.
 - **Verify the product outcome, not only the gate.** For R4-01, confirm the colophon credits + theme match
   the displayed 7 after the fix (compare `/api/issue/meta` to `/api/feed/today` top-7). For R4-08, confirm
   completing calibration seeds a non-trivial centroid and writes no `seed-…` feedback rows.
@@ -77,6 +76,6 @@ When you stop, print a concise summary:
 
 Verification commands (recap): `npx tsc --noEmit` · `npm run lint` · `npm run build` · `npm run dev`.
 
-Start now: open `agents/review/REVIEW_TRACKER.md`, read the **ROUND 4** section, find the first `TODO`
-(currently **R4-01**), and begin the loop. R4-01 and R4-08 are the two Highs — fix them first. Re-confirm
-each against current code before changing it.
+Start now: open `agents/review/REVIEW_TRACKER.md`, read the **ROUND 4 — follow-ups** subsection, find the
+first `TODO` (currently **R4-14**), and begin the loop. Only two minor items remain (R4-14 logic fix,
+R4-15 flag-for-Kyle). Re-confirm each against current code before changing it.

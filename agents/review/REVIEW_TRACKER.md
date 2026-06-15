@@ -960,6 +960,16 @@ Operational order: the two Highs first.
 - [x] **R4-12** · 🟢 Low · Dashboard bars/charts lack text alternatives — add `role="img"` + `aria-label` (follow the `SevenDotStrip` pattern). `app/dashboard/page.tsx` Bar + split bar. · DONE · Commit: 4a0c71e · Notes: Added `role="img"` + `aria-label` to the category-distribution `Bar` (`"{label}: {count}"`) and the discovery-vs-fixed split bar (`"N of M pieces from discovery (P%)"`), with the inner fill `aria-hidden` — mirroring the `SevenDotStrip` pattern. Files: `app/dashboard/page.tsx`. Gate green.
 - [x] **R4-13** · 🟢 Low · Calibration sets `tangent_calibration_done` even on an empty/failed fetch (`CalibrationModal.tsx:106`) → a transient first-run failure permanently consumes onboarding with zero signal (compounds R4-08). Only set the done flag when ≥1 real response was captured, or retry the fetch first. · DONE · Commit: 4a0c71e · Notes: Added `dismissWithoutConsuming()` (just `setVisible(false)`, leaves the done-flag unset) and use it in the two fetch bow-out paths (empty `pieces` / fetch error) instead of `finish({}, [])`. So a transient first-run failure closes the modal for this load but `evaluate()` re-prompts + retries the fetch on the next visit (one retry per load, not a tight loop), rather than permanently consuming onboarding. Real completions (SKIP, finishing the cards, the tone step) still call `finish` and set the flag. The committed seed fallback (≥12 pieces) means the empty-pieces path is essentially only ever a real failure. Files: `app/components/CalibrationModal.tsx`. Gate green.
 
+### Round 4 — follow-ups (found in post-Round-4 verification, 2026-06-14)
+- [ ] **R4-14** · 🟢 Low · [REGRESSION from R4-05] Re-applied consecutive-source cap can break C3's ≥4-category guarantee
+  - Where: `lib/pipeline/displayedFeed.ts:159` (`applyDiversityCap` runs after C2/C3)
+  - In a ~0.1% edge case (a 4+ same-source run forced into the displayed span — reachable since `MAX_ARTICLES_PER_SOURCE=4`) the cap defers the sole representative of a category below the fold, dropping the displayed 7 from 4 → 3 categories. R4-05's claim that it preserves C3 isn't true by construction. Does **not** cause R4-01 divergence (feed + meta still agree, both from the same helper). Fix: run the cap *before* C3, or make the cap's break-pick category/unfamiliar-aware.
+  - Status: TODO · Commit: — · Notes: —
+- [ ] **R4-15** · 🟢 Low (taste — needs Kyle's eye) · Several `data/calibration_seed.json` aesthetic vectors are semantically off
+  - Where: `data/calibration_seed.json`
+  - Valid in-range vectors (seeding works), but the encoded calibration signal is questionable — e.g. `seed-serious-philosophy` (a "grave meditation") and `seed-emotional-psychology` (a grief piece) both carry `playful: 5`; `seed-abstract-film` (slow cinema) carries `playful: 5, concrete: 5`. These are the cold-start taste anchors, so they should reflect real taste. **Kyle should review/hand-tune the 12 seed vectors** (or regenerate them with an LLM pass).
+  - Status: TODO · Commit: — · Notes: —
+
 ---
 
 ## Decisions Log
@@ -1496,5 +1506,15 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   fill `aria-hidden`). R4-13: empty/failed calibration fetch now bows out WITHOUT setting the done-flag
   (`dismissWithoutConsuming`), so a transient first-run failure re-prompts/retries next visit instead of
   permanently consuming onboarding. Two decisions logged (R4-05, R4-07). Gate green. Commit: 4a0c71e.
-- **✅ ROUND 4 COMPLETE: 13/13 DONE (2 High, 6 Medium, 5 Low), 0 TODO.**
-- RESUME AT: — (Round 4 backlog cleared)
+- **✅ ROUND 4 (main) COMPLETE: 13/13 DONE (2 High, 6 Medium, 5 Low).**
+
+### Session 8 — 2026-06-14 — Round 4 verification (reviewer, Cowork)
+- Verified Round 4: clean tree at `d199bb4`, all 16 commits present, `tsc` + `lint` green, all R4 deploys
+  Ready (build green). Deep adversarial audit of the two Highs: **both hold by construction** — R4-01
+  (colophon credits + theme derive from the same `resolveDisplayedFeed` the feed serves; `ISSUE_META_VERSION`
+  regenerates stale meta exactly once) and R4-08 (seed path uses identical EMA math/alpha/dislike-mirror,
+  writes zero feedback rows, batch path unchanged). R4-03/04/10 correct, no regressions.
+- Audit found **2 new follow-ups** → logged as **R4-14** (the R4-05 cap re-apply can break C3's ≥4-category
+  guarantee in a ~0.1% edge case — newly introduced) and **R4-15** (several seed calibration vectors are
+  semantically off — needs Kyle's eye).
+- RESUME AT: **R4-14** (2 minor follow-ups; not urgent).
