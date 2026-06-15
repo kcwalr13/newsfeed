@@ -98,11 +98,19 @@ function slugify(name: string): string {
 // source forward in the list; if none exists, accepts the violation rather than dropping.
 // Exported so the display-diversity reorders (which run AFTER the ranker) can re-apply it and
 // not reintroduce a >cap same-source run near the fold (R4-05). A no-op when no run exceeds cap.
-export function applyDiversityCap(articles: Article[], cap: number): Article[] {
+//
+// `initialRun` seeds the run state from a preceding segment, so the cap can be applied to one
+// slice of a list while still counting a same-source run that straddles the slice boundary
+// (R4-14: cap the below-fold segment continuing the displayed segment's trailing run).
+export function applyDiversityCap(
+  articles: Article[],
+  cap: number,
+  initialRun?: { sourceSlug: string | null; runLength: number }
+): Article[] {
   const pending = [...articles];
   const result: Article[] = [];
-  let runSource: string | null = null;
-  let runLength = 0;
+  let runSource: string | null = initialRun?.sourceSlug ?? null;
+  let runLength = initialRun?.runLength ?? 0;
 
   while (pending.length > 0) {
     let picked = 0;
@@ -126,6 +134,29 @@ export function applyDiversityCap(articles: Article[], cap: number): Article[] {
   }
 
   return result;
+}
+
+/**
+ * Trailing run of consecutive same-source articles at the END of `articles`,
+ * expressed in the cap's source notion (slugified `sourceName`). Lets the
+ * consecutive-source cap (`applyDiversityCap`) be continued across a segment
+ * boundary so a same-source run straddling the displayed-issue fold is still
+ * broken without reordering across that fold (R4-14).
+ */
+export function trailingSourceRun(
+  articles: Article[]
+): { sourceSlug: string | null; runLength: number } {
+  if (articles.length === 0) return { sourceSlug: null, runLength: 0 };
+  const sourceSlug = slugify(articles[articles.length - 1].sourceName);
+  let runLength = 0;
+  for (
+    let i = articles.length - 1;
+    i >= 0 && slugify(articles[i].sourceName) === sourceSlug;
+    i--
+  ) {
+    runLength += 1;
+  }
+  return { sourceSlug, runLength };
 }
 
 /**

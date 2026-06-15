@@ -964,7 +964,32 @@ Operational order: the two Highs first.
 - [ ] **R4-14** · 🟢 Low · [REGRESSION from R4-05] Re-applied consecutive-source cap can break C3's ≥4-category guarantee
   - Where: `lib/pipeline/displayedFeed.ts:159` (`applyDiversityCap` runs after C2/C3)
   - In a ~0.1% edge case (a 4+ same-source run forced into the displayed span — reachable since `MAX_ARTICLES_PER_SOURCE=4`) the cap defers the sole representative of a category below the fold, dropping the displayed 7 from 4 → 3 categories. R4-05's claim that it preserves C3 isn't true by construction. Does **not** cause R4-01 divergence (feed + meta still agree, both from the same helper). Fix: run the cap *before* C3, or make the cap's break-pick category/unfamiliar-aware.
-  - Status: TODO · Commit: — · Notes: —
+  - Status: DONE · Commit: pending · Notes: Chose the "make the re-cap diversity-aware" option (option 2) over
+    "run the cap before C3" — the latter is unsafe because C3's reorder can *itself* reintroduce a >cap run by
+    removing a separator (e.g. top `[A,A,A,X,A,…]` → demote X → `[A,A,A,A,…]`), so the cap must stay last to
+    keep its no->cap-run guarantee. Implemented a **floor-guarded re-cap** in `resolveDisplayedFeed`
+    (`lib/pipeline/displayedFeed.ts`): apply the whole-list `applyDiversityCap` as before, but if it would push
+    the displayed span below a floor the pre-cap span actually MET (`< MIN_CATEGORIES_IN_ISSUE` or
+    `< MIN_UNFAMILIAR_IN_ISSUE`), fall back to capping each side of the fold separately — `applyDiversityCap`
+    on the top-`ISSUE_DISPLAY_SIZE` slice (preserves its EXACT membership ⇒ category + unfamiliar counts
+    unchanged ⇒ floors held), then the below-fold slice *continuing the run-state across the fold* via a new
+    `trailingSourceRun()` + an optional `initialRun` param on `applyDiversityCap` (so a straddling run is still
+    broken). New `ranker.ts` exports: `applyDiversityCap(…, initialRun?)` (backward-compatible — default seeds
+    null/0, so the ranker's own call at line ~349 is unchanged) and `trailingSourceRun()`. Two helpers in
+    `displayedFeed.ts`: `distinctCategoryCount` / `unfamiliarCount`. Files: `lib/pipeline/ranker.ts`,
+    `lib/pipeline/displayedFeed.ts`. **Verification (outcome, not just gate):** a standalone simulation
+    replicating both functions verbatim — (a) **1,518,080** inputs that meet the ≥4-category floor, biased hard
+    toward the dangerous shape (one dominant run-forming source + boundary-positioned unique categories), found
+    **0** cases where the whole-list cap takes a ≥4-cat top-7 below 4; (b) **400k** random post-C2/C3-shaped
+    inputs → NEW never reduced the displayed-7 below a met floor (`belowGuaranteeWhenMet=0`), whole-branch was
+    byte-identical to R4-05 (`wholeDiffersFromOld=0`), and the fallback introduced **0** displayed-issue runs;
+    (c) the fallback path, forced with a synthetic input, keeps the displayed 7 at 4 categories + 2 unfamiliar
+    with maxRun 3 and exact membership. **Conclusion:** the literal 4→3 break is effectively *unreachable* (the
+    cap only ever defers *same-source* run members, and a floor-critical sole representative is a unique source
+    in the top span — never a run member), so this guard makes R4-05's "preserves C3" claim hold **by
+    construction** with **zero behavior change in every observed case** (identical to R4-05) while protecting the
+    floors if a future rank/C2/C3 change shifts the distribution. Feed + colophon still resolve from the one
+    shared helper ⇒ no R4-01 divergence. Gate green (tsc + lint + build).
 - [ ] **R4-15** · 🟢 Low (taste — needs Kyle's eye) · Several `data/calibration_seed.json` aesthetic vectors are semantically off
   - Where: `data/calibration_seed.json`
   - Valid in-range vectors (seeding works), but the encoded calibration signal is questionable — e.g. `seed-serious-philosophy` (a "grave meditation") and `seed-emotional-psychology` (a grief piece) both carry `playful: 5`; `seed-abstract-film` (slow cinema) carries `playful: 5, concrete: 5`. These are the cold-start taste anchors, so they should reflect real taste. **Kyle should review/hand-tune the 12 seed vectors** (or regenerate them with an LLM pass).
@@ -1013,6 +1038,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-14 | R4-08 | Combined report options (b "scored fixtures") + a dedicated seed endpoint that bypasses the feedback table entirely, rather than (a) "tone-nudge only" or (c) "guard upsertFeedback" | (a) alone fails the acceptance: with no tones selected it seeds nothing, and it discards the like/pass signal. (c) alone (reject unresolvable ids) stops phantom rows but still leaves the centroid unseeded (the EMA also can't find a score for a non-article id). Only seeding the centroid *directly* from committed vectors meets both halves ("non-trivial centroid" AND "no phantom rows"). Seed vectors are held server-side (`seedSet.ts`) and the endpoint whitelists ids + validates values, so the client can't seed arbitrary vectors. The seed path deliberately does NOT write feedback rows or bump the short-term/C1 counts — there's no real engagement yet, so only the long-term centroid (ranker base weight 0.30) is seeded; that's the honest signal for a cold-start fallback. Branch on the API's `source` flag (not a `seed-` id-prefix sniff) so the routing doesn't depend on an id naming convention. Live end-to-end deferred (same P3-E3 precedent: it would seed Kyle's real profile). |
 | 2026-06-14 | R4-01 | Shared a single `resolveDisplayedFeed` helper between the feed + issue/meta routes (report's first option), AND added an `ISSUE_META_VERSION` cache-bust so already-cached (raw-order) metadata regenerates once | The report offered "share a helper" or "persist the displayed order at assembly time". Persisting at assembly can't work: the displayed order is *personalized* (rankFeed) + depends on shown-domain history, both unknown to the pipeline at batch-write time — only the per-request route can compute it. The shared helper makes both routes resolve the identical seven from one code path. The cache-bust is necessary because issue metadata is cached per-batch in `article_batches.issue_metadata`; without it, batches generated before the fix (incl. the live-confirmed "Quanta ×5/Aeon ×2" one) would keep serving raw-order credits until the next uncached batch, making the fix un-verifiable on today's issue. A `metaVersion` guard regenerates each stale batch exactly once (one Haiku call, bounded by views) then re-caches at v2. Did NOT run the live two-route compare from the session: issue/meta *writes* the resolved order to the live colophon, and an anonymous (no-cookie) local run would persist anonymous-ranked credits over Kyle's real ones — same write-pollution precedent as P3-E3. |
 | 2026-06-13 | R2-05 | Replaced the meetup "word + length≤60" rule with a signal/label classifier that **biases toward keeping** essays; did not add a committed test (no runner in repo) | The finding asked to "anchor the announcement shape (place/date/RSVP signal)". An announcement carries scheduling/RSVP cues or is a short event label; an essay merely discusses meetups. False positives (dropping essays) are the harm here, so when a meetup title lacks any announcement signal and isn't a short label, we keep it — a stray announcement slipping through is cheap (discovery still LLM-scores it; fixed-RSS just shows one extra item) versus silently dropping a real essay. Day-of-week/clock-time signals only apply once "meetup" is present, bounding their false-positive surface. The repo has no test framework (PIPE-Q2's "11-case test" was ad-hoc), so the true-positive/negative matrix was run as an ad-hoc script replicating the committed regexes rather than added as a committed test. |
+| 2026-06-14 | R4-14 | Make the re-cap **floor-guarded** (option 2: diversity-aware) and keep it LAST; did NOT "run the cap before C3"; guard the MIN floors only (not "never decrease") | "Run the cap before C3" is unsafe: C3's reorder can itself remove a separator and reintroduce a >cap run, so the cap must stay last to keep its no->cap guarantee. Guarding only the documented floors (`MIN_CATEGORIES_IN_ISSUE` / `MIN_UNFAMILIAR_IN_ISSUE`) rather than "never reduce top-7 diversity" keeps the re-cap byte-identical to R4-05 in every observed case (the floor-protecting fallback, which preserves exact top-span membership, never has to fire), so it introduces **no** new below-fold or displayed-issue runs — whereas a "never decrease" guard would trade ~0.6% of below-fold runs to protect *above-floor* decreases that aren't guarantee violations. Simulation (1.5M+ targeted + 400k random) shows the literal 4→3 break is unreachable (the cap only defers same-source run members; a floor-critical sole rep is a unique source, never a run member), so the guard is a by-construction safety net, not a behavior change. |
 
 ---
 
@@ -1518,3 +1544,19 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   guarantee in a ~0.1% edge case — newly introduced) and **R4-15** (several seed calibration vectors are
   semantically off — needs Kyle's eye).
 - RESUME AT: **R4-14** (2 minor follow-ups; not urgent).
+
+### Session 9 — 2026-06-14 — Claude Code (Round-4 follow-ups)
+- **R4-14** → DONE. Made the post-C2/C3 consecutive-source re-cap in `resolveDisplayedFeed` **floor-guarded**
+  (kept it last — "run before C3" is unsafe since C3 can itself reintroduce a >cap run by removing a separator).
+  The whole-list `applyDiversityCap` still runs as in R4-05; only if it would push the displayed span below a
+  floor the pre-cap span MET (`MIN_CATEGORIES_IN_ISSUE` / `MIN_UNFAMILIAR_IN_ISSUE`) does it fall back to
+  capping each side of the fold separately — top-`ISSUE_DISPLAY_SIZE` slice (exact membership preserved ⇒ floors
+  held, and ≥MIN cats ⇒ ≥MIN sources ⇒ still no >cap run) + below-fold slice continuing the run-state across the
+  fold via new `trailingSourceRun()` + an optional `initialRun` param on `applyDiversityCap` (backward-compatible).
+  Files: `lib/pipeline/ranker.ts`, `lib/pipeline/displayedFeed.ts`. **Composition verified by simulation** (the
+  task's "verify the outcome" step): the displayed 7 always stays ≥4 categories and ≥2 unfamiliar with no >cap
+  run after the cap, and `/api/feed/today` top-7 + `/api/issue/meta` still agree (single shared helper). The
+  literal 4→3 break proved **unreachable** in 1.5M+ targeted + 400k random inputs ⇒ this is a by-construction
+  guard with zero behavior change vs R4-05 in every observed case. Decision logged. Gate green. Commit: pending.
+- **R4-15** → see entry; needs Kyle's taste sign-off (do not unilaterally finalize the vectors).
+- RESUME AT: **R4-15** (BLOCKED on Kyle's review of the proposed seed-vector corrections).
