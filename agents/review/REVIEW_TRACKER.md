@@ -1069,6 +1069,24 @@ headline outcome; pull it earlier if preferred.
 - [x] **R5-D3** · "A place to explore" item type: committed `data/places.json` (hand-picked sites — seed directories, standout digital gardens, Webcurios/Cool Tools/ooh.directory); inject N as `format:'place'` items at assembly (`articleUrl`=homepage, no body, bespoke inviting note). Distinct "**A place to get lost in**" card with an **Explore ↗** CTA that links straight out (place items must NOT open the in-app reader). Surface ~1 every few issues so it stays special. Acceptance: an issue occasionally includes a place card linking to a whole site; tapping opens the site, not a broken reader. · DONE · Commit: cb940b0
   - Notes: Committed `data/places.json` — 10 seeded sites (ooh.directory, Marginalia Search, Wiby, Gossip's Web, Are.na, Cool Tools, Ciechanowski, Gwern, Maggie Appleton, Public Domain Review collections), each with a bespoke second-person invitation. **Kyle can curate/extend this list.** `lib/pipeline/places.ts`: `selectPlaceForBatch(batchDate)` picks a place **deterministically** — `epochDay % PLACE_ISSUE_INTERVAL(3) === 0` gates the cadence (~1 every 3 issues), `floor(day/3) % len` rotates which one (no `Math.random` → re-run safe; verified ~1/3 days, all 10 cycled). `run.ts` injects it as a `format:'place'` Article (`articleUrl`=homepage, `curatorNote`=the bespoke note, no body/score/concepts) **after** all per-article LLM/fetch loops so it costs nothing. **Routing (settled per the design's recommendation): links straight out** — `ArticleCard` has a distinct "A place to get lost in" branch (accent eyebrow, tinted bordered box, site name, the invitation, an **Explore ↗** CTA) that is an `<a target="_blank" rel="noopener noreferrer">` to the homepage — never the in-app reader, no Pass/Underline/Read-later row. `ensureFormatSpread` gained a `requirePlaceIfPresent` step (0) that surfaces the rare place into the top 7 (same swap-validity → preserves C2/C3); the cap floor-guard guards a present place too (though a place is its own unique source, so the cap never defers it). `app/page.tsx` excludes `place` items from the seven-dot read/total count (a place is a side-invitation, not a piece to action — keeps "All read" reachable). **Composition re-verified by simulation** (400k runs incl. places): 0 >cap runs, 0 floors broken by the cap, place surfaced **96.8%** of place-issues, and **0** misses where a floor-preserving swap existed (every miss correctly yields to a C2/C3 floor). Files: `data/places.json`, `lib/pipeline/places.ts`, `lib/pipeline/run.ts`, `lib/pipeline/displayDiversity.ts`, `lib/pipeline/displayedFeed.ts`, `app/components/ArticleCard.tsx`, `app/page.tsx`. Gate green. Decision logged. Edge note: reaching a place via the *archive* opens the reader, which (R5-B2) shows the "Read at source ↗" fallback (not broken) — a later refinement could link the archive out too.
 
+### Round 5 — follow-ups (found in post-R5 verification, 2026-06-15)
+- [ ] **R5-C3** · 🟠 High (the R5-C outcome isn't delivered in prod) · Curator notes are NOT generating on the live feed
+  - **Live-observed:** the deployed feed (today's R5 cron batch) returns `curatorNote` empty on all 7 displayed
+    items → the card falls back to the raw RSS description. So Kyle's #2 is not actually delivered, even though
+    the code audits as correct and generation is awaited inline in `app/api/feed/today/route.ts:54`.
+  - `ANTHROPIC_API_KEY` IS present in Vercel (the pipeline uses it; today's batch is healthy). No
+    `[curatorNote] Failed` lines surfaced in the (finicky) Logs UI — *weakly* points at the
+    `if (!process.env.ANTHROPIC_API_KEY) return 0` early-return, which is surprising given the key exists.
+  - Diagnose from the **`/api/feed/today` function logs directly**: is `generateMissingCuratorNotes`
+    early-returning (key not resolving in the route runtime) or are the Haiku calls throwing (`[curatorNote]
+    Failed …` — rate limit / model / `taste` undefined into `buildUserPrompt`)? Confirm `taste` from
+    `resolveDisplayedFeed` is never undefined into the generator, then fix. Also: add `export const maxDuration`
+    to the feed route (7 inline awaited Haiku calls on the request path risk the 10s default), and consider
+    generating notes at **pipeline time** instead of the request path (latency + the DAT-M1 "LLM on the read
+    path" smell).
+  - Acceptance: displayed items show personalized curator notes live; the raw RSS summary no longer appears.
+  - Status: TODO · Commit: — · Notes: —
+
 ---
 
 ## Decisions Log
@@ -1719,5 +1737,19 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   surfaced 96.8%, 0 bug-misses** (misses only yield to C2/C3). Files: `data/places.json`, `lib/pipeline/places.ts`,
   `lib/pipeline/run.ts`, `lib/pipeline/displayDiversity.ts`, `lib/pipeline/displayedFeed.ts`,
   `app/components/ArticleCard.tsx`, `app/page.tsx`. Gate green. Decision logged. Commit: cb940b0.
-- **✅ ROUND 5 COMPLETE.** RESUME AT (Round 5): — (all 8 items DONE; R4-15 still BLOCKED on Kyle's seed-vector
-  sign-off, independent of Round 5).
+- **✅ ROUND 5 (main) COMPLETE: 8/8 DONE.**
+
+### Session 10 — 2026-06-15 — Round 5 verification (reviewer/PM, Cowork)
+- Verified Round 5: clean tree at `2569a09`, all 10 commits present, `tsc` + `lint` green, R5 deploys live.
+  Deep adversarial audit: the **four display guarantees (C2 + C3 + format + cap) compose without breaking
+  each other** (per-swap floor check + floor-guarded cap) — no regressions. R5-C/B/D3 + the dead-code cleanup
+  all correct.
+- **Live headline check (#3) — CONFIRMED:** today's cron issue (08:34 UTC) displays a real format mix —
+  4 short + 2 visual + 1 longread in the shown 7 (music, science, psychology, two visual-art pieces) instead
+  of all long reads. Place not present today (cadence ~1/3). R5-A/B verified by code+audit (live-feel deferred).
+- **Live GAP found:** **R5-C (curator note, #2) is NOT generating in prod** — the displayed feed shows no
+  `curatorNote` (falls back to the RSS summary), despite correct code and the key being present. Logged as
+  **R5-C3** (High) to diagnose from the feed-route function logs + add `maxDuration` / move generation to
+  pipeline time.
+- **Still awaiting Kyle:** R4-15 seed-vector sign-off.
+- RESUME AT: **R5-C3** (diagnose + fix the curator-note generation).

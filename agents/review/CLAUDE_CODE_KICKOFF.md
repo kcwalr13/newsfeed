@@ -32,15 +32,19 @@ per-finding loop defined in the tracker:
 ## Policy (already decided — don't re-litigate)
 - **Scope:** the entire tracker, in order — **except items marked `DEFERRED`**, which are out of
   scope (single-user project; see the tracker's *Future state — multi-user rollout* section). Skip
-  them; do not re-open them. Rounds 1–4 are complete (R4-15 is `BLOCKED` on Kyle's taste sign-off — leave it).
-  We are now on the **ROUND 5 — Product backlog** (from Kyle's usage feedback). The next actionable item is
-  **R5-A1**. These are **feature/config items** — read the precise plan first:
-  `agents/architect/design_product_round5_content_mix.md` (it has the integration points, acceptance criteria,
-  sequencing A→B→C→D, and risks). Build order **A → B → C → D**. Don't skip ahead or batch unrelated items.
-  Commit `feat(R5-XX): …`. Follow the design doc's acceptance criteria, not just a green gate.
-- **These are product changes — verify the product outcome.** Per item, check the design-doc acceptance
-  criterion (e.g. D1: a typical issue is no longer all long-reads and the colophon stays in sync; B: a
-  paywalled item is excluded but a short *free* visual post is not). Two items need extra care: **R5-D1**
+  them; do not re-open them. Rounds 1–4 and the main Round-5 backlog are complete (R4-15 is `BLOCKED` on Kyle's
+  taste sign-off — leave it). **One verification follow-up remains — the next actionable item is `R5-C3`:**
+  the personalized curator note (R5-C) is **not generating on the live feed** — the deployed `/api/feed/today`
+  returns empty `curatorNote` so the card falls back to the RSS summary, even though the code is correct and
+  `ANTHROPIC_API_KEY` is set. **Diagnose from the actual `/api/feed/today` Vercel function logs** (not the log
+  search UI): is `generateMissingCuratorNotes` early-returning on a missing key in the route runtime, or are
+  the Haiku calls throwing (`[curatorNote] Failed …` — check `taste` from `resolveDisplayedFeed` is never
+  undefined into `buildUserPrompt`, rate limits, model)? Fix it; also add `export const maxDuration` to the
+  feed route and consider generating notes at **pipeline time** instead of the request path (latency / the
+  DAT-M1 "LLM on the read path" smell). Commit `fix(R5-C3): …`.
+- **Verify the product outcome, not just the gate.** For R5-C3, confirm the deployed feed actually shows
+  personalized curator notes (curl `/api/feed/today` and check `articles[].curatorNote` is populated) — a
+  green build is not enough; the bug only shows at runtime.
   (a third display-diversity guarantee — re-prove it composes with C2/C3 + the source cap, R4-14 precedent)
   and **R5-D3** (the "place" item type — settle reader-routing: a place links straight out, never opens the
   in-app reader).
@@ -79,7 +83,7 @@ When you stop, print a concise summary:
 
 Verification commands (recap): `npx tsc --noEmit` · `npm run lint` · `npm run build` · `npm run dev`.
 
-Start now: read `agents/architect/design_product_round5_content_mix.md` (the precise plan), then open
-`agents/review/REVIEW_TRACKER.md`, find the first `TODO` in the **ROUND 5 — Product** section (currently
-**R5-A1**), and begin the loop. R5-A1 (restore feed scroll on back-nav) is a small, daily-feel first win.
-Work the order A → B → C → D; **D (the content-format mix) is the headline outcome.**
+Start now: open `agents/review/REVIEW_TRACKER.md`, read the **R5-C3** item in the *Round 5 — follow-ups*
+subsection (currently the only actionable `TODO`), and begin the loop. It's a runtime bug — the curator note
+doesn't generate on the live feed; diagnose from the deployed `/api/feed/today` function logs and verify the
+fix by checking `articles[].curatorNote` is actually populated on the live endpoint, not just a green build.
