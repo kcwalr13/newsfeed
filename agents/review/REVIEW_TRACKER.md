@@ -91,8 +91,12 @@ npm run dev           # for manual/browser spot-checks
   section below. 2 High (R4-01 colophon/theme credits the wrong 7 — live-confirmed; R4-08 onboarding seed
   fallback writes phantom rows + doesn't seed the EMA), 6 Medium, 5 Low. **Docs were brought current in
   this session** (README, CLAUDE.md, ARCHITECTURE.md — committed in `33d6b18`).
-  **✅ ROUND 4 COMPLETE: 13/13 DONE (2 High, 6 Medium, 5 Low) · 0 TODO.** **Last resume point: — (cleared).**
-  **Round 4 follow-ups (2026-06-14): R4-14 DONE (commit `9697ffe`) · R4-15 BLOCKED on Kyle's taste sign-off**
+  **✅ ROUND 4 COMPLETE: 13/13 DONE (2 High, 6 Medium, 5 Low) · 0 TODO.** Follow-ups: R4-14 DONE (`9697ffe`) ·
+  R4-15 BLOCKED on Kyle's taste sign-off (one seed vector).
+- **Round 5 (Product — content mix, curator voice & feel, 2026-06-14): 8 NEW items, all TODO.** From Kyle's
+  usage feedback. Plan: `agents/architect/design_product_round5_content_mix.md`. A scroll-restore · B paywall
+  guard · C personalized curator note (replaces summary) · D content-format mix incl. "a place to explore"
+  (#3 — the headline). Build order A → B → C → D. **Last resume point: R5-A1.**
   (the report's premise is a scale misread; only 1 of 12 seed vectors is genuinely off — see R4-15 entry). **0 TODO.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
@@ -1030,6 +1034,32 @@ Operational order: the two Highs first.
 
 ---
 
+## ROUND 5 — Product (content mix, curator voice & feel, 2026-06-14)
+
+From Kyle's hands-on feedback. **Decisions:** content mix = full treatment (formats + "a place to explore");
+curator blurb = personalized note that replaces the summary. Precise plan + integration points + acceptance
+criteria + risks: `agents/architect/design_product_round5_content_mix.md`. Feature/config items — standard
+workflow (atomic commit, gate green, push). No migration. Build order **A → B → C → D**. D (#3) is the
+headline outcome; pull it earlier if preferred.
+
+### A — Feed scroll restoration (Kyle #1)
+- [ ] **R5-A1** · Restore feed scroll on back-navigation. Set `history.scrollRestoration='manual'`; on card click record the clicked article id + scrollY in `sessionStorage` (keyed by batchDate); suppress the `<FeedSkeleton/>` on return (render stale `data` while re-fetching — skeleton only on first load); after paint, scroll the saved article's card into view (fallback scrollY). Anchor by **id** (survives the per-request re-rank). Files: `app/page.tsx` (+ 1 line in `app/layout.tsx`). Acceptance: open a mid-issue item → back returns to that item's spot, no top-jump/skeleton flash. · TODO
+
+### B — Paywall / full-text guard (Kyle #4)
+- [ ] **R5-B1** · `lib/utils/paywall.ts` `detectPaywall(bodyText)` (phrase list anchored to short trailing lines: "subscribe to read/continue", "this post is for paid subscribers", "members only", "become a member", "to continue reading", "unlock…"; min-content floor as a **secondary** signal — do NOT reuse `AESTHETIC_BODY_MIN_CHARS`). Apply in `rssAdapter.ts` (drop teaser body → triggers backfill) and as a new `'paywalled'` `ExtractionFailureReason` in `bodyExtractor.ts`; **exclude still-paywalled items in `run.ts` assembly before the fixed/discovery slot-fill** so the issue doesn't under-fill. Per-item, never per-source (Substack free vs paid). Acceptance: paywalled/teaser items excluded; a short *free* visual post is not. · TODO
+- [ ] **R5-B2** · Reader thin-body fallback: in `app/articles/[id]/page.tsx` show the existing "Read at source ↗" fallback when `paragraphs.length < ~3` (or a char floor), not only when fully empty — a teaser never renders as a stub. · TODO
+
+### C — Personalized curator note replaces the summary (Kyle #2)
+- [ ] **R5-C1** · Add `Article.curatorNote?: string` (verify it survives `toPublicArticle`). New editorial, second-person, **taste-aware** prompt (extend `rationaleGenerator.ts` or add `curatorNoteGenerator.ts`): *why you'll want this + what taste it invites*, NOT a summary; fed a compact taste digest (top concept labels via `getTopConceptNodes` + a tone descriptor from the aesthetic centroid + the article's aesthetic vector). Generate for **all displayed items** (drop the exploration-only filter) at request time in `GET /api/feed/today`, persist via the existing `after()` + `patchBatchArticleFields` cache. Return the taste model from `resolveDisplayedFeed` instead of re-querying. (Folds in D4: short/place items get the exploration-inviting register.) Acceptance: every displayed item shows a personalized "why this is worth your time" note; raw RSS summary gone; subsequent loads don't re-call the LLM. · TODO
+- [ ] **R5-C2** · Render it: `ArticleCard.tsx` blurb block → `article.curatorNote ?? cleanDesc(description)` (keep the 3-line clamp); the now-redundant slot-badge rationale line can be removed/merged. · TODO
+
+### D — Content-format mix — THE HEADLINE (Kyle #3)
+- [ ] **R5-D1** · Add `Article.format?: 'longread'|'short'|'visual'|'potpourri'|'place'`; derive at assembly (`run.ts`, with `readTime`) via source-category allowlist + readTime threshold (no LLM). Add `ensureFormatSpread()` to `lib/pipeline/displayDiversity.ts`, invoked in `resolveDisplayedFeed` after C2/C3, guaranteeing ≥1 short + ≥1 visual/potpourri and ≤N longreads in the displayed 7; config next to `MIN_CATEGORIES_IN_ISSUE`. ⚠️ **Re-prove the consecutive-source cap can't break this or the C2/C3 floors (R4-14 precedent)** — order the reorders/cap so all floors hold; degrade gracefully. Acceptance: a typical issue isn't all long-reads; colophon stays in sync (shared resolver). · TODO
+- [ ] **R5-D2** · `ArticleCard.tsx` card variants by `format`: compact/dense for short/potpourri, image-forward for visual. Read-time UI already hides when absent. · TODO
+- [ ] **R5-D3** · "A place to explore" item type: committed `data/places.json` (hand-picked sites — seed directories, standout digital gardens, Webcurios/Cool Tools/ooh.directory); inject N as `format:'place'` items at assembly (`articleUrl`=homepage, no body, bespoke inviting note). Distinct "**A place to get lost in**" card with an **Explore ↗** CTA that links straight out (place items must NOT open the in-app reader). Surface ~1 every few issues so it stays special. Acceptance: an issue occasionally includes a place card linking to a whole site; tapping opens the site, not a broken reader. · TODO
+
+---
+
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
 
@@ -1598,5 +1628,17 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   faithful**; only `seed-contemplative-science` is off by ≥2 (concrete 4→2, specialist 4→2 — proposed corrected
   vector in the R4-15 entry). Left `data/calibration_seed.json` untouched pending Kyle's sign-off; impact is
   modest (centroid base weight 0.30, 1 of 12 anchors).
-- RESUME AT: **—** (both Round-4 follow-ups handled: R4-14 DONE+pushed `9697ffe`; R4-15 BLOCKED on Kyle's
-  review of the proposed seed-vector correction. No autonomous TODOs remain.)
+- RESUME AT (Round 4): — (R4-14 DONE `9697ffe`; R4-15 BLOCKED on Kyle's seed-vector sign-off).
+
+### Session 9 — 2026-06-14 — Round 5 product plan from Kyle's usage feedback (reviewer/PM, Cowork)
+- Kyle gave hands-on feedback: (1) restore feed scroll on back-nav; (2) blurb should be a personalized
+  curator note selling the detour, not a summary; (3) **biggest** — mix in short/fun/potpourri/visual items
+  and "a place to explore" (a whole site), not all long reads; (4) exclude paywalled / no-full-text items.
+  Decisions: content mix = full treatment (formats + place-to-explore); blurb = personalized note replacing
+  the summary.
+- Mapped exact integration points (code-map agent), wrote the precise plan
+  `agents/architect/design_product_round5_content_mix.md`, opened **Round 5** (8 items: A scroll, B paywall,
+  C curator note, D format mix — the headline). No migration. Build order A → B → C → D.
+- **Still awaiting Kyle:** R4-15 — approve/adjust the proposed `seed-contemplative-science` vector
+  (concrete 4→2, specialist 4→2) before that fixture is committed.
+- RESUME AT: **R5-A1**

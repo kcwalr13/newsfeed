@@ -32,15 +32,18 @@ per-finding loop defined in the tracker:
 ## Policy (already decided — don't re-litigate)
 - **Scope:** the entire tracker, in order — **except items marked `DEFERRED`**, which are out of
   scope (single-user project; see the tracker's *Future state — multi-user rollout* section). Skip
-  them; do not re-open them. Round 4 (main, 13 items) is complete; **two minor follow-ups remain** —
-  the next actionable item is **R4-14**. Both are Low: **R4-14** (the R4-05 consecutive-source cap, run
-  after C2/C3, can drop the displayed 7 from 4 → 3 categories in a ~0.1% edge case — fix by running the cap
-  before C3 or making its break-pick category-aware) and **R4-15** (several `data/calibration_seed.json`
-  aesthetic vectors are semantically off — this one needs Kyle's taste judgement; flag it for him rather
-  than guessing). They may share one `chore(R4-followups)` commit. Commit `fix(R4-XX): …`.
-- **Verify the product outcome, not only the gate.** For R4-01, confirm the colophon credits + theme match
-  the displayed 7 after the fix (compare `/api/issue/meta` to `/api/feed/today` top-7). For R4-08, confirm
-  completing calibration seeds a non-trivial centroid and writes no `seed-…` feedback rows.
+  them; do not re-open them. Rounds 1–4 are complete (R4-15 is `BLOCKED` on Kyle's taste sign-off — leave it).
+  We are now on the **ROUND 5 — Product backlog** (from Kyle's usage feedback). The next actionable item is
+  **R5-A1**. These are **feature/config items** — read the precise plan first:
+  `agents/architect/design_product_round5_content_mix.md` (it has the integration points, acceptance criteria,
+  sequencing A→B→C→D, and risks). Build order **A → B → C → D**. Don't skip ahead or batch unrelated items.
+  Commit `feat(R5-XX): …`. Follow the design doc's acceptance criteria, not just a green gate.
+- **These are product changes — verify the product outcome.** Per item, check the design-doc acceptance
+  criterion (e.g. D1: a typical issue is no longer all long-reads and the colophon stays in sync; B: a
+  paywalled item is excluded but a short *free* visual post is not). Two items need extra care: **R5-D1**
+  (a third display-diversity guarantee — re-prove it composes with C2/C3 + the source cap, R4-14 precedent)
+  and **R5-D3** (the "place" item type — settle reader-routing: a place links straight out, never opens the
+  in-app reader).
 - **Push after every finding.** Each push deploys to Vercel and is used for live re-validation,
   so the build **must be green before you push.** Never push a red build.
 - **Autonomy:** proceed using the report's recommended fix on every item. For any judgment call
@@ -76,6 +79,7 @@ When you stop, print a concise summary:
 
 Verification commands (recap): `npx tsc --noEmit` · `npm run lint` · `npm run build` · `npm run dev`.
 
-Start now: open `agents/review/REVIEW_TRACKER.md`, read the **ROUND 4 — follow-ups** subsection, find the
-first `TODO` (currently **R4-14**), and begin the loop. Only two minor items remain (R4-14 logic fix,
-R4-15 flag-for-Kyle). Re-confirm each against current code before changing it.
+Start now: read `agents/architect/design_product_round5_content_mix.md` (the precise plan), then open
+`agents/review/REVIEW_TRACKER.md`, find the first `TODO` in the **ROUND 5 — Product** section (currently
+**R5-A1**), and begin the loop. R5-A1 (restore feed scroll on back-nav) is a small, daily-feel first win.
+Work the order A → B → C → D; **D (the content-format mix) is the headline outcome.**
