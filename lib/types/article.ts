@@ -85,6 +85,14 @@ export interface Article {
    * Derived from bodyText word count at pipeline time.
    */
   readTime?: number;
+
+  /**
+   * Personalized, second-person curator note (R5-C) — an editorial invitation
+   * ("why you'll want this") that replaces the raw RSS summary as the card
+   * blurb. Generated at request time from the reader's taste digest and cached
+   * back to the batch, so subsequent loads are free. Sent to the client.
+   */
+  curatorNote?: string;
 }
 
 /** The response shape returned by GET /api/feed/today. */

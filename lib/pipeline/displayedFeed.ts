@@ -48,6 +48,19 @@ function unfamiliarCount(articles: Article[], shownDomains: Map<string, string>)
   return articles.filter((a) => isNeverShown(a, shownDomains)).length;
 }
 
+/**
+ * The reader's taste model, resolved once here and returned so callers (the
+ * curator-note generator, R5-C) don't re-query it.
+ */
+export interface ResolvedTaste {
+  /** Top concept labels, strongest first (getTopConceptNodes). */
+  topConcepts: string[];
+  /** Long-term aesthetic centroid, or null when none exists yet. */
+  centroid: AestheticScoreVector | null;
+  /** Per-article aesthetic vectors, keyed by article id. */
+  articleScores: Map<string, AestheticScoreVector>;
+}
+
 export interface DisplayedFeed {
   /**
    * The batch's articles in final display order: personalized rank + the C2/C3
@@ -64,7 +77,15 @@ export interface DisplayedFeed {
    * for a ranked feed (e.g. exploration-slot rationale generation) gate on this.
    */
   ranked: boolean;
+  /** The reader's resolved taste model (R5-C); empty on the raw-order fallback. */
+  taste: ResolvedTaste;
 }
+
+const EMPTY_TASTE: ResolvedTaste = {
+  topConcepts: [],
+  centroid: null,
+  articleScores: new Map(),
+};
 
 /**
  * Resolves the final displayed order of a batch for the requesting identity.
@@ -133,11 +154,19 @@ export async function resolveDisplayedFeed(
     allConceptEdgesResult   = conceptEdges;
   } catch (err) {
     console.error('[displayedFeed] identity/feedback/aesthetic fetch failed, returning raw order:', err);
-    return { articles: batch.articles, setCookieHeader, ranked: false };
+    return { articles: batch.articles, setCookieHeader, ranked: false, taste: EMPTY_TASTE };
   }
 
   const topConceptLabels = topConceptNodes.map(n => n.label);
   const explorationBudget = aestheticProfile?.exploration_budget ?? EXPLORATION_BASELINE;
+
+  // Taste digest returned for the curator-note generator (R5-C) — already
+  // resolved above, so the feed route doesn't re-query it.
+  const taste: ResolvedTaste = {
+    topConcepts: topConceptLabels,
+    centroid: aestheticProfile?.centroid ?? null,
+    articleScores: aestheticScoreMap,
+  };
 
   const rankedArticles = rankFeed(
     batch.articles,
@@ -222,5 +251,5 @@ export async function resolveDisplayedFeed(
     console.error('[displayedFeed] display-diversity reorder skipped:', err);
   }
 
-  return { articles: displayArticles, setCookieHeader, ranked: true };
+  return { articles: displayArticles, setCookieHeader, ranked: true, taste };
 }
