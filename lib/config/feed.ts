@@ -1,5 +1,7 @@
 // Quota and discovery tuning constants shared across the pipeline and discovery subsystems.
 
+import { LLM_PROVIDER } from '@/lib/config/llm';
+
 /** Total articles in every daily batch. */
 export const ARTICLES_PER_DAY = 20;
 
@@ -90,8 +92,15 @@ export const DISCOVERY_CANDIDATES_PER_TOPIC = 20;
  * sequential body+LLM round-trips) so a widened raw pool can never push a run
  * past the DAT-H2 budget. The gate chooses these from the full (now ~240+) raw
  * pool, interleaved by topic so Small-Web candidates are represented.
+ *
+ * Provider-aware (R6-5): under Gemini's ~15 RPM free tier the shared limiter
+ * meters every LLM call to ~4s apart, so 40 discovery evals (alone ~160s) plus
+ * the per-article scoring phase would overrun the wall-clock budget. Lowering
+ * the cap to 15 keeps a full Gemini run inside `PIPELINE_WALL_CLOCK_BUDGET_MS`
+ * (the per-article scoring phase is additionally deadline-guarded — see run.ts).
+ * Anthropic (effectively unlimited rate) keeps the full 40.
  */
-export const DISCOVERY_MAX_EVAL_CANDIDATES = 40;
+export const DISCOVERY_MAX_EVAL_CANDIDATES = LLM_PROVIDER === 'gemini' ? 15 : 40;
 
 /** Magnitude of topic weight adjustment per feedback event (like or dislike). */
 export const TOPIC_WEIGHT_STEP = 0.1;
@@ -142,16 +151,23 @@ export const PIPELINE_WALL_CLOCK_BUDGET_MS = 270_000;
  */
 export const PIPELINE_POST_DISCOVERY_RESERVE_MS = 120_000;
 
-/** Max concurrent Anthropic calls in the per-article scoring/concept loops. */
-export const PIPELINE_LLM_CONCURRENCY = 4;
+/**
+ * Max concurrent LLM calls in the per-article scoring/concept loops. Subordinate
+ * to the shared rate limiter (R6-3), which sets the actual rate; this only caps
+ * how many requests are in flight at once. Provider-aware (R6-5): 2 under Gemini
+ * (gentler on the free tier's per-minute/concurrency ceilings), 4 for Anthropic
+ * (unchanged).
+ */
+export const PIPELINE_LLM_CONCURRENCY = LLM_PROVIDER === 'gemini' ? 2 : 4;
 
 /**
  * Max concurrent discovery candidates in body-extraction + LLM evaluation.
  * The loop was fully sequential, so one slow fetch/LLM call stalled the rest and
- * risked the pipeline wall-clock budget (R2-18). Kept modest (4) to bound
- * simultaneous Anthropic calls and outbound fetches.
+ * risked the pipeline wall-clock budget (R2-18). Kept modest to bound
+ * simultaneous LLM calls and outbound fetches. Provider-aware (R6-5): 2 under
+ * Gemini, 4 for Anthropic (unchanged).
  */
-export const DISCOVERY_LLM_CONCURRENCY = 4;
+export const DISCOVERY_LLM_CONCURRENCY = LLM_PROVIDER === 'gemini' ? 2 : 4;
 
 /**
  * Hard cap on per-article LLM calls (aesthetic scoring + concept extraction)

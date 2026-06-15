@@ -223,13 +223,33 @@ function diversifyForSelection(
  * Failures are isolated per-article: an error for article N does not affect N+1.
  * A scoring failure never removes the article from the batch.
  */
-/** Per-run LLM call budget (PIPE-M5). */
+/** Per-run LLM call budget (PIPE-M5) + wall-clock deadline (R6-5). */
 interface LlmBudget {
   used: number;
   exhaustedLogged: boolean;
+  /**
+   * Absolute time (ms epoch) past which the per-article enrichment phase stops
+   * issuing new LLM calls so the batch is still written before the platform
+   * kills the function (R6-5). Under Gemini's ~15 RPM the shared limiter spaces
+   * calls ~4s apart, so a full scoring + concept pass can exceed the wall-clock
+   * budget; this guard caps it. Effectively never reached under Anthropic
+   * (fast, effectively-unthrottled calls), so the Anthropic path is unchanged.
+   */
+  deadlineMs: number;
+  deadlineLogged: boolean;
 }
 
 function tryConsumeLlm(budget: LlmBudget): boolean {
+  if (Date.now() >= budget.deadlineMs) {
+    if (!budget.deadlineLogged) {
+      appendLog(
+        `[pipeline] LLM wall-clock deadline reached — remaining articles skip ` +
+          `enrichment this run (batch still writes; unscored items rank by source score)`
+      );
+      budget.deadlineLogged = true;
+    }
+    return false;
+  }
   if (budget.used >= MAX_LLM_EVALS_PER_RUN) {
     if (!budget.exhaustedLogged) {
       appendLog(
@@ -572,8 +592,15 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     }
 
     // Score all articles aesthetically before writing the batch.
-    // One shared LLM budget covers scoring + concept extraction (PIPE-M5).
-    const llmBudget: LlmBudget = { used: 0, exhaustedLogged: false };
+    // One shared LLM budget covers scoring + concept extraction (PIPE-M5), plus a
+    // wall-clock deadline so a slow (rate-limited) provider can't run the
+    // enrichment phase past the budget and lose the batch write (R6-5 / DAT-H2).
+    const llmBudget: LlmBudget = {
+      used: 0,
+      exhaustedLogged: false,
+      deadlineMs: runStartMs + PIPELINE_WALL_CLOCK_BUDGET_MS,
+      deadlineLogged: false,
+    };
     const { scored, alreadyScored } = await scoreArticlesAesthetic(articles, llmBudget);
 
     // Phase 4: Extract concepts for all articles before writing the batch.
