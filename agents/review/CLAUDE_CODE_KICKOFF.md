@@ -2,6 +2,13 @@ You are working in the **Tangent** repo. We are running a systematic remediation
 to fix every finding from a code + UX/UI review, one finding at a time, committing and pushing
 after each so we never lose progress if a session ends mid-way.
 
+## Status note (2026-06-15) — Gemini key already provisioned
+A free-tier **Gemini API key** has already been created (Google AI Studio, named "Tangent") and set in
+Vercel as **`GEMINI_API_KEY`** (all environments). So R6-6's "create a key" Kyle-action is **done** —
+do **not** ask Kyle to create one. The only remaining Kyle-action is the final **`LLM_PROVIDER=gemini`**
+flip in Vercel, which must happen **after R6-5 deploys** (until then the abstraction defaults to Anthropic).
+Do not hardcode or echo the key value anywhere; reference it by name (`GEMINI_API_KEY`) only.
+
 ## Read these first (in order)
 1. `CLAUDE.md` — project context, agent pipeline, and ground rules. Follow them.
 2. `agents/review/REVIEW_TRACKER.md` — **the source of truth.** It contains every finding
@@ -32,17 +39,18 @@ per-finding loop defined in the tracker:
 ## Policy (already decided — don't re-litigate)
 - **Scope:** the entire tracker, in order — **except items marked `DEFERRED`**, which are out of
   scope (single-user project; see the tracker's *Future state — multi-user rollout* section). Skip
-  them; do not re-open them. Rounds 1–4 and the main Round-5 backlog are complete (R4-15 is `BLOCKED` on Kyle's
-  taste sign-off — leave it). **One verification follow-up remains — the next actionable item is `R5-C3`:**
-  the personalized curator note (R5-C) is **not generating on the live feed** — the deployed `/api/feed/today`
-  returns empty `curatorNote` so the card falls back to the RSS summary, even though the code is correct and
-  `ANTHROPIC_API_KEY` is set. **Diagnose from the actual `/api/feed/today` Vercel function logs** (not the log
-  search UI): is `generateMissingCuratorNotes` early-returning on a missing key in the route runtime, or are
-  the Haiku calls throwing (`[curatorNote] Failed …` — check `taste` from `resolveDisplayedFeed` is never
-  undefined into `buildUserPrompt`, rate limits, model)? Fix it; also add `export const maxDuration` to the
-  feed route and consider generating notes at **pipeline time** instead of the request path (latency / the
-  DAT-M1 "LLM on the read path" smell). Commit `fix(R5-C3): …`.
-- **Verify the product outcome, not just the gate.** For R5-C3, confirm the deployed feed actually shows
+  them; do not re-open them. Rounds 1–5 are complete (R4-15 `BLOCKED` on Kyle's seed-vector sign-off; R5-C3 is
+  the Anthropic account being out of credits — **Round 6 resolves it** by switching providers). We are now on
+  the **ROUND 6 backlog** (LLM provider abstraction → go Gemini free-tier). The next actionable item is **R6-1**.
+  **Read the precise plan first:** `agents/architect/design_product_round6_llm_provider_abstraction.md` (the
+  7-call-site map, the rate-limit strategy, schema mapping, sequencing, caveats). Build order **R6-1 → R6-7**;
+  the gate stays green at each step and the provider switch (R6-5) comes last. Commit `feat(R6-XX): …`.
+- **Critical invariants (don't break these in the refactor):** at every refactored LLM site keep
+  `UNTRUSTED_CONTENT_NOTICE` in the `system` prompt + `wrapUntrusted(...)` on the user content (sites 1–6, not
+  the query-bank script) and **all existing post-parse validation** (Gemini honors schema constraints weakly).
+  R6-2 must be **behavior-preserving** (Anthropic stays active) — verify the gate is green before moving on.
+- **Verify the product outcome, not just the gate.** For R5-C3 (the legacy item, now folded into Round 6):
+  the goal is the deployed feed actually shows
   personalized curator notes (curl `/api/feed/today` and check `articles[].curatorNote` is populated) — a
   green build is not enough; the bug only shows at runtime.
   (a third display-diversity guarantee — re-prove it composes with C2/C3 + the source cap, R4-14 precedent)
@@ -83,7 +91,8 @@ When you stop, print a concise summary:
 
 Verification commands (recap): `npx tsc --noEmit` · `npm run lint` · `npm run build` · `npm run dev`.
 
-Start now: open `agents/review/REVIEW_TRACKER.md`, read the **R5-C3** item in the *Round 5 — follow-ups*
-subsection (currently the only actionable `TODO`), and begin the loop. It's a runtime bug — the curator note
-doesn't generate on the live feed; diagnose from the deployed `/api/feed/today` function logs and verify the
-fix by checking `articles[].curatorNote` is actually populated on the live endpoint, not just a green build.
+Start now: read `agents/architect/design_product_round6_llm_provider_abstraction.md` (the precise plan), then
+open `agents/review/REVIEW_TRACKER.md`, find the first `TODO` in the **ROUND 6** section (currently **R6-1**),
+and begin the loop. R6-2 (refactor the 7 sites behind the interface, Anthropic still active) must stay
+behavior-preserving; the Gemini switch is R6-5. The hard part is the rate limiter (R6-3) + budget-fit (R6-5) —
+follow design §2.

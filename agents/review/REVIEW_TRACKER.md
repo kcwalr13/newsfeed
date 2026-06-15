@@ -101,6 +101,13 @@ npm run dev           # for manual/browser spot-checks
   No migrations (all config/logic/UI, deploy-safe). Live product validation runs on the Vercel deploy / next
   daily cron (note quality needs `ANTHROPIC_API_KEY`; format mix + place cadence visible on the next batch).
   (the report's premise is a scale misread; only 1 of 12 seed vectors is genuinely off — see R4-15 entry). **0 TODO.**
+  **Post-R5 verification (Session 10):** content mix (#3) confirmed live; **R5-C3** logged — curator notes don't
+  generate in prod because the **Anthropic account is out of credits** (root cause via `vercel logs`).
+- **Round 6 (LLM provider abstraction + go free-tier, 2026-06-15): 7 NEW items, all TODO.** Plan:
+  `agents/architect/design_product_round6_llm_provider_abstraction.md`. Abstract the 7 LLM call sites behind a
+  provider interface (Anthropic + **Gemini** adapters), add a shared rate limiter, and switch prod to **Gemini
+  2.x Flash (free tier)** = $0 spend. Order R6-1 → R6-7 (R6-7 optional batching). **Resolves R5-C3.**
+  **Progress: 1/7 DONE (R6-1) · 0 IN-PROGRESS · 6 TODO (R6-2…R6-7). Last resume point: R6-2.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -1085,7 +1092,44 @@ headline outcome; pull it earlier if preferred.
     generating notes at **pipeline time** instead of the request path (latency + the DAT-M1 "LLM on the read
     path" smell).
   - Acceptance: displayed items show personalized curator notes live; the raw RSS summary no longer appears.
-  - Status: TODO · Commit: — · Notes: —
+  - **ROOT CAUSE (confirmed 2026-06-15 via `vercel logs`):** **NOT a code bug.** Every Haiku call returns
+    `400 invalid_request_error: "Your credit balance is too low to access the Anthropic API."` — the
+    **Anthropic account (the `ANTHROPIC_API_KEY` in Vercel) is out of credits.** The code is correct: it catches
+    the 400 (`curatorNoteGenerator.ts:126`) and falls back to the RSS description.
+  - **Impact is broader than curator notes:** with the account out of credits, ALL LLM features fail — aesthetic
+    taste scoring, discovery LLM eval, theme generation, AND curator notes. The next daily cron will produce a
+    **degraded issue** (PIPE-H1: ranked by source score only, likely no discovery, fallback theme, no notes).
+    LLM-free features still work (palette, format mix, display diversity, paywall guard, scroll). Likely
+    exhausted by the heavy testing across this engagement (many full-pipeline refreshes ≈ 40+ Haiku calls each,
+    curator-note attempts, calibration) plus daily crons.
+  - **PRIMARY FIX — Kyle (billing, not code):** add credits / enable auto-reload at console.anthropic.com →
+    Plans & Billing. Once topped up, curator notes + all LLM features resume automatically with the
+    already-deployed code — no code change needed to un-break them.
+  - **Optional code hygiene (lower priority, keep for later):** move curator-note generation to PIPELINE time
+    (`lib/pipeline/run.ts`, bounded concurrency, persist `curatorNote` into the batch) so it's off the request
+    path (latency + the DAT-M1 "LLM on the read path" smell) and pre-baked into the issue. Not required to fix
+    the credit error.
+  - Status: BLOCKED (on Kyle's Anthropic billing) · the optional pipeline-time refactor can be a separate item.
+
+---
+
+## ROUND 6 — LLM provider abstraction + go free-tier (2026-06-15)
+
+Kyle wants $0 LLM spend + infra to swap providers. **Decision:** active provider after this lands = **Gemini
+2.x Flash (free tier)**; keep the Anthropic adapter one-env-var away. Precise plan (call-site map, the
+rate-limit strategy, schema mapping, caveats): `agents/architect/design_product_round6_llm_provider_abstraction.md`.
+Feature/config — standard workflow; **no migration**. Order **R6-1 → R6-7**; the gate stays green at each step
+and the provider switch comes last. **Preserve `UNTRUSTED_CONTENT_NOTICE` in `system` + `wrapUntrusted()` on
+user content (sites 1–6) and all post-parse validation** at every refactored site.
+
+- [x] **R6-1** · Provider interface + config. `lib/llm/types.ts` (`LlmProvider`: `generateStructured<T>({schema,toolName,system,user,maxTokens})` + `generateText({system?,user,maxTokens})`), `lib/llm/index.ts` (`getLlm()` factory), extend `lib/config/llm.ts` with `LLM_PROVIDER` (`'anthropic'|'gemini'`, default `anthropic`) + a per-provider `{model,rpm,maxConcurrency,dailyCap?}` table. No behavior change. · **DONE** (commit `pending`)
+  - **Notes:** Added `lib/llm/types.ts` (`JsonSchema` subset + `GenerateStructuredOptions`/`GenerateTextOptions` + `LlmProvider`), `lib/llm/index.ts` (`getLlm()` factory — memoized; throws "no adapter registered" until R6-2/R6-4 register the adapters, which is safe because **no call site invokes `getLlm()` yet** — the 7 sites still use the Anthropic SDK directly). Extended `lib/config/llm.ts`: kept `LLM_MODEL` for back-compat, added `LlmProviderName`, `ProviderConfig`, `LLM_PROVIDER` (env, default `anthropic`; only the literal `gemini` switches), `PROVIDER_CONFIG` (anthropic = Infinity RPM/no cap → limiter no-op until R6-5; gemini = 15 RPM / 2 concurrency / 1500 RPD placeholder, R6-5 tunes), and `activeProviderConfig()`. **Behavior-preserving:** scaffolding only; the existing `LLM_MODEL` import in all 7 sites is unchanged. Verified: `npx tsc --noEmit` clean · `npm run lint` 0 errors (3 pre-existing warnings in untouched files) · `npm run build` EXIT=0 "Compiled successfully". Follow-up: R6-2 registers the Anthropic adapter + refactors the 7 sites to `getLlm()`.
+- [ ] **R6-2** · Anthropic adapter (`lib/llm/anthropic.ts`) + **refactor all 7 LLM sites to the interface** (aestheticScorer, llmEvaluator [keep its provider-injection test seam], conceptExtractor, blindSpotProber → `generateStructured`; themeGenerator, curatorNoteGenerator, `scripts/refresh-query-banks.ts` → `generateText`). Anthropic stays active → **behavior-preserving**; gate green. De-risks the round. · TODO
+- [ ] **R6-3** · Shared token-bucket rate limiter (`lib/llm/limiter.ts`) keyed by the active provider's RPM; wire **every** call through it (incl. the unbounded `generateMissingCuratorNotes` fan-out); per-loop concurrency (`PIPELINE_LLM_CONCURRENCY`, `DISCOVERY_LLM_CONCURRENCY`) becomes subordinate. Default to Anthropic's unlimited rate so behavior is unchanged until R6-5. · TODO
+- [ ] **R6-4** · Gemini adapter (`lib/llm/gemini.ts`, `@google/genai`): `generateStructured` → `responseMimeType:'application/json' + responseSchema` (per-site mapping in design §3) + `JSON.parse`; `generateText` → `generateContent`; `system → systemInstruction`; preserve the fence/notice; keep post-parse validation (Gemini honors schema constraints weakly). Add `GEMINI_API_KEY` env. · TODO
+- [ ] **R6-5** · Go live on Gemini free + fit the budget. Set `LLM_PROVIDER=gemini`, model = **Gemini 2.0 Flash** (15 RPM/1M TPM), limiter ≈15 RPM; lower `DISCOVERY_MAX_EVAL_CANDIDATES` (40 → ~15) + concurrency so a full run fits RPM **and** `PIPELINE_WALL_CLOCK_BUDGET_MS`; verify graceful degradation (DAT-H2 still writes a thinner batch) and the daily RPD cap isn't blown by a refresh. Acceptance: a refresh completes on Gemini, structured + text calls return valid output, no 429 storms, batch writes. · TODO
+- [ ] **R6-6** · Docs + ops. `.env.example` + README + ARCHITECTURE: `LLM_PROVIDER` / `GEMINI_API_KEY`, the free-tier **training-data caveat** (article text + taste signals), the **taste-model recalibration** note (Haiku-scored vs Gemini-scored mixed space — accept drift or one-time rescore), degraded-mode behavior. **Kyle action:** create a free key at aistudio.google.com → set `GEMINI_API_KEY` + `LLM_PROVIDER=gemini` in Vercel. · TODO
+- [ ] **R6-7** · (Optional, phase 2) **Batch** the high-volume structured calls — score N articles per request (one prompt → array of N score objects) for aesthetic scoring + discovery eval — collapsing ~40 evals → ~4–8 calls. Reclaims throughput/quality under the free tier; improves cost/latency on any provider. Defer; the round works without it. · TODO
 
 ---
 
@@ -1752,4 +1796,33 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   **R5-C3** (High) to diagnose from the feed-route function logs + add `maxDuration` / move generation to
   pipeline time.
 - **Still awaiting Kyle:** R4-15 seed-vector sign-off.
-- RESUME AT: **R5-C3** (diagnose + fix the curator-note generation).
+- RESUME AT (post-R5): — (R5-C3 = Anthropic out of credits; not a code bug).
+
+### Session 11 — 2026-06-15 — Round 6 plan: LLM provider abstraction (reviewer/PM, Cowork)
+- R5-C3 root cause was the Anthropic account being out of credits. Rather than top up, Kyle chose to build an
+  **LLM provider abstraction** and switch the active provider to **Gemini 2.x Flash (free tier)** for $0 spend
+  + future model/provider flexibility.
+- Mapped all **7 LLM call sites** (4 structured/tool_use, 3 text) and sized the call volume (~70–90/run, ≤40
+  discovery evals) vs Gemini free's ~10–15 RPM — the rate limiter + budget-fit is the crux, not the adapter.
+  Wrote the precise plan `agents/architect/design_product_round6_llm_provider_abstraction.md` and opened
+  **Round 6** (7 items, R6-1→R6-7; R6-7 optional batching). No migration.
+- **Resolves R5-C3** once live (curator notes will generate on the free key). R4-15 still BLOCKED on Kyle.
+- RESUME AT: **R6-1**
+
+### Session 12 — 2026-06-15 — Claude Code (Round 6 start: LLM provider abstraction)
+- **R6-1 DONE** — provider interface + config scaffolding (no behavior change).
+  - Added `lib/llm/types.ts`: `JsonSchema` (minimal subset covering all 4 structured sites),
+    `GenerateStructuredOptions` / `GenerateTextOptions`, and the `LlmProvider` interface
+    (`generateStructured<T>` + `generateText`). Documented the prompt-injection invariant the
+    R6-2 refactor must preserve (notice in `system` + `wrapUntrusted` on `user` for sites 1–6).
+  - Added `lib/llm/index.ts`: `getLlm()` factory (memoized; switches on `LLM_PROVIDER`). Throws
+    "no adapter registered" for now — **safe because no call site calls `getLlm()` yet**; R6-2
+    registers the Anthropic adapter, R6-4 the Gemini one.
+  - Extended `lib/config/llm.ts`: kept `LLM_MODEL` (back-compat — all 7 sites still import it),
+    added `LlmProviderName`, `ProviderConfig`, `LLM_PROVIDER` (env → default `anthropic`),
+    `PROVIDER_CONFIG` (anthropic = ∞ RPM/no daily cap → limiter no-op until R6-5; gemini =
+    `gemini-2.0-flash` / 15 RPM / 2 concurrency / 1500 RPD as placeholders R6-5 tunes), and
+    `activeProviderConfig()`.
+  - Gate: `npx tsc --noEmit` clean · `npm run lint` 0 errors (3 pre-existing warnings, untouched
+    files) · `npm run build` EXIT=0. Commit: `pending` (backfill in R6-2's tracker update).
+- RESUME AT: **R6-2** (Anthropic adapter + refactor all 7 sites to the interface; behavior-preserving).
