@@ -91,7 +91,7 @@ npm run dev           # for manual/browser spot-checks
   section below. 2 High (R4-01 colophon/theme credits the wrong 7 — live-confirmed; R4-08 onboarding seed
   fallback writes phantom rows + doesn't seed the EMA), 6 Medium, 5 Low. **Docs were brought current in
   this session** (README, CLAUDE.md, ARCHITECTURE.md — committed in `33d6b18`).
-  Round-4 progress: **3 DONE (R4-01, R4-08, R4-02) · 10 TODO.** **Last resume point: R4-03.**
+  Round-4 progress: **4 DONE (R4-01, R4-08, R4-02, R4-03) · 9 TODO.** **Last resume point: R4-04.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -947,7 +947,7 @@ Operational order: the two Highs first.
 
 ### Round 4 — Medium
 - [x] **R4-02** · 🟡 Medium · `discoverySources` exposes raw registrable domains (`artwalkway.com`), not source names. `computeDiscoveryYield` (`lib/pipeline/discoveryMeta.ts:31`) — return `{domain, name}` (use `a.sourceName`) so the UI can show "Art Walkway." · DONE · Commit: pending · Notes: `computeDiscoveryYield` now returns `discoverySources: DiscoverySource[]` (`{domain, name}`), deduped by registrable domain, name from `a.sourceName` (domain fallback; a domain-only placeholder is upgraded if a later article for the same domain carries a real name), sorted by name. `FeedResponse.discoverySources` retyped to `Array<{domain,name}>`. No UI currently renders it (exposed in the API only), so this is forward-enabling — the consumer can now show "Art Walkway." Files: `lib/pipeline/discoveryMeta.ts`, `lib/types/article.ts`. Gate green.
-- [ ] **R4-03** · 🟡 Medium · Novelty filter has no mega-site denylist — Wikipedia (seen in prod), Medium, Substack, NYT, YouTube, Reddit pass as "hidden gems." Add a `MEGA_SITE_DENYLIST` checked in `lib/discovery/run.ts` before eval; for shared hosts (substack.com/medium.com) key novelty on the full host, not the registrable domain (else one Substack suppresses all others for 14 issues). · TODO
+- [x] **R4-03** · 🟡 Medium · Novelty filter has no mega-site denylist — Wikipedia (seen in prod), Medium, Substack, NYT, YouTube, Reddit pass as "hidden gems." Add a `MEGA_SITE_DENYLIST` checked in `lib/discovery/run.ts` before eval; for shared hosts (substack.com/medium.com) key novelty on the full host, not the registrable domain (else one Substack suppresses all others for 14 issues). · DONE · Commit: pending · Notes: `lib/discovery/novelty.ts` now exports `MEGA_SITE_DENYLIST` (focused set of mainstream platforms — reference/video/social/code/retail/mega-news, by registrable domain so `en.wikipedia.org`→`wikipedia.org` is covered), `SHARED_HOSTS` (substack/medium/wordpress/blogspot/**github.io**/etc.), `isMegaSite(url)`, and `noveltyKey(url)` (full host for shared hosts, registrable domain otherwise). `loadSeenSourceDomains` + fixed-source set now key by `noveltyKey`; `lib/discovery/run.ts` Phase 1 drops mega-sites (`MEGA_SITE` log) before the novelty check, which now uses `noveltyKey`. YIELD log gains `megaSite=N`. **Also fixes the same subdomain-collapse bug for github.io/wordpress.com/etc.** (not in the multi-part-suffix list → all subdomains previously collapsed to one registrable domain, so one author suppressed the whole platform). Verified by an inline replica matrix: wikipedia/youtube → mega; alice/bob.substack.com → distinct keys (one seen doesn't suppress the other); medium.com path-authors collapse (expected — path-based); kk.org unchanged. Files: `lib/discovery/novelty.ts`, `lib/discovery/run.ts`. Gate green.
 - [ ] **R4-04** · 🟡 Medium · Hard-floor last-resort isn't bounded: `top = qualified.slice(0,6)` takes the best 6 regardless of `LLM_EVAL_FLOOR` (the floor is a label, not a gate, `lib/discovery/run.ts:386-418`) — a thin day can fill all 6 discovery slots with sub-3.0 content. Cap below-floor last-resort to ≤2, or shrink the quota when only sub-floor candidates remain. · TODO
 - [ ] **R4-09** · 🟡 Medium · Dashboard exploration-budget shows `{budget} / 7` but the budget is clamped `[2,6]` (`serendipity.ts`) — it can never read full. `app/dashboard/page.tsx:214` → use `/ {EXPLORATION_CEILING}` (6) or drop the denominator. · TODO
 - [ ] **R4-10** · 🟡 Medium · Mid-calibration refresh discards all in-progress responses (state-only until `finish()`; `CalibrationModal.tsx:117-127`). Persist partial progress (`tangent_calibration_progress`) and resume, or write each response as it's made. · TODO
@@ -1467,5 +1467,9 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   byte-identical + endpoint not abusable. Decision logged. Gate green. Commit: c978e7a.
 - **R4-02** → DONE: `computeDiscoveryYield` returns `discoverySources` as `{domain, name}[]` (name from
   `a.sourceName`, domain fallback), deduped by registrable domain, sorted by name; `FeedResponse`
-  retyped. Forward-enabling (no UI renders it yet). Gate green. Commit: pending.
-- RESUME AT: **R4-03**
+  retyped. Forward-enabling (no UI renders it yet). Gate green. Commit: 5c38601.
+- **R4-03** → DONE: added `MEGA_SITE_DENYLIST` + `SHARED_HOSTS` + `isMegaSite`/`noveltyKey` to
+  `lib/discovery/novelty.ts`; discovery Phase 1 drops mega-sites before eval and keys novelty by full
+  host for shared hosts (so substack/github.io authors are distinct — one seen no longer suppresses the
+  platform). YIELD log gains `megaSite=N`. Behavior verified by an inline matrix. Gate green. Commit: pending.
+- RESUME AT: **R4-04**

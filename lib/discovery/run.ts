@@ -17,7 +17,7 @@ import { loadQueryBanks, loadRotationState, saveRotationState, selectNextQueries
 import { runSmallWebCrawl } from './smallWeb/crawler';
 import { appendLog, readLatestBatch } from '@/lib/pipeline/storage';
 import { canonicalizeUrlForDedup, registrableDomain } from '@/lib/utils/url';
-import { loadSeenSourceDomains } from './novelty';
+import { loadSeenSourceDomains, isMegaSite, noveltyKey } from './novelty';
 import {
   getTopicWeightsForUser,
   getAllTopicWeightsAveraged,
@@ -260,6 +260,7 @@ export async function runDiscovery(
   // fixed-source set on any DB error.
   const seenDomains = await loadSeenSourceDomains(NOVELTY_LOOKBACK_ISSUES);
   let notNovelCount = 0;
+  let megaSiteCount = 0;
 
   // Phase 1 (sequential, cheap): synchronous gates + novelty + dedup. Resolving
   // dedup up-front — adding each canonical URL to seenCanonical on first sight,
@@ -275,10 +276,20 @@ export async function runDiscovery(
       appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- ${gateResult.reason}`);
       continue;
     }
-    // Novelty (P3-A3): drop known / recently-shown source domains.
-    const domain = registrableDomain(result.sourceUrl || result.url);
-    if (seenDomains.has(domain)) {
-      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- NOT_NOVEL (${domain})`);
+    // Mega-site denylist (R4-03): mainstream platforms are never hidden gems,
+    // even if "novel" — drop them before the expensive eval.
+    const sourceUrl = result.sourceUrl || result.url;
+    if (isMegaSite(sourceUrl)) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- MEGA_SITE (${registrableDomain(sourceUrl)})`);
+      megaSiteCount++;
+      continue;
+    }
+    // Novelty (P3-A3): drop known / recently-shown sources. Keyed via noveltyKey
+    // so shared hosts (substack.com, github.io …) distinguish individual authors
+    // by full host instead of suppressing the whole platform (R4-03).
+    const key = noveltyKey(sourceUrl);
+    if (seenDomains.has(key)) {
+      appendLog(`[discovery] DISCARD [${topic.id}] ${result.url} -- NOT_NOVEL (${key})`);
       notNovelCount++;
       continue;
     }
@@ -405,7 +416,7 @@ export async function runDiscovery(
   // below-floor count when the last-resort backfill had to dip under the floor.
   const yieldLine =
     `[discovery] YIELD candidatesFound=${allCandidatePairs.length} ` +
-    `notNovel=${notNovelCount} gatePassed=${toProcess.length} evaluated=${toEvaluate.length} scored=${qualified.length} ` +
+    `megaSite=${megaSiteCount} notNovel=${notNovelCount} gatePassed=${toProcess.length} evaluated=${toEvaluate.length} scored=${qualified.length} ` +
     `aboveThreshold=${aboveThreshold.length} aboveFloor=${aboveFloor.length} ` +
     `slotsFilled=${top.length}/${DISCOVERY_ARTICLES_PER_DAY} belowFloor=${belowFloorFilled} ` +
     `(threshold=${LLM_EVAL_THRESHOLD} floor=${LLM_EVAL_FLOOR})`;
