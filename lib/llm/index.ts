@@ -11,6 +11,7 @@
 
 import type { LlmProvider, GenerateStructuredOptions, GenerateTextOptions } from './types';
 import { AnthropicProvider } from './anthropic';
+import { GeminiProvider } from './gemini';
 import { acquireLlmSlot } from './limiter';
 import { LLM_PROVIDER, type LlmProviderName } from '@/lib/config/llm';
 
@@ -51,8 +52,7 @@ function createProvider(name: LlmProviderName): LlmProvider {
     case 'anthropic':
       return new AnthropicProvider();
     case 'gemini':
-      // Gemini adapter lands in R6-4. Until then, selecting it is a config error.
-      throw new Error('[llm] Gemini adapter is not registered yet (R6-4).');
+      return new GeminiProvider();
     default:
       throw new Error(`[llm] Unknown LLM provider "${name}".`);
   }
