@@ -9,18 +9,41 @@
  *   - `gemini`    → R6-4 (lib/llm/gemini.ts)      ← not yet registered
  */
 
-import type { LlmProvider } from './types';
+import type { LlmProvider, GenerateStructuredOptions, GenerateTextOptions } from './types';
 import { AnthropicProvider } from './anthropic';
+import { acquireLlmSlot } from './limiter';
 import { LLM_PROVIDER, type LlmProviderName } from '@/lib/config/llm';
 
 export type { LlmProvider } from './types';
 
 let _cached: LlmProvider | null = null;
 
-/** Returns the active LLM provider adapter (lazily constructed, memoized). */
+/**
+ * Returns the active LLM provider adapter, wrapped by the shared rate limiter
+ * (R6-3) so every call is metered to the provider's RPM. Lazily constructed and
+ * memoized.
+ */
 export function getLlm(): LlmProvider {
-  if (!_cached) _cached = createProvider(LLM_PROVIDER);
+  if (!_cached) _cached = withRateLimit(createProvider(LLM_PROVIDER));
   return _cached;
+}
+
+/**
+ * Decorates a provider so every call first acquires a rate-limiter slot
+ * (`acquireLlmSlot`). A no-op delay for unlimited providers (Anthropic), so the
+ * Anthropic path is unchanged until the R6-5 Gemini switch.
+ */
+function withRateLimit(provider: LlmProvider): LlmProvider {
+  return {
+    async generateStructured<T>(opts: GenerateStructuredOptions): Promise<T> {
+      await acquireLlmSlot();
+      return provider.generateStructured<T>(opts);
+    },
+    async generateText(opts: GenerateTextOptions): Promise<string> {
+      await acquireLlmSlot();
+      return provider.generateText(opts);
+    },
+  };
 }
 
 function createProvider(name: LlmProviderName): LlmProvider {
