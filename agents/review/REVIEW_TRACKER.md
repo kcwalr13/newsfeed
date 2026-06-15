@@ -92,6 +92,8 @@ npm run dev           # for manual/browser spot-checks
   fallback writes phantom rows + doesn't seed the EMA), 6 Medium, 5 Low. **Docs were brought current in
   this session** (README, CLAUDE.md, ARCHITECTURE.md — committed in `33d6b18`).
   **✅ ROUND 4 COMPLETE: 13/13 DONE (2 High, 6 Medium, 5 Low) · 0 TODO.** **Last resume point: — (cleared).**
+  **Round 4 follow-ups (2026-06-14): R4-14 DONE (commit `9697ffe`) · R4-15 BLOCKED on Kyle's taste sign-off**
+  (the report's premise is a scale misread; only 1 of 12 seed vectors is genuinely off — see R4-15 entry). **0 TODO.**
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -964,7 +966,7 @@ Operational order: the two Highs first.
 - [ ] **R4-14** · 🟢 Low · [REGRESSION from R4-05] Re-applied consecutive-source cap can break C3's ≥4-category guarantee
   - Where: `lib/pipeline/displayedFeed.ts:159` (`applyDiversityCap` runs after C2/C3)
   - In a ~0.1% edge case (a 4+ same-source run forced into the displayed span — reachable since `MAX_ARTICLES_PER_SOURCE=4`) the cap defers the sole representative of a category below the fold, dropping the displayed 7 from 4 → 3 categories. R4-05's claim that it preserves C3 isn't true by construction. Does **not** cause R4-01 divergence (feed + meta still agree, both from the same helper). Fix: run the cap *before* C3, or make the cap's break-pick category/unfamiliar-aware.
-  - Status: DONE · Commit: pending · Notes: Chose the "make the re-cap diversity-aware" option (option 2) over
+  - Status: DONE · Commit: 9697ffe · Notes: Chose the "make the re-cap diversity-aware" option (option 2) over
     "run the cap before C3" — the latter is unsafe because C3's reorder can *itself* reintroduce a >cap run by
     removing a separator (e.g. top `[A,A,A,X,A,…]` → demote X → `[A,A,A,A,…]`), so the cap must stay last to
     keep its no->cap-run guarantee. Implemented a **floor-guarded re-cap** in `resolveDisplayedFeed`
@@ -993,7 +995,38 @@ Operational order: the two Highs first.
 - [ ] **R4-15** · 🟢 Low (taste — needs Kyle's eye) · Several `data/calibration_seed.json` aesthetic vectors are semantically off
   - Where: `data/calibration_seed.json`
   - Valid in-range vectors (seeding works), but the encoded calibration signal is questionable — e.g. `seed-serious-philosophy` (a "grave meditation") and `seed-emotional-psychology` (a grief piece) both carry `playful: 5`; `seed-abstract-film` (slow cinema) carries `playful: 5, concrete: 5`. These are the cold-start taste anchors, so they should reflect real taste. **Kyle should review/hand-tune the 12 seed vectors** (or regenerate them with an LLM pass).
-  - Status: TODO · Commit: — · Notes: —
+  - Status: **BLOCKED** (awaiting Kyle's taste sign-off) · Commit: — (JSON deliberately NOT modified) · Notes:
+    **⚠️ The finding's specific evidence is a scale misread — surfacing per the "report it faithfully" guardrail.**
+    The aesthetic axes are **bipolar (1.0–5.0, 3.0 = neutral) and three are INVERTED relative to their field
+    name** — confirmed in BOTH `lib/types/aesthetic.ts` and the live LLM scorer prompt that produces every real
+    article vector (`lib/discovery/aestheticScorer.ts:31-53`), so the seeds are commensurate with it:
+    `contemplative` 1=propulsive→5=contemplative · `concrete` **1=concrete→5=abstract** · `personal`
+    **1=personal→5=universal** · `playful` **1=playful→5=serious** · `specialist` 1=generalist→5=specialist ·
+    `emotional` 1=neutral→5=resonant. Under that polarity the three fixtures the report cited are **correct**:
+    `playful: 5` = *highly serious* (right for a "grave meditation" and a grief piece) and `concrete: 5` =
+    *highly abstract* (right — the film dek literally says "An abstract essay"). The report appears to have read
+    `playful`/`concrete` as magnitude-of-the-named-quality rather than the inverted axis.
+    **Independent audit (verify-the-outcome):** I scored all 12 fixtures against the confirmed polarity AND ran a
+    12-agent fan-out (one agent per fixture, each given only the polarity + title/dek, run `wf_14e4b2e8-df1`).
+    Both agree: **11 of 12 fixtures are faithful to their dek — zero dimensions off by ≥2.** A handful of off-by-1
+    nudges (within taste noise, NOT errors) surfaced: propulsive-ideas playful 3→4 · playful-music emotional 4→3
+    · serious-philosophy personal 3→4 · personal-literature playful 4→5 · specialist-art contemplative 3→4 /
+    personal 4→5 · emotional-psychology personal 2→3 · neutral-design playful 4→3 · concrete-science playful 2→3
+    · contemplative-science personal 4→5 / emotional 2→3.
+    **The one fixture with a genuine inconsistency (off by ≥2):**
+    - `seed-contemplative-science` ("The Quiet Mathematics of Snowflakes", Quanta): stored
+      `{contemplative:5, concrete:4, personal:4, playful:4, specialist:4, emotional:2}`.
+      • `concrete: 4` reads too **abstract** — the piece is grounded in snowflakes/water/cold/six-fold symmetry →
+        **propose `concrete: 2`** (concrete). • `specialist: 4` reads too **specialist** — Quanta is written for
+        the curious non-expert ("emerges from nothing but water and cold") → **propose `specialist: 2`**.
+      • **Proposed corrected vector (for Kyle to confirm/adjust): `{contemplative:5, concrete:2, personal:4,
+        playful:4, specialist:2, emotional:2}`** (the within-noise dims left as-is; optional nudges personal 4→5,
+        emotional 2→3 if Kyle wants them).
+    **Recommendation:** because the cold-start impact is modest (long-term centroid base weight only 0.30, and
+    this is 1 of 12 anchors) and the values are Kyle's taste call, I did **not** edit `data/calibration_seed.json`.
+    Kyle to decide: (a) accept the one snowflake correction (clear polarity over-read), and/or (b) take any of the
+    optional off-by-1 nudges, and/or (c) leave all 12 as-is (defensible — they're internally consistent anchors).
+    Once Kyle signs off, apply his chosen values and flip to DONE/VERIFIED.
 
 ---
 
@@ -1557,6 +1590,13 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   task's "verify the outcome" step): the displayed 7 always stays ≥4 categories and ≥2 unfamiliar with no >cap
   run after the cap, and `/api/feed/today` top-7 + `/api/issue/meta` still agree (single shared helper). The
   literal 4→3 break proved **unreachable** in 1.5M+ targeted + 400k random inputs ⇒ this is a by-construction
-  guard with zero behavior change vs R4-05 in every observed case. Decision logged. Gate green. Commit: pending.
-- **R4-15** → see entry; needs Kyle's taste sign-off (do not unilaterally finalize the vectors).
-- RESUME AT: **R4-15** (BLOCKED on Kyle's review of the proposed seed-vector corrections).
+  guard with zero behavior change vs R4-05 in every observed case. Decision logged. Gate green. Commit: 9697ffe.
+- **R4-15** → **BLOCKED** (Kyle's taste call; JSON not modified). Key finding: the report's evidence is a
+  **scale misread** — `playful`/`concrete`/`personal` are INVERTED axes (`playful:5`=serious, `concrete:5`=abstract),
+  confirmed in `lib/types/aesthetic.ts` + the live scorer prompt, so the three fixtures it cited are actually
+  correct. Independent audit (my read + a 12-agent fan-out, `wf_14e4b2e8-df1`) agrees **11/12 fixtures are
+  faithful**; only `seed-contemplative-science` is off by ≥2 (concrete 4→2, specialist 4→2 — proposed corrected
+  vector in the R4-15 entry). Left `data/calibration_seed.json` untouched pending Kyle's sign-off; impact is
+  modest (centroid base weight 0.30, 1 of 12 anchors).
+- RESUME AT: **—** (both Round-4 follow-ups handled: R4-14 DONE+pushed `9697ffe`; R4-15 BLOCKED on Kyle's
+  review of the proposed seed-vector correction. No autonomous TODOs remain.)
