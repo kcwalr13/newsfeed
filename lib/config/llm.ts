@@ -57,11 +57,16 @@ export const PROVIDER_CONFIG: Record<LlmProviderName, ProviderConfig> = {
     maxConcurrency: 4,
   },
   gemini: {
-    // Gemini 2.0 Flash free tier ≈ 15 RPM / 1M TPM / ~1500 RPD (R6-5 confirms).
-    model: 'gemini-2.0-flash',
+    // gemini-2.5-flash-lite: stable, free-tier, high-throughput, and "thinking"
+    // is OFF by default (so a small maxOutputTokens isn't consumed by reasoning).
+    // NOTE: gemini-2.0-flash was deprecated + shut down 2026-06-01 (free-tier
+    // quota went to 0 → 429 RESOURCE_EXHAUSTED), so R6-5's original pick is dead.
+    // Free-tier RPM/RPD are account-specific and move; 15 RPM is a safe ceiling
+    // for the even-spacing limiter — lower it here if 429s persist.
+    model: 'gemini-2.5-flash-lite',
     rpm: 15,
     maxConcurrency: 2,
-    dailyCap: 1500,
+    dailyCap: 1000,
   },
 };
 
