@@ -46,12 +46,12 @@ It rests on four foundational pillars, to be built in sequence:
 Copy `.env.example` to `.env.local` and fill in the values. Full reference:
 
 **Required**
-- `ANTHROPIC_API_KEY` — Used by the aesthetic scorer, concept extractor, LLM content evaluator, theme generator, and curator notes **when `LLM_PROVIDER=anthropic` (the default)**. Without a valid key for the active provider, those LLM steps silently skip and articles are ranked by source score only.
+- `ANTHROPIC_API_KEY` — Used by the aesthetic scorer, concept extractor, LLM content evaluator, theme generator, and curator notes **when `LLM_PROVIDER=anthropic` (the committed code default)**. Without a valid key for the active provider, those LLM steps silently skip and articles are ranked by source score only. **Production currently runs `LLM_PROVIDER=gemini` (since 2026-06-15), so `GEMINI_API_KEY` is the active key and `ANTHROPIC_API_KEY` is only needed if you switch the provider back.**
 - `DATABASE_URL` — Neon serverless Postgres connection string.
 
 **LLM provider (Round 6)** — all LLM work goes through `lib/llm/` (`getLlm()`); the backend is config-selected, not hardcoded.
-- `LLM_PROVIDER` — `anthropic` (default) or `gemini`. Switching is an env change only (no code change). A shared RPM limiter (`lib/llm/limiter.ts`) meters every call to the active provider's rate (no-op for Anthropic; ~15 RPM for Gemini free tier, with discovery cap + a scoring wall-clock deadline so a daily run fits the budget and the batch always writes).
-- `GEMINI_API_KEY` — Google AI Studio (Gemini 2.0 Flash) free-tier key; required when `LLM_PROVIDER=gemini`. Free-tier caveats (training-data privacy, Haiku↔Gemini taste-score drift, daily request cap) are documented in README + ARCHITECTURE.
+- `LLM_PROVIDER` — `anthropic` (committed default) or `gemini` (**active in production since 2026-06-15**). Switching is an env change only (no code change). A shared RPM limiter (`lib/llm/limiter.ts`) meters every call to the active provider's rate (no-op for Anthropic; metered to a conservative ~15 RPM ceiling for Gemini — free-tier RPM/RPD are account-specific and no longer published per-model, so this is a self-imposed safe ceiling tunable in `PROVIDER_CONFIG`, not a documented limit — with a discovery cap + a scoring wall-clock deadline so a daily run fits the budget and the batch always writes).
+- `GEMINI_API_KEY` — Google AI Studio (**Gemini 2.5 Flash-Lite**) free-tier key; required when `LLM_PROVIDER=gemini` (the active production provider). The original Round-6 pick `gemini-2.0-flash` was deprecated and **shut down 2026-06-01** (free-tier quota → 0, `429 RESOURCE_EXHAUSTED`), so the active model is `gemini-2.5-flash-lite` (stable, free-tier, "thinking" off by default). Free-tier caveats (training-data privacy, Haiku↔Gemini taste-score drift, daily request cap) are documented in README + ARCHITECTURE.
 
 **Discovery / pipeline**
 - `BRAVE_SEARCH_API_KEY` — Used by the proactive discovery pipeline (Brave Search + Small Web).

@@ -2,12 +2,15 @@ You are working in the **Tangent** repo. We are running a systematic remediation
 to fix every finding from a code + UX/UI review, one finding at a time, committing and pushing
 after each so we never lose progress if a session ends mid-way.
 
-## Status note (2026-06-15) — Gemini key already provisioned
-A free-tier **Gemini API key** has already been created (Google AI Studio, named "Tangent") and set in
-Vercel as **`GEMINI_API_KEY`** (all environments). So R6-6's "create a key" Kyle-action is **done** —
-do **not** ask Kyle to create one. The only remaining Kyle-action is the final **`LLM_PROVIDER=gemini`**
-flip in Vercel, which must happen **after R6-5 deploys** (until then the abstraction defaults to Anthropic).
-Do not hardcode or echo the key value anywhere; reference it by name (`GEMINI_API_KEY`) only.
+## Status note (2026-06-15) — Round 6 COMPLETE + LIVE; R5-C3 RESOLVED
+**Round 6 is done and live in production on the Gemini free tier.** `LLM_PROVIDER=gemini` + `GEMINI_API_KEY`
+are set in Vercel; the active model is **`gemini-2.5-flash-lite`** (the design's `gemini-2.0-flash` was
+deprecated/shut down 2026-06-01 → free-tier quota 0 → 429; swapped in commit `0dbd842`). **R5-C3 is resolved**
+— curator notes verified generating live ($0, 7/7). There is **no active TODO**: the only open backlog item is
+**R4-15** (BLOCKED on Kyle's seed-vector sign-off in `data/calibration_seed.json`). The structured
+discovery/scoring calls get their first live exercise at the next daily cron — worth a look, but not a code task.
+Do not hardcode or echo any API key value; reference keys by name only. If starting a *new* round, repoint the
+"Your job this session" + "Start now" sections below to the new backlog; the Round-6 instructions are historical.
 
 ## Read these first (in order)
 1. `CLAUDE.md` — project context, agent pipeline, and ground rules. Follow them.
@@ -39,12 +42,12 @@ per-finding loop defined in the tracker:
 ## Policy (already decided — don't re-litigate)
 - **Scope:** the entire tracker, in order — **except items marked `DEFERRED`**, which are out of
   scope (single-user project; see the tracker's *Future state — multi-user rollout* section). Skip
-  them; do not re-open them. Rounds 1–5 are complete (R4-15 `BLOCKED` on Kyle's seed-vector sign-off; R5-C3 is
-  the Anthropic account being out of credits — **Round 6 resolves it** by switching providers). We are now on
-  the **ROUND 6 backlog** (LLM provider abstraction → go Gemini free-tier). The next actionable item is **R6-1**.
-  **Read the precise plan first:** `agents/architect/design_product_round6_llm_provider_abstraction.md` (the
-  7-call-site map, the rate-limit strategy, schema mapping, sequencing, caveats). Build order **R6-1 → R6-7**;
-  the gate stays green at each step and the provider switch (R6-5) comes last. Commit `feat(R6-XX): …`.
+  them; do not re-open them. **Rounds 1–6 are complete.** R5-C3 is **RESOLVED** (Round 6 switched prod to the
+  Gemini free tier — `gemini-2.5-flash-lite` — and curator notes generate live at $0). **There is no active
+  TODO.** The only open backlog item is **R4-15** (`BLOCKED` on Kyle's seed-vector sign-off in
+  `data/calibration_seed.json`) — do not force it. If a *new* round is opened, work its backlog in order;
+  otherwise there is nothing to implement and this kickoff is historical. (Round 6 plan, now implemented:
+  `agents/architect/design_product_round6_llm_provider_abstraction.md`.)
 - **Critical invariants (don't break these in the refactor):** at every refactored LLM site keep
   `UNTRUSTED_CONTENT_NOTICE` in the `system` prompt + `wrapUntrusted(...)` on the user content (sites 1–6, not
   the query-bank script) and **all existing post-parse validation** (Gemini honors schema constraints weakly).
@@ -91,8 +94,9 @@ When you stop, print a concise summary:
 
 Verification commands (recap): `npx tsc --noEmit` · `npm run lint` · `npm run build` · `npm run dev`.
 
-Start now: read `agents/architect/design_product_round6_llm_provider_abstraction.md` (the precise plan), then
-open `agents/review/REVIEW_TRACKER.md`, find the first `TODO` in the **ROUND 6** section (currently **R6-1**),
-and begin the loop. R6-2 (refactor the 7 sites behind the interface, Anthropic still active) must stay
-behavior-preserving; the Gemini switch is R6-5. The hard part is the rate limiter (R6-3) + budget-fit (R6-5) —
-follow design §2.
+Start here: open `agents/review/REVIEW_TRACKER.md` and confirm state before doing anything. **As of 2026-06-15
+there is no active `TODO`** — Rounds 1–6 are complete and live (R6 went to the Gemini free tier;
+`gemini-2.5-flash-lite`; R5-C3 resolved). The only open item is **R4-15** (`BLOCKED` on Kyle's seed-vector
+sign-off) — do not force a blocked item. If you were handed a **new** round of findings, work that backlog in
+tracker order using the per-finding loop above; otherwise there is nothing to implement and this kickoff is a
+historical record of the Round-6 campaign.

@@ -39,7 +39,7 @@ faster.
 - **Framework:** Next.js 16 (App Router) + React 19 + TypeScript
 - **Styling:** Tailwind CSS v4
 - **Database:** Neon serverless Postgres (pgvector-ready for embeddings)
-- **LLM:** provider-abstracted (`lib/llm/`) — Claude API (default) or Gemini free-tier, selected by `LLM_PROVIDER`; powers content evaluation, aesthetic scoring, concept extraction, and theme + curator-note generation
+- **LLM:** provider-abstracted (`lib/llm/`) — Claude API (committed default) or Gemini free-tier, selected by `LLM_PROVIDER` (**production runs Gemini 2.5 Flash-Lite, free tier**); powers content evaluation, aesthetic scoring, concept extraction, and theme + curator-note generation
 - **Delivery:** Progressive Web App (installable; no app stores)
 - **Hosting:** Vercel (daily cron triggers the pipeline)
 
@@ -100,12 +100,16 @@ All LLM work goes through a provider abstraction in [`lib/llm/`](lib/llm) (`getL
 so the backend is chosen by config rather than hardcoded:
 
 - **`anthropic` (default)** — Claude Haiku via `@anthropic-ai/sdk`, key `ANTHROPIC_API_KEY`.
-- **`gemini`** — Gemini 2.0 Flash (free tier) via `@google/genai`, key `GEMINI_API_KEY`.
-  Switch with `LLM_PROVIDER=gemini` in the environment (no code change).
+- **`gemini`** — Gemini 2.5 Flash-Lite (free tier) via `@google/genai`, key `GEMINI_API_KEY`.
+  Switch with `LLM_PROVIDER=gemini` in the environment (no code change). **This is the
+  active production provider (since 2026-06-15).** The earlier Round-6 pick
+  `gemini-2.0-flash` was deprecated and shut down 2026-06-01 (free-tier quota → 0), so the
+  active model is `gemini-2.5-flash-lite` (stable, free-tier, "thinking" off by default).
 
 A shared rate limiter ([`lib/llm/limiter.ts`](lib/llm/limiter.ts)) spaces every LLM
-call to the active provider's RPM (a no-op for Anthropic; ~15 RPM for the Gemini free
-tier). Under Gemini the pipeline lowers its discovery-evaluation cap and the per-article
+call to the active provider's RPM (a no-op for Anthropic; metered to a conservative
+~15 RPM ceiling for Gemini — free-tier RPM/RPD are account-specific and no longer
+published per-model, so this is a self-imposed safe ceiling, tunable in `PROVIDER_CONFIG`). Under Gemini the pipeline lowers its discovery-evaluation cap and the per-article
 scoring phase is bounded by a wall-clock deadline, so a daily run fits the free-tier
 rate **and** the function's time budget — and the batch is always written even if some
 articles end up unscored (they fall back to source-score ranking).

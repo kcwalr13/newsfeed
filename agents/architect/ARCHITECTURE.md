@@ -1,11 +1,13 @@
 # System Architecture
 
-**Last Updated**: 2026-06-13
+**Last Updated**: 2026-06-15
 **Maintained by**: Architect Agent
 **Status**: Active — Milestones 1–8, Phases 1–4, QA pass, post-Phase-4 operational fixes, and the
-Round-1 + Round-2 review-remediation campaign, and the Round-3 product/vision-alignment campaign, shipped. See the **Post-review updates** sections near
-the end for systems added/changed during remediation; `agents/review/REVIEW_TRACKER.md` has the
-finding-by-finding log.
+review-remediation campaigns Round 1 → Round 6 shipped: Round 1+2 (code/UX remediation), Round 3
+(product/vision alignment), Round 4 (adversarial review), Round 5 (content mix + curator voice),
+Round 6 (LLM provider abstraction → live on Gemini 2.5 Flash-Lite free tier, 2026-06-15). See the
+**Post-review updates** sections near the end for systems added/changed during remediation;
+`agents/review/REVIEW_TRACKER.md` has the finding-by-finding log.
 
 > **Vision (2026-04-07):** The project is a personalized content discovery companion,
 > not a news aggregator. Single-user scope (Kyle), starter sources provided, identity
@@ -378,9 +380,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `NEXTAUTH_URL` | Email link generation | Base URL: `http://localhost:3000` (dev), `https://yourdomain.com` (prod). Validated to an https origin before building email links (SEC-M1). |
 | `ALLOWED_BASE_URLS` | Email link generation (optional) | Comma-separated allowlist of origins permitted in email links; when set, `NEXTAUTH_URL`'s origin must be a member or email sending fails closed (SEC-M1). |
 | `BRAVE_SEARCH_API_KEY` | Discovery pipeline (all Brave Search calls) | Obtain at https://api.search.brave.com. Free tier: 2,000 req/month. Never commit. |
-| `ANTHROPIC_API_KEY` | LLM calls when `LLM_PROVIDER=anthropic` (default): evaluator, aesthetic scorer, concept extractor, theme + curator notes, query-bank script | Obtain at console.anthropic.com. Never commit. |
-| `LLM_PROVIDER` | Provider selection (Round 6, optional) | `anthropic` (default) or `gemini`. Selects the active backend in `lib/llm/`. |
-| `GEMINI_API_KEY` | LLM calls when `LLM_PROVIDER=gemini` | Google AI Studio free-tier key (Gemini 2.0 Flash). Never commit. |
+| `ANTHROPIC_API_KEY` | LLM calls when `LLM_PROVIDER=anthropic` (committed default; **production currently runs `gemini`**): evaluator, aesthetic scorer, concept extractor, theme + curator notes, query-bank script | Obtain at console.anthropic.com. Never commit. |
+| `LLM_PROVIDER` | Provider selection (Round 6) | `anthropic` (committed default) or `gemini` (**active in production since 2026-06-15**). Selects the active backend in `lib/llm/`. |
+| `GEMINI_API_KEY` | LLM calls when `LLM_PROVIDER=gemini` (**active in production**) | Google AI Studio free-tier key (**Gemini 2.5 Flash-Lite**; the earlier `gemini-2.0-flash` pick was deprecated/shut down 2026-06-01). Never commit. |
 | `OWNER_EMAIL` | Account menu (single-user) | Owner email returned by `/api/auth/me`; server-only, never hardcoded in source or shipped in the client bundle (SEC-C1). |
 
 ---
@@ -619,16 +621,16 @@ Plan: `agents/architect/design_product_round6_llm_provider_abstraction.md`. All 
 - `types.ts` — `LlmProvider` interface (`generateStructured<T>` for tool/JSON-schema sites, `generateText` for text sites), a minimal `JsonSchema`, and a typed `LlmError {kind:'api'|'parse'}`.
 - `index.ts` — `getLlm()` factory (selects + memoizes the active adapter, then wraps it with the rate limiter) and `isLlmConfigured()` (provider-aware key check, used by the graceful-skip sites: curator notes, issue theme, the query-bank script).
 - `anthropic.ts` — `@anthropic-ai/sdk`; structured = single forced `tool_use`, text = first text block. Default provider.
-- `gemini.ts` — `@google/genai` (Gemini 2.0 Flash); structured = `responseMimeType:'application/json'` + a `responseSchema` converted from `JsonSchema` (Type enum, string `minItems`/`maxItems`), text = plain `generateContent`; `system → systemInstruction`.
+- `gemini.ts` — `@google/genai` (**Gemini 2.5 Flash-Lite** — the design's `gemini-2.0-flash` was shut down 2026-06-01); structured = `responseMimeType:'application/json'` + a `responseSchema` converted from `JsonSchema` (Type enum, string `minItems`/`maxItems`), text = plain `generateContent`; `system → systemInstruction`.
 - `limiter.ts` — a shared fixed-interval (leaky-bucket) scheduler keyed on the active provider's RPM; guarantees ≤ rpm calls in every rolling 60s window. **No-op for Anthropic** (Infinity RPM). Per serverless instance (one cron run = one instance).
 
 **The 7 refactored call sites** keep their prompts, schemas, `max_tokens`, and post-parse validation byte-identical; the prompt-injection invariant (`UNTRUSTED_CONTENT_NOTICE` in `system` + `wrapUntrusted()` on user content) holds for the 6 in-app sites (the offline query-bank script is exempt — trusted labels). Gemini honors schema constraints weakly, so the client-side validation at each site is load-bearing.
 
-**Budget-fit (R6-5)** — under Gemini's ~15 RPM the limiter spaces calls ~4s apart, so `lib/config/feed.ts` lowers `DISCOVERY_MAX_EVAL_CANDIDATES` (40→15) and per-loop concurrency (4→2) for `gemini`, and `runPipeline`'s per-article scoring/concept phase gained a wall-clock **deadline** (`LlmBudget.deadlineMs = runStartMs + PIPELINE_WALL_CLOCK_BUDGET_MS`, enforced in `tryConsumeLlm`). The batch is written *after* scoring, so the deadline guarantees it is still written before `maxDuration` even when the slow rate forces some articles to stay unscored (they rank by source score — the existing DAT-H2/PIPE-H1 degraded fallback).
+**Budget-fit (R6-5)** — under Gemini's ~15 RPM (a self-imposed safe ceiling in `PROVIDER_CONFIG`; free-tier RPM/RPD are account-specific and no longer published per-model) the limiter spaces calls ~4s apart, so `lib/config/feed.ts` lowers `DISCOVERY_MAX_EVAL_CANDIDATES` (40→15) and per-loop concurrency (4→2) for `gemini`, and `runPipeline`'s per-article scoring/concept phase gained a wall-clock **deadline** (`LlmBudget.deadlineMs = runStartMs + PIPELINE_WALL_CLOCK_BUDGET_MS`, enforced in `tryConsumeLlm`). The batch is written *after* scoring, so the deadline guarantees it is still written before `maxDuration` even when the slow rate forces some articles to stay unscored (they rank by source score — the existing DAT-H2/PIPE-H1 degraded fallback).
 
 **Caveats (free tier)** — Google may use free-tier prompts for product improvement (public article text + a taste digest are sent); aesthetic scores are now a *mixed* Haiku/Gemini space (accept the drift or one-time re-score); a daily request cap means avoiding gratuitous `forceOverwrite` refreshes.
 
-**Ops** — the active provider defaults to `anthropic`; going live on Gemini is the single Vercel env change `LLM_PROVIDER=gemini` (with `GEMINI_API_KEY` set). This is what resolves R5-C3 (curator notes weren't generating because the Anthropic account ran out of credits).
+**Ops** — the committed code default is `anthropic`; production **went live on Gemini** via the single Vercel env change `LLM_PROVIDER=gemini` (with `GEMINI_API_KEY` set) on 2026-06-15. This **resolved R5-C3** (curator notes weren't generating because the Anthropic account ran out of credits) — verified live: `/api/feed/today` returns personalized `curatorNote` for all displayed pieces at $0 on the Gemini free tier. The model is `gemini-2.5-flash-lite` (the design's `gemini-2.0-flash` was deprecated/shut down 2026-06-01).
 
 ---
 
@@ -684,4 +686,5 @@ Plan: `agents/architect/design_product_round6_llm_provider_abstraction.md`. All 
 | 2026-04-20 | Manual | Post-Phase-4 operational fixes: (1) app rebranded to Tangent; (2) Vercel cron added (vercel.json, daily 08:00 UTC `0 8 * * *`); (3) solo mode auth bypass (no login required); (4) batch storage migrated from filesystem to Neon DB (migration 013, storage.ts rewrite); (5) cooldown.ts rewritten to in-memory Map; (6) bodyExtractor.ts rewritten using node-html-parser (jsdom/readability removed — ESM incompatibility on Vercel); (7) data/sources.json replaced with 8 esoteric discovery sources (Quanta, Aeon, Nautilus, ACX, Ribbonfarm, LessWrong, Marginal Revolution, The Marginalian). ARCHITECTURE.md updated to reflect all changes. |
 | 2026-04-25 | Dev Agent | Taste-learning fixes: (1) ranker.ts — cross-session source scoring: all historical feedback now processed via `extractSourceSlugFromId()` (slices trailing `-<8hex>` suffix) instead of filtering to today's batch only; `save` events count as positive signals alongside `like` for Wilson scores; (2) feedback/route.ts — `save` events now also update the aesthetic EMA centroid (treated as `like`); previously only like/dislike updated the profile; (3) run.ts — `estimateReadTime()` added (238 WPM, min 1 min), `Article.readTime` populated at pipeline time for all article types; (4) data/sources.json — expanded from 8 to 12 active RSS sources: Psyche, The Baffler, Noema, Works in Progress; (5) .gitignore — push.sh added; (6) types/node-html-parser.d.ts — minimal type stub for offline TypeScript resolution; (7) bodyExtractor.ts — explicit HTMLElement type annotation on `el` forEach callback. npx tsc --noEmit passes clean. |
 | 2026-06-13 | Claude Code | Review remediation (Round 1 + Round 2) doc sync (D-03): refreshed the stale facts in this file — Next.js 14+→16, cron 07:00→08:00 UTC, 8→12 sources, in-memory cooldown→Postgres cooldown+run-lock, added `OWNER_EMAIL`/`ALLOWED_BASE_URLS` to the env table — and added the **Post-review updates** section documenting the rate limiter, run-lock, blind-spot prober wiring, migration runner, migrations 014–019, new shared modules (bodyClean, promptSafety, llm.ts, concurrency, useModalA11y, HeroImage), and the 8 removed v1 components. Per-finding detail in `agents/review/REVIEW_TRACKER.md`. |
+| 2026-06-15 | Claude Code + Cowork | Rounds 4–6 shipped. R4 (adversarial review remediation); R5 (content mix: scroll restoration, paywall/teaser guard, personalized second-person curator notes replacing the RSS blurb, format taxonomy `longread/short/visual/potpourri/place`); R6 (LLM provider abstraction in `lib/llm/` — interface + Anthropic/Gemini adapters + shared rate limiter, all 7 call sites refactored, prompt-injection invariants preserved). Production **went live on Gemini free tier** (`LLM_PROVIDER=gemini`, 2026-06-15), **resolving R5-C3** (curator notes now generate at $0; verified live 7/7). The Round-6 design's `gemini-2.0-flash` pick was deprecated/shut down 2026-06-01, so the active model is **`gemini-2.5-flash-lite`** (commit 0dbd842). Per-finding detail in `agents/review/REVIEW_TRACKER.md`. |
 

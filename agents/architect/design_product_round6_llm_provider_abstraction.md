@@ -1,10 +1,20 @@
 # Design — Round 6: LLM Provider Abstraction (Claude ↔ Gemini) + go free-tier
 
-**Status:** Plan — ready for implementation
+**Status:** ✅ Implemented — Round 6 complete and **live in production on Gemini 2.5 Flash-Lite (free tier), 2026-06-15.**
 **Author:** Review/PM pass (Cowork), 2026-06-15
 **Source:** Kyle wants (a) zero extra LLM spend and (b) infrastructure to swap models/providers as new ones ship.
-**Decision (Kyle):** after the abstraction lands, the **active provider = Gemini 2.x Flash (free tier)**.
+**Decision (Kyle):** after the abstraction lands, the **active provider = Gemini Flash (free tier)**.
 Backlog: `agents/review/REVIEW_TRACKER.md` → ROUND 6.
+
+> **UPDATE (2026-06-15, post-implementation).** This plan recommends **`gemini-2.0-flash`** (see §2 and
+> R6-5). That model was **deprecated and shut down 2026-06-01** — its free-tier quota is now `0`, so it
+> returns `429 RESOURCE_EXHAUSTED`. The shipped/active model is **`gemini-2.5-flash-lite`** (stable,
+> free-tier, "thinking" off by default — so a small `maxOutputTokens` isn't consumed by reasoning), set in
+> `lib/config/llm.ts` (commit `0dbd842`). Wherever this doc says "Gemini 2.0 Flash" below, read
+> "Gemini 2.5 Flash-Lite." The free-tier RPM/RPD figures quoted below are also obsolete: Google no longer
+> publishes per-model free-tier limits (they're account-specific); the config uses `rpm:15` as a
+> self-imposed safe ceiling. Everything else in the plan shipped as written, and **R5-C3 is resolved**
+> (curator notes verified generating live on the free tier, 7/7).
 
 ---
 
