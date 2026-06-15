@@ -157,7 +157,12 @@ export async function computeMetrics(
       rate: explShown.length ? explAccepted / explShown.length : 0,
     },
     tasteMaturity: {
-      feedbackCount: profile?.feedback_count ?? feedbackRows.length,
+      // Canonical maturity count = distinct feedback rows (the user's teaching
+      // volume), the SAME notion the C1 aesthetic-weight ramp keys on in the
+      // ranker (R4-07). The profile's internal feedback_count counts every EMA
+      // update (incl. tone nudges / seed-set seeding that write no feedback row),
+      // so using it here would diverge from the ranker and overstate maturity.
+      feedbackCount: feedbackRows.length,
       isDrifting: profile?.is_drifting ?? false,
       shortTermEventCount: profile?.short_term_feedback_count ?? 0,
       receptivityScore: profile?.receptivity_score ?? null,

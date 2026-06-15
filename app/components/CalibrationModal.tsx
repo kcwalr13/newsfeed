@@ -109,6 +109,12 @@ export default function CalibrationModal({ onComplete }: Props) {
 
   const skip = useCallback(() => finish(responses, tones), [finish, responses, tones]);
 
+  // Bow out of THIS attempt without consuming onboarding (R4-13): an empty or
+  // failed calibration fetch is likely transient, so leave the done-flag unset
+  // and just close — the next visit re-prompts and retries instead of
+  // permanently losing first-run calibration with zero signal captured.
+  const dismissWithoutConsuming = useCallback(() => setVisible(false), []);
+
   useModalA11y(visible, dialogRef, skip);
 
   // Fetch the calibration set once we become visible.
@@ -121,10 +127,10 @@ export default function CalibrationModal({ onComplete }: Props) {
         if (!cancelled && Array.isArray(d?.pieces) && d.pieces.length > 0) {
           setSource(d.source === 'seed' ? 'seed' : 'batch');
           setPieces(d.pieces);
-        } else if (!cancelled) finish({}, []); // nothing to calibrate on — bow out
+        } else if (!cancelled) dismissWithoutConsuming(); // no pieces — retry next visit (R4-13)
       })
       .catch(() => {
-        if (!cancelled) finish({}, []);
+        if (!cancelled) dismissWithoutConsuming();
       });
     return () => {
       cancelled = true;

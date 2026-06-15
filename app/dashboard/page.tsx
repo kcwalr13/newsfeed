@@ -54,8 +54,16 @@ function Bar({ value, max, label, count }: { value: number; max: number; label: 
       >
         {label}
       </span>
-      <div className="flex-1 h-2 rounded-sm" style={{ background: 'var(--accent-soft)' }}>
-        <div className="h-2 rounded-sm" style={{ width: `${w}%`, background: 'var(--accent)' }} />
+      {/* The visible label + count already convey the data to AT; the bar is a
+          purely visual proportion, so describe it once and hide the inner fill
+          (R4-12, mirroring the SevenDotStrip pattern). */}
+      <div
+        className="flex-1 h-2 rounded-sm"
+        style={{ background: 'var(--accent-soft)' }}
+        role="img"
+        aria-label={`${label}: ${count}`}
+      >
+        <div className="h-2 rounded-sm" aria-hidden="true" style={{ width: `${w}%`, background: 'var(--accent)' }} />
       </div>
       <span className="ql-mono flex-shrink-0" style={{ fontSize: '10px', color: 'var(--muted)', width: '40px', textAlign: 'right' }}>
         {count}
@@ -93,6 +101,18 @@ export default async function DashboardPage() {
     console.error('[dashboard] computeMetrics failed:', err);
     failed = true;
   }
+
+  // The discovery-share panel reflects the LATEST stored batch, which is only
+  // "today" once the daily cron has run. Label it honestly so a pre-cron view
+  // doesn't claim stale numbers are today's (R4-06).
+  const utcToday = new Date().toISOString().slice(0, 10);
+  const latest = metrics?.latestBatchDate ?? null;
+  const latestPanelLabel =
+    latest && latest === utcToday
+      ? 'TODAY'
+      : latest
+        ? `LATEST (${new Date(latest + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
+        : 'LATEST';
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -132,7 +152,7 @@ export default async function DashboardPage() {
             <Section label="DISCOVERY SHARE">
               <div className="flex items-end gap-6">
                 <Stat
-                  label="TODAY"
+                  label={latestPanelLabel}
                   value={pct(metrics.discoveryShare.today.discoveryPct)}
                   sub={`${metrics.discoveryShare.today.discovery} of ${metrics.discoveryShare.today.total} pieces discovered`}
                 />
@@ -152,9 +172,15 @@ export default async function DashboardPage() {
                 </div>
               </div>
               {/* today's discovery vs fixed bar */}
-              <div className="mt-5 flex h-2 rounded-sm overflow-hidden" style={{ background: 'var(--accent-soft)' }}>
+              <div
+                className="mt-5 flex h-2 rounded-sm overflow-hidden"
+                style={{ background: 'var(--accent-soft)' }}
+                role="img"
+                aria-label={`${metrics.discoveryShare.today.discovery} of ${metrics.discoveryShare.today.total} pieces from discovery (${pct(metrics.discoveryShare.today.discoveryPct)})`}
+              >
                 <div
                   className="h-2"
+                  aria-hidden="true"
                   style={{ width: pct(metrics.discoveryShare.today.discoveryPct), background: 'var(--accent)' }}
                 />
               </div>

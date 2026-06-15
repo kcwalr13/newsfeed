@@ -96,7 +96,9 @@ function slugify(name: string): string {
 // Post-processing pass: enforces no more than `cap` consecutive articles from the same source.
 // Does not drop articles. When the cap is reached, pulls the next article from a different
 // source forward in the list; if none exists, accepts the violation rather than dropping.
-function applyDiversityCap(articles: Article[], cap: number): Article[] {
+// Exported so the display-diversity reorders (which run AFTER the ranker) can re-apply it and
+// not reintroduce a >cap same-source run near the fold (R4-05). A no-op when no run exceeds cap.
+export function applyDiversityCap(articles: Article[], cap: number): Article[] {
   const pending = [...articles];
   const result: Article[] = [];
   let runSource: string | null = null;

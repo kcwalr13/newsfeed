@@ -21,7 +21,7 @@ import { getShownSourceDomains } from '@/lib/pipeline/storage';
 import { resolveSession } from '@/lib/auth/session';
 import { getFeedbackForUser, getFeedbackForDevice } from '@/lib/db/feedback';
 import type { DbFeedbackRow } from '@/lib/db/feedback';
-import { rankFeed } from '@/lib/pipeline/ranker';
+import { rankFeed, applyDiversityCap, SOURCE_CONSECUTIVE_CAP } from '@/lib/pipeline/ranker';
 import { getAestheticProfile, getArticleAestheticScores } from '@/lib/db/aesthetics';
 import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthetic';
 import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
@@ -153,6 +153,10 @@ export async function resolveDisplayedFeed(
       MIN_CATEGORIES_IN_ISSUE,
       (a) => isNeverShown(a, shownDomains)
     );
+    // Re-apply the consecutive-source cap (R4-05): the C2/C3 reorders run after
+    // the ranker's own cap and could otherwise leave a >cap same-source run near
+    // the fold. No-op unless such a run exists.
+    displayArticles = applyDiversityCap(displayArticles, SOURCE_CONSECUTIVE_CAP);
   } catch (err) {
     console.error('[displayedFeed] display-diversity reorder skipped:', err);
   }
