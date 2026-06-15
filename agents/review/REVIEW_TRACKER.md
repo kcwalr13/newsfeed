@@ -889,7 +889,7 @@ ARCHITECTURE.md) were already brought current in the review session — not a Ro
 Operational order: the two Highs first.
 
 ### Round 4 — High
-- [ ] **R4-01** · 🔴 High · [REGRESSION amplified by P3-C2/C3] Colophon credits + editor theme reflect raw batch order, not the displayed 7
+- [x] **R4-01** · 🔴 High · [REGRESSION amplified by P3-C2/C3] Colophon credits + editor theme reflect raw batch order, not the displayed 7
   - Where: `app/api/issue/meta/route.ts` (`buildSourceCredits`, `generateTheme` over `batch.articles` raw order) vs `app/api/feed/today/route.ts:144-159` (rank + C2/C3 reorder) + `app/page.tsx:215`
   - **Live-confirmed:** reader sees Quanta/Aeon/Prism News/Aquarium Drunkard/Nautilus/The Baffler/The Marginalian, but the colophon credits "Quanta ×5, Aeon ×2" and the theme reads "science and philosophy" — the framing undersells the breadth Round 3 created.
   - Fix: apply the same rank + display-diversity reorder in `/api/issue/meta` (share a single "resolve displayed 7" helper with the feed route), or persist the final displayed order/folio once at assembly time and read it in both. Acceptance: colophon credits + theme match the displayed 7.
@@ -915,7 +915,7 @@ Operational order: the two Highs first.
     write anonymous-order metadata to the live colophon — same precedent as P3-E3). Files:
     `lib/pipeline/displayedFeed.ts` (new), `app/api/feed/today/route.ts`, `app/api/issue/meta/route.ts`,
     `lib/pipeline/themeGenerator.ts`, `lib/types/article.ts`. Verified: tsc + lint (0 errors) + build green.
-- [ ] **R4-08** · 🔴 High · [REGRESSION from P3-E1/E3] Onboarding seed-set fallback writes phantom feedback rows and never seeds the aesthetic EMA
+- [x] **R4-08** · 🔴 High · [REGRESSION from P3-E1/E3] Onboarding seed-set fallback writes phantom feedback rows and never seeds the aesthetic EMA
   - Where: `app/api/onboarding/calibration/route.ts:34-42` (synthetic `seed-…` IDs), `app/page.tsx` handler → `setFeedback` → `POST /api/feedback`; `app/api/feedback/route.ts:55-60` (`getArticleAestheticScore('seed-…')` → null → EMA skipped); `feedback.article_id` is FK-less.
   - Impact: when the seed fallback fires (no batch OR any DB hiccup in `getArticleAestheticScores`), calibration inserts ~16 feedback rows for non-existent articles (permanently inflating metrics) AND the aesthetic centroid is never seeded — the headline P3-E feature silently no-ops for the centroid.
   - Fix: short-circuit synthetic IDs in the completion handler (apply only the tone nudge), or ship a small *scored* fixture set so seed pieces have real article IDs, or guard `upsertFeedback` against IDs that don't resolve via `findArticleInAnyBatch`. Acceptance: completing calibration via the fallback seeds a non-trivial centroid and writes no phantom rows.
