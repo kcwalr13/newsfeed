@@ -1,19 +1,16 @@
 /**
- * LLM provider factory (R6-1).
+ * LLM provider factory (R6-1 / R6-2).
  *
  * `getLlm()` returns the active provider adapter, selected by `LLM_PROVIDER`
  * (lib/config/llm.ts) and memoized for the process lifetime.
  *
- * Adapters are registered in later Round-6 steps:
- *   - `anthropic` → R6-2 (lib/llm/anthropic.ts)
- *   - `gemini`    → R6-4 (lib/llm/gemini.ts)
- *
- * No call site invokes `getLlm()` until R6-2 (the 7 sites still call the
- * Anthropic SDK directly), so the throwing default below is behavior-neutral
- * scaffolding — it cannot fire on any current code path.
+ * Registered adapters:
+ *   - `anthropic` → R6-2 (lib/llm/anthropic.ts)  ← active by default
+ *   - `gemini`    → R6-4 (lib/llm/gemini.ts)      ← not yet registered
  */
 
 import type { LlmProvider } from './types';
+import { AnthropicProvider } from './anthropic';
 import { LLM_PROVIDER, type LlmProviderName } from '@/lib/config/llm';
 
 export type { LlmProvider } from './types';
@@ -27,7 +24,30 @@ export function getLlm(): LlmProvider {
 }
 
 function createProvider(name: LlmProviderName): LlmProvider {
-  // Adapters land in R6-2 (anthropic) and R6-4 (gemini). Until then this throws;
-  // safe because nothing calls getLlm() yet.
-  throw new Error(`[llm] No adapter registered for provider "${name}" yet.`);
+  switch (name) {
+    case 'anthropic':
+      return new AnthropicProvider();
+    case 'gemini':
+      // Gemini adapter lands in R6-4. Until then, selecting it is a config error.
+      throw new Error('[llm] Gemini adapter is not registered yet (R6-4).');
+    default:
+      throw new Error(`[llm] Unknown LLM provider "${name}".`);
+  }
+}
+
+/**
+ * Whether the active provider has its API key set. Call sites that degrade
+ * gracefully without an LLM (curator notes, issue theme, the query-bank script)
+ * check this before attempting a call. Provider-aware so it stays correct after
+ * the R6-5 switch — for `anthropic` it equals the old `!!ANTHROPIC_API_KEY`
+ * guard, preserving R6-2 behavior.
+ */
+export function isLlmConfigured(): boolean {
+  switch (LLM_PROVIDER) {
+    case 'gemini':
+      return !!process.env.GEMINI_API_KEY;
+    case 'anthropic':
+    default:
+      return !!process.env.ANTHROPIC_API_KEY;
+  }
 }

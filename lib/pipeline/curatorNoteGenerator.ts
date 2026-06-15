@@ -13,19 +13,11 @@
  * the LLM call.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { Article } from '@/lib/types/article';
 import type { AestheticScoreVector } from '@/lib/types/aesthetic';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
 import { appendLog } from '@/lib/pipeline/storage';
-import { LLM_MODEL } from '@/lib/config/llm';
-
-// Lazily initialised so the module can be imported without the key set.
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic();
-  return _client;
-}
+import { getLlm, isLlmConfigured } from '@/lib/llm';
 
 /** Compact, request-resolved sketch of the reader's taste (R5-C). */
 export interface TasteDigest {
@@ -104,20 +96,17 @@ export async function generateCuratorNote(
   article: Article,
   digest: TasteDigest
 ): Promise<string | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
+  if (!isLlmConfigured()) return null;
 
   try {
-    const msg = await getClient().messages.create({
-      model: LLM_MODEL,
-      max_tokens: 110,
+    const raw = await getLlm().generateText({
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(article, digest) }],
+      user: buildUserPrompt(article, digest),
+      maxTokens: 110,
     });
 
-    const block = msg.content[0];
-    if (!block || block.type !== 'text') return null;
     // Strip wrapping quotes, normalise whitespace, clamp runaway output.
-    const text = block.text
+    const text = raw
       .replace(/\s+/g, ' ')
       .replace(/^["'“”]+|["'“”]+$/g, '')
       .trim()
@@ -143,7 +132,7 @@ export async function generateMissingCuratorNotes(
   articles: Article[],
   digest: TasteDigest
 ): Promise<number> {
-  if (!process.env.ANTHROPIC_API_KEY) return 0;
+  if (!isLlmConfigured()) return 0;
 
   const pending = articles.filter((a) => !a.curatorNote);
   if (pending.length === 0) return 0;

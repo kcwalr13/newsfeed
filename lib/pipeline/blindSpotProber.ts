@@ -1,22 +1,11 @@
 // Phase 4: LLM-based blind spot cluster identification, probe article selection, and ignore processing.
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { Article } from '@/lib/types/article';
 import type { BlindSpotCluster } from '@/lib/db/blindSpots';
 import { recordProbeClusterIgnore } from '@/lib/db/blindSpots';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
-import { LLM_MODEL } from '@/lib/config/llm';
-
-// Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
-// and doing that at module load would crash every importer of this module.
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY is not set');
-  }
-  if (!_client) _client = new Anthropic();
-  return _client;
-}
+import { getLlm } from '@/lib/llm';
+import type { JsonSchema } from '@/lib/llm/types';
 
 interface BlindSpotClusterResult {
   clusterLabel:       string;
@@ -56,56 +45,40 @@ export async function identifyBlindSpotClusters(
     return [];
   }
 
-  const GROUP_CONCEPTS_TOOL: Anthropic.Tool = {
-    name: 'group_concepts',
-    description: 'Group concept labels into broad thematic clusters.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        clusters: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              cluster_label:   { type: 'string' },
-              member_concepts: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['cluster_label', 'member_concepts'],
+  const GROUP_CONCEPTS_SCHEMA: JsonSchema = {
+    type: 'object',
+    properties: {
+      clusters: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            cluster_label:   { type: 'string' },
+            member_concepts: { type: 'array', items: { type: 'string' } },
           },
+          required: ['cluster_label', 'member_concepts'],
         },
       },
-      required: ['clusters'],
     },
+    required: ['clusters'],
   };
 
   let rawClusters: Array<{ cluster_label: string; member_concepts: string[] }>;
 
   try {
-    const response = await getClient().messages.create({
-      model: LLM_MODEL,
-      max_tokens: 2048,
+    const input = await getLlm().generateStructured<{ clusters?: unknown }>({
+      schema: GROUP_CONCEPTS_SCHEMA,
+      toolName: 'group_concepts',
+      toolDescription: 'Group concept labels into broad thematic clusters.',
       system:
         'You are a concept taxonomy assistant. Group the concept labels in the user message ' +
         'into broad thematic clusters of 2-8 words each. Assign each label to exactly one cluster. ' +
         "Use a cluster labeled 'other' for labels that do not fit any clear theme. " +
         UNTRUSTED_CONTENT_NOTICE,
-      tools: [GROUP_CONCEPTS_TOOL],
-      tool_choice: { type: 'any' },
-      messages: [
-        {
-          role: 'user',
-          content: wrapUntrusted(uniqueLabels.join('\n')),
-        },
-      ],
+      user: wrapUntrusted(uniqueLabels.join('\n')),
+      maxTokens: 2048,
     });
 
-    const toolUse = response.content.find(b => b.type === 'tool_use');
-    if (!toolUse || toolUse.type !== 'tool_use') {
-      console.error('[blindSpotProber] LLM did not return a tool_use block');
-      return [];
-    }
-
-    const input = toolUse.input as { clusters?: unknown };
     if (!Array.isArray(input.clusters)) {
       console.error('[blindSpotProber] tool input.clusters is not an array');
       return [];

@@ -7,25 +7,10 @@
  * Called once per batch, result cached in article_batches.issue_metadata.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { Article, DailyIssue, SourceCredit } from '@/lib/types/article';
 import { appendLog } from '@/lib/pipeline/storage';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
-import { LLM_MODEL } from '@/lib/config/llm';
-
-// Lazy client with an explicit key guard, consistent with the other LLM modules
-// (PIPE-H1 / R2-20): constructing Anthropic() without ANTHROPIC_API_KEY throws a
-// less obvious SDK error. The caller (buildIssueMetadata) already skips when the
-// key is absent, and any throw here is caught → fallback theme, so this is
-// defense-in-depth for any future caller.
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY is not set');
-  }
-  if (!_client) _client = new Anthropic();
-  return _client;
-}
+import { getLlm, isLlmConfigured } from '@/lib/llm';
 
 /**
  * Current derivation version for issue metadata. Bump when the displayed-seven
@@ -56,19 +41,15 @@ async function generateTheme(articles: Article[]): Promise<ThemeResult> {
     `{"theme":"<two or three lowercase words>","themeNote":"<one sentence under 22 words>"}\n` +
     UNTRUSTED_CONTENT_NOTICE;
 
-  const msg = await getClient().messages.create({
-    model: LLM_MODEL,
+  const text = await getLlm().generateText({
+    system,
+    user: wrapUntrusted(titles),
     // 160: the JSON envelope + a 22-word note can exceed 80 tokens, truncating
     // mid-string and failing JSON.parse → fallback theme (PIPE-L3).
-    max_tokens: 160,
-    system,
-    messages: [{ role: 'user', content: wrapUntrusted(titles) }],
+    maxTokens: 160,
   });
 
-  const block = msg.content[0];
-  if (!block || block.type !== 'text') throw new Error('No text content in response');
-
-  const raw = block.text.trim();
+  const raw = text.trim();
   // Strip any accidental markdown code fences
   const jsonStr = raw.replace(/^```json?\s*/i, '').replace(/\s*```$/, '').trim();
   const parsed = JSON.parse(jsonStr) as { theme?: string; themeNote?: string };
@@ -144,7 +125,7 @@ export async function buildIssueMetadata(
   let theme = 'today\'s selection';
   let themeNote = 'Seven pieces worth your time.';
 
-  if (process.env.ANTHROPIC_API_KEY && displayArticles.length > 0) {
+  if (isLlmConfigured() && displayArticles.length > 0) {
     try {
       const result = await generateTheme(displayArticles);
       theme = result.theme;

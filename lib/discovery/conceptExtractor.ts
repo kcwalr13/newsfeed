@@ -1,20 +1,9 @@
 // Phase 3: LLM concept extraction from liked article body text.
 
-import Anthropic from '@anthropic-ai/sdk';
 import { AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
-import { LLM_MODEL } from '@/lib/config/llm';
-
-// Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
-// and doing that at module load would crash every importer of this module.
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY is not set');
-  }
-  if (!_client) _client = new Anthropic();
-  return _client;
-}
+import { getLlm } from '@/lib/llm';
+import type { JsonSchema } from '@/lib/llm/types';
 
 const CONCEPT_EXTRACTION_SYSTEM_PROMPT = `You extract the specific intellectual concepts, ideas, and themes that an article engages with. A concept label is 2–5 words and names a specific idea, not a broad category. Extract 5–8 concepts per article.
 
@@ -24,22 +13,18 @@ Bad concept labels (too broad, not concepts): "politics", "technology", "science
 
 Extract concepts that represent the actual intellectual territory of the article — what someone would remember having learned about if they read it carefully. Return only the extract_concepts tool call.`;
 
-const EXTRACT_CONCEPTS_TOOL: Anthropic.Tool = {
-  name: 'extract_concepts',
-  description: 'Extract the core intellectual concepts from the supplied article text.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      concepts: {
-        type: 'array',
-        items: { type: 'string' },
-        minItems: 2,
-        maxItems: 10,
-        description: 'Array of 5–8 concept labels, each 2–5 words.',
-      },
+const EXTRACT_CONCEPTS_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: {
+    concepts: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 2,
+      maxItems: 10,
+      description: 'Array of 5–8 concept labels, each 2–5 words.',
     },
-    required: ['concepts'],
   },
+  required: ['concepts'],
 };
 
 /**
@@ -53,27 +38,15 @@ const EXTRACT_CONCEPTS_TOOL: Anthropic.Tool = {
 export async function extractConcepts(bodyText: string): Promise<string[]> {
   const truncated = bodyText.slice(0, AESTHETIC_BODY_MAX_CHARS);
 
-  const response = await getClient().messages.create({
-    model: LLM_MODEL,
-    max_tokens: 512,
+  const input = await getLlm().generateStructured<{ concepts?: unknown }>({
+    schema: EXTRACT_CONCEPTS_SCHEMA,
+    toolName: 'extract_concepts',
+    toolDescription: 'Extract the core intellectual concepts from the supplied article text.',
     system: `${CONCEPT_EXTRACTION_SYSTEM_PROMPT}\n\n${UNTRUSTED_CONTENT_NOTICE}`,
-    tools: [EXTRACT_CONCEPTS_TOOL],
-    tool_choice: { type: 'any' },
-    messages: [
-      {
-        role: 'user',
-        content: wrapUntrusted(truncated),
-      },
-    ],
+    user: wrapUntrusted(truncated),
+    maxTokens: 512,
   });
 
-  // Extract the tool use block
-  const toolUse = response.content.find(b => b.type === 'tool_use');
-  if (!toolUse || toolUse.type !== 'tool_use') {
-    throw new Error('[conceptExtractor] LLM did not return a tool_use block');
-  }
-
-  const input = toolUse.input as { concepts?: unknown };
   if (!Array.isArray(input.concepts)) {
     throw new Error('[conceptExtractor] tool input.concepts is not an array');
   }

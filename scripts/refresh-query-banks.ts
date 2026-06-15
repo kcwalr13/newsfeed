@@ -7,20 +7,17 @@
  * Overwrites data/query_banks.json and resets data/query_rotation_state.json.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
 import { DISCOVERY_TOPICS } from '../lib/discovery/topics';
-import { LLM_MODEL } from '../lib/config/llm';
+import { getLlm, isLlmConfigured } from '../lib/llm';
+import { LlmError } from '../lib/llm/types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const BANK_PATH = path.join(DATA_DIR, 'query_banks.json');
 const STATE_PATH = path.join(DATA_DIR, 'query_rotation_state.json');
 
-const GENERATION_MODEL = LLM_MODEL;
-
 async function generateQueriesForTopic(
-  client: Anthropic,
   topicId: string,
   topicLabel: string
 ): Promise<string[]> {
@@ -37,13 +34,22 @@ Requirements:
 
 Return a JSON array of exactly 5 strings and nothing else. No markdown, no explanation.`;
 
-  const response = await client.messages.create({
-    model: GENERATION_MODEL,
-    max_tokens: 512,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const text = response.content.find((b) => b.type === 'text')?.text ?? '';
+  // Trusted topic labels (no scraped content) → no wrapUntrusted / notice (site 7 exemption).
+  // Preserve the pre-abstraction degenerate-output behavior: a response with no
+  // usable text became `''` (old `?? ''`) → fell through to the warning and
+  // skipped just this topic; a transport/API error aborted the run. The adapter
+  // signals these via LlmError.kind, so a 'parse' error → empty text (skip), and
+  // an 'api' error rethrows (abort), exactly as before.
+  let text: string;
+  try {
+    text = await getLlm().generateText({ user: prompt, maxTokens: 512 });
+  } catch (err) {
+    if (err instanceof LlmError && err.kind === 'parse') {
+      text = '';
+    } else {
+      throw err;
+    }
+  }
   try {
     // Strip markdown code fences — a fenced reply otherwise fails JSON.parse
     // and silently yields 0 queries for the topic (PIPE-L4).
@@ -60,13 +66,11 @@ Return a JSON array of exactly 5 strings and nothing else. No markdown, no expla
 }
 
 async function main() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.error('ERROR: ANTHROPIC_API_KEY environment variable is not set.');
+  if (!isLlmConfigured()) {
+    console.error("ERROR: the active LLM provider's API key is not set.");
     process.exit(1);
   }
 
-  const client = new Anthropic({ apiKey });
   const startedAt = new Date().toISOString();
   console.log(`[refresh-query-banks] Starting at ${startedAt}`);
   console.log(`[refresh-query-banks] Topics to process: ${DISCOVERY_TOPICS.length}`);
@@ -77,7 +81,7 @@ async function main() {
 
   for (const topic of DISCOVERY_TOPICS) {
     process.stdout.write(`  Generating queries for "${topic.label}"... `);
-    const queries = await generateQueriesForTopic(client, topic.id, topic.label);
+    const queries = await generateQueriesForTopic(topic.id, topic.label);
     if (queries.length < 5) {
       console.log(`WARNING: got ${queries.length}/5 queries`);
       warningTopics++;

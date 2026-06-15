@@ -1,23 +1,10 @@
 // Aesthetic scorer module — scores article text on six aesthetic dimensions via Claude Haiku.
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { AestheticScoreVector } from '@/lib/types/aesthetic';
 import { AESTHETIC_SCALE_MIN, AESTHETIC_SCALE_MAX } from '@/lib/config/aesthetic';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
-import { LLM_MODEL } from '@/lib/config/llm';
-
-// Lazy client: constructing Anthropic() with a missing ANTHROPIC_API_KEY throws,
-// and doing that at module load would crash every importer of this module.
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new AestheticScoringError('ANTHROPIC_API_KEY is not set');
-  }
-  if (!_client) _client = new Anthropic();
-  return _client;
-}
-
-const MODEL = LLM_MODEL;
+import { getLlm } from '@/lib/llm';
+import type { JsonSchema } from '@/lib/llm/types';
 
 const SYSTEM_PROMPT = `You are a thoughtful literary editor with wide reading experience across all genres and disciplines. Your task is to score a piece of writing on six aesthetic dimensions that describe how the writing *feels* to read — not what it is about or whether it is good.
 
@@ -54,21 +41,17 @@ The six dimensions:
 
 Score the piece as it actually reads, not as the genre or subject would suggest. A technical tutorial can be warmly personal. A political essay can be playfully written. Judge the text, not the category.\n\n${UNTRUSTED_CONTENT_NOTICE}`;
 
-const SCORE_TOOL: Anthropic.Tool = {
-  name: 'score_aesthetic',
-  description: 'Score the supplied text on six aesthetic dimensions.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      contemplative: { type: 'number', minimum: 1.0, maximum: 5.0 },
-      concrete:      { type: 'number', minimum: 1.0, maximum: 5.0 },
-      personal:      { type: 'number', minimum: 1.0, maximum: 5.0 },
-      playful:       { type: 'number', minimum: 1.0, maximum: 5.0 },
-      specialist:    { type: 'number', minimum: 1.0, maximum: 5.0 },
-      emotional:     { type: 'number', minimum: 1.0, maximum: 5.0 },
-    },
-    required: ['contemplative', 'concrete', 'personal', 'playful', 'specialist', 'emotional'],
+const SCORE_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: {
+    contemplative: { type: 'number', minimum: 1.0, maximum: 5.0 },
+    concrete:      { type: 'number', minimum: 1.0, maximum: 5.0 },
+    personal:      { type: 'number', minimum: 1.0, maximum: 5.0 },
+    playful:       { type: 'number', minimum: 1.0, maximum: 5.0 },
+    specialist:    { type: 'number', minimum: 1.0, maximum: 5.0 },
+    emotional:     { type: 'number', minimum: 1.0, maximum: 5.0 },
   },
+  required: ['contemplative', 'concrete', 'personal', 'playful', 'specialist', 'emotional'],
 };
 
 export class AestheticScoringError extends Error {
@@ -89,15 +72,15 @@ export class AestheticScoringError extends Error {
  *   out-of-range values). The caller must catch and handle failures.
  */
 export async function scoreAesthetic(input: string): Promise<AestheticScoreVector> {
-  let response: Anthropic.Message;
+  let raw: Record<string, unknown>;
   try {
-    response = await getClient().messages.create({
-      model: MODEL,
-      max_tokens: 256,
+    raw = await getLlm().generateStructured<Record<string, unknown>>({
+      schema: SCORE_SCHEMA,
+      toolName: 'score_aesthetic',
+      toolDescription: 'Score the supplied text on six aesthetic dimensions.',
       system: SYSTEM_PROMPT,
-      tools: [SCORE_TOOL],
-      tool_choice: { type: 'any' },
-      messages: [{ role: 'user', content: wrapUntrusted(input) }],
+      user: wrapUntrusted(input),
+      maxTokens: 256,
     });
   } catch (err) {
     throw new AestheticScoringError(
@@ -105,16 +88,6 @@ export async function scoreAesthetic(input: string): Promise<AestheticScoreVecto
       err
     );
   }
-
-  // Extract the tool_use block from the response
-  const toolUseBlock = response.content.find(b => b.type === 'tool_use');
-  if (!toolUseBlock || toolUseBlock.type !== 'tool_use') {
-    throw new AestheticScoringError(
-      `LLM response did not contain a tool_use block. stop_reason=${response.stop_reason}`
-    );
-  }
-
-  const raw = toolUseBlock.input as Record<string, unknown>;
 
   // Validate all six fields are present and numeric
   const keys: Array<keyof AestheticScoreVector> = [

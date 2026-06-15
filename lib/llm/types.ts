@@ -41,6 +41,8 @@ export interface GenerateStructuredOptions {
   schema: JsonSchema;
   /** Tool name (used by Anthropic `tool_use`; ignored by providers with native JSON mode). */
   toolName: string;
+  /** Optional tool description (Anthropic tool definition; ignored by Gemini). */
+  toolDescription?: string;
   /** System prompt. MUST include `UNTRUSTED_CONTENT_NOTICE` for in-app sites. */
   system: string;
   /** User content. MUST be `wrapUntrusted()`-fenced for in-app sites. */
@@ -64,4 +66,21 @@ export interface LlmProvider {
   generateStructured<T>(opts: GenerateStructuredOptions): Promise<T>;
   /** Returns the model's plain-text output. Throws on call failure. */
   generateText(opts: GenerateTextOptions): Promise<string>;
+}
+
+/**
+ * Error thrown by provider adapters. `kind` distinguishes a transport/API
+ * failure (`'api'`) from a malformed/unparseable response (`'parse'`) so call
+ * sites that branch on that distinction (e.g. the content evaluator's
+ * `api_error` vs `parse_error`) keep their pre-abstraction behavior.
+ */
+export class LlmError extends Error {
+  constructor(
+    public readonly kind: 'api' | 'parse',
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'LlmError';
+  }
 }

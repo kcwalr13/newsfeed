@@ -1,11 +1,24 @@
 // SERVER-SIDE ONLY — never import in browser bundles.
 
-import Anthropic from '@anthropic-ai/sdk';
 import { UNTRUSTED_CONTENT_NOTICE, wrapUntrusted } from '@/lib/utils/promptSafety';
-import { LLM_MODEL } from '@/lib/config/llm';
+import { getLlm } from '@/lib/llm';
+import type { LlmProvider, JsonSchema } from '@/lib/llm/types';
+import { LlmError } from '@/lib/llm/types';
 
-/** Model used for content evaluation. Do not hardcode inline; use this constant. */
-const LLM_EVAL_MODEL = LLM_MODEL;
+const SCORE_ARTICLE_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: {
+    intellectual_substance:    { type: 'integer', minimum: 1, maximum: 5 },
+    originality:               { type: 'integer', minimum: 1, maximum: 5 },
+    cross_disciplinary_appeal: { type: 'integer', minimum: 1, maximum: 5 },
+    evergreen_durability:      { type: 'integer', minimum: 1, maximum: 5 },
+    writing_quality:           { type: 'integer', minimum: 1, maximum: 5 },
+  },
+  required: [
+    'intellectual_substance', 'originality',
+    'cross_disciplinary_appeal', 'evergreen_durability', 'writing_quality',
+  ],
+};
 
 export interface LLMScores {
   intellectual_substance: number;
@@ -31,19 +44,22 @@ export interface LLMEvalFailure {
 export type LLMEvalResult = LLMEvalSuccess | LLMEvalFailure;
 
 /**
- * Evaluates article content quality using the LLM client provided.
- * This is the testable inner function — pass in an Anthropic client to decouple from env vars.
+ * Evaluates article content quality using the LLM provider supplied.
+ * This is the testable inner function — pass in an LlmProvider to decouple from
+ * the active-provider factory / env vars.
  */
 export async function evaluateWithLLMClient(
-  client: Anthropic,
+  provider: LlmProvider,
   title: string,
   description: string,
   bodyText: string
 ): Promise<LLMEvalResult> {
+  let input: Record<string, unknown>;
   try {
-    const response = await client.messages.create({
-      model: LLM_EVAL_MODEL,
-      max_tokens: 256,
+    input = await provider.generateStructured<Record<string, unknown>>({
+      schema: SCORE_ARTICLE_SCHEMA,
+      toolName: 'score_article',
+      toolDescription: 'Return quality scores for the article.',
       system: `You are an editorial evaluator for a personalized content discovery system.
 Your task is to assess whether a piece of writing meets a high curatorial bar —
 the kind of writing that would be recommended by publications like The Browser,
@@ -62,99 +78,75 @@ Dimensions:
 Score as a thoughtful, widely-read editor — not as a classifier pattern-matching on surface signals. A 5 means genuinely exceptional. A 3 means adequate but unremarkable. A 1 means generic, poorly written, or purely informational without insight.
 
 ${UNTRUSTED_CONTENT_NOTICE}`,
-      tools: [{
-        name: 'score_article',
-        description: 'Return quality scores for the article.',
-        input_schema: {
-          type: 'object' as const,
-          properties: {
-            intellectual_substance:    { type: 'integer', minimum: 1, maximum: 5 },
-            originality:               { type: 'integer', minimum: 1, maximum: 5 },
-            cross_disciplinary_appeal: { type: 'integer', minimum: 1, maximum: 5 },
-            evergreen_durability:      { type: 'integer', minimum: 1, maximum: 5 },
-            writing_quality:           { type: 'integer', minimum: 1, maximum: 5 },
-          },
-          required: [
-            'intellectual_substance', 'originality',
-            'cross_disciplinary_appeal', 'evergreen_durability', 'writing_quality'
-          ],
-        },
-      }],
-      tool_choice: { type: 'tool', name: 'score_article' },
-      messages: [{
-        role: 'user',
-        content: wrapUntrusted(
-          `Title: ${title}\nDescription: ${description}\nBody (first 3000 characters):\n${bodyText.slice(0, 3000)}`
-        ),
-      }],
+      user: wrapUntrusted(
+        `Title: ${title}\nDescription: ${description}\nBody (first 3000 characters):\n${bodyText.slice(0, 3000)}`
+      ),
+      maxTokens: 256,
     });
-
-    // Find the tool_use block for score_article
-    const toolBlock = response.content.find(
-      (block): block is Anthropic.ToolUseBlock =>
-        block.type === 'tool_use' && block.name === 'score_article'
-    );
-
-    if (!toolBlock) {
-      return { success: false, reason: 'parse_error', detail: 'No score_article tool_use block found' };
-    }
-
-    const input = toolBlock.input as Record<string, unknown>;
-    const dims = [
-      'intellectual_substance',
-      'originality',
-      'cross_disciplinary_appeal',
-      'evergreen_durability',
-      'writing_quality',
-    ] as const;
-
-    // Validate all five fields are integers in [1, 5]
-    for (const dim of dims) {
-      const val = input[dim];
-      if (typeof val !== 'number' || !Number.isInteger(val) || val < 1 || val > 5) {
-        return {
-          success: false,
-          reason: 'parse_error',
-          detail: `Invalid value for ${dim}: ${JSON.stringify(val)}`,
-        };
-      }
-    }
-
-    const intellectual_substance = input.intellectual_substance as number;
-    const originality = input.originality as number;
-    const cross_disciplinary_appeal = input.cross_disciplinary_appeal as number;
-    const evergreen_durability = input.evergreen_durability as number;
-    const writing_quality = input.writing_quality as number;
-
-    const composite = Math.round(
-      ((intellectual_substance + originality + cross_disciplinary_appeal + evergreen_durability + writing_quality) / 5) * 100
-    ) / 100;
-
-    return {
-      success: true,
-      scores: {
-        intellectual_substance,
-        originality,
-        cross_disciplinary_appeal,
-        evergreen_durability,
-        writing_quality,
-        composite,
-      },
-    };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, reason: 'api_error', detail: msg };
+    // Preserve the pre-abstraction reason mapping: a malformed/missing
+    // structured response → parse_error; everything else (network/API) →
+    // api_error.
+    if (err instanceof LlmError && err.kind === 'parse') {
+      return { success: false, reason: 'parse_error', detail: err.message };
+    }
+    return {
+      success: false,
+      reason: 'api_error',
+      detail: err instanceof Error ? err.message : String(err),
+    };
   }
+
+  const dims = [
+    'intellectual_substance',
+    'originality',
+    'cross_disciplinary_appeal',
+    'evergreen_durability',
+    'writing_quality',
+  ] as const;
+
+  // Validate all five fields are integers in [1, 5]
+  for (const dim of dims) {
+    const val = input[dim];
+    if (typeof val !== 'number' || !Number.isInteger(val) || val < 1 || val > 5) {
+      return {
+        success: false,
+        reason: 'parse_error',
+        detail: `Invalid value for ${dim}: ${JSON.stringify(val)}`,
+      };
+    }
+  }
+
+  const intellectual_substance = input.intellectual_substance as number;
+  const originality = input.originality as number;
+  const cross_disciplinary_appeal = input.cross_disciplinary_appeal as number;
+  const evergreen_durability = input.evergreen_durability as number;
+  const writing_quality = input.writing_quality as number;
+
+  const composite = Math.round(
+    ((intellectual_substance + originality + cross_disciplinary_appeal + evergreen_durability + writing_quality) / 5) * 100
+  ) / 100;
+
+  return {
+    success: true,
+    scores: {
+      intellectual_substance,
+      originality,
+      cross_disciplinary_appeal,
+      evergreen_durability,
+      writing_quality,
+      composite,
+    },
+  };
 }
 
 /**
- * Creates an Anthropic client from ANTHROPIC_API_KEY and evaluates the article.
+ * Evaluates the article using the active LLM provider (lib/llm).
  */
 export async function evaluateWithLLM(
   title: string,
   description: string,
   bodyText: string
 ): Promise<LLMEvalResult> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return evaluateWithLLMClient(client, title, description, bodyText);
+  return evaluateWithLLMClient(getLlm(), title, description, bodyText);
 }
