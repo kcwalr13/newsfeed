@@ -10,6 +10,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { computeMetrics, type TangentMetrics } from '@/lib/db/metrics';
+import { EXPLORATION_CEILING } from '@/lib/config/serendipity';
 
 export const dynamic = 'force-dynamic';
 
@@ -211,7 +212,7 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <MonoLabel>EXPLORATION BUDGET</MonoLabel>
-                  <p className="ql-serif" style={{ fontSize: '22px', color: 'var(--fg)' }}>{metrics.tasteMaturity.explorationBudget} / 7</p>
+                  <p className="ql-serif" style={{ fontSize: '22px', color: 'var(--fg)' }}>{metrics.tasteMaturity.explorationBudget} / {EXPLORATION_CEILING}</p>
                 </div>
               </dl>
             </Section>
