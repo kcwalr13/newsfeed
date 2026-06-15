@@ -91,9 +91,19 @@ export const LLM_EVAL_THRESHOLD = 3.5;
 /**
  * Adaptive-threshold floor: when fewer than DISCOVERY_ARTICLES_PER_DAY
  * candidates clear LLM_EVAL_THRESHOLD, slots are filled top-down by composite
- * score from candidates at or above this floor (never below it).
+ * score from candidates at or above this floor. As a last resort the quota may
+ * dip below the floor, but only up to DISCOVERY_BELOW_FLOOR_MAX slots (R4-04).
  */
 export const LLM_EVAL_FLOOR = 3.0;
+
+/**
+ * Maximum number of discovery slots that the last-resort backfill may fill with
+ * BELOW-floor candidates (R4-04). Bounds a thin day: rather than packing all
+ * DISCOVERY_ARTICLES_PER_DAY slots with sub-floor content, discovery ships at
+ * most this many sub-floor pieces and leaves the rest of the quota unfilled (the
+ * issue is topped up from the fixed palette).
+ */
+export const DISCOVERY_BELOW_FLOOR_MAX = 2;
 
 /** Maximum characters of body text sent to the LLM evaluator per call (cost control). */
 export const LLM_EVAL_BODY_CHAR_LIMIT = 3000;

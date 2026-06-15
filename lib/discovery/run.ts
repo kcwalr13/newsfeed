@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 import type { Article } from '@/lib/types/article';
-import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_QUERIES_PER_TOPIC, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_MAX_EVAL_CANDIDATES, DISCOVERY_ARTICLES_PER_DAY, NOVELTY_LOOKBACK_ISSUES, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR, DISCOVERY_LLM_CONCURRENCY } from '@/lib/config/feed';
+import { DISCOVERY_TOPICS_PER_RUN, DISCOVERY_QUERIES_PER_TOPIC, DISCOVERY_CANDIDATES_PER_TOPIC, DISCOVERY_MAX_EVAL_CANDIDATES, DISCOVERY_ARTICLES_PER_DAY, NOVELTY_LOOKBACK_ISSUES, TOPIC_WEIGHT_STEP, TOPIC_WEIGHT_FLOOR, TOPIC_WEIGHT_CEILING, LLM_EVAL_THRESHOLD, LLM_EVAL_FLOOR, DISCOVERY_BELOW_FLOOR_MAX, DISCOVERY_LLM_CONCURRENCY } from '@/lib/config/feed';
 import { forEachWithConcurrency } from '@/lib/utils/concurrency';
 import { DISCOVERY_TOPICS } from './topics';
 import type { DiscoveryTopic } from './topics';
@@ -389,14 +389,19 @@ export async function runDiscovery(
   //   1. candidates at/above LLM_EVAL_THRESHOLD (the editorial bar);
   //   2. backfill the rest down to LLM_EVAL_FLOOR;
   //   3. last resort — the best remaining by composite (below the floor) so a
-  //      run still fills its slots. An imperfect *discovered* piece advances the
-  //      core promise ("find sources you don't know") more than a 7th
-  //      fixed-source article. The below-floor count is always logged, so this
-  //      never happens silently and the floor stays a real, observable line.
-  // `qualified` is sorted desc, so slicing naturally honors that priority.
+  //      run still fills its slots, but BOUNDED to DISCOVERY_BELOW_FLOOR_MAX
+  //      slots (R4-04) so a thin day can't pack the whole quota with sub-floor
+  //      content. An imperfect *discovered* piece advances the core promise
+  //      ("find sources you don't know") more than a 7th fixed-source article,
+  //      but only a couple — the rest of the quota is left for the fixed palette.
+  //      The below-floor count is always logged, so this never happens silently
+  //      and the floor stays a real, observable line.
+  // `qualified` (and the filtered sub-lists) are sorted desc, so slicing honors
+  // the threshold → floor → last-resort priority.
   qualified.sort((a, b) => b.llmScores.composite - a.llmScores.composite);
   const aboveThreshold = qualified.filter((c) => c.llmScores.composite >= LLM_EVAL_THRESHOLD);
   const aboveFloor = qualified.filter((c) => c.llmScores.composite >= LLM_EVAL_FLOOR);
+  const belowFloor = qualified.filter((c) => c.llmScores.composite < LLM_EVAL_FLOOR);
 
   if (qualified.length > 0 && aboveThreshold.length === 0) {
     const msg =
@@ -406,8 +411,14 @@ export async function runDiscovery(
     appendLog(msg);
   }
 
-  const top = qualified.slice(0, DISCOVERY_ARTICLES_PER_DAY);
-  const belowFloorFilled = top.filter((c) => c.llmScores.composite < LLM_EVAL_FLOOR).length;
+  // Fill from at/above-floor first; only then dip below the floor, capped at
+  // DISCOVERY_BELOW_FLOOR_MAX so an all-sub-floor day fills ≤2 slots, not 6.
+  const fromAboveFloor = aboveFloor.slice(0, DISCOVERY_ARTICLES_PER_DAY);
+  const remainingSlots = DISCOVERY_ARTICLES_PER_DAY - fromAboveFloor.length;
+  const fromBelowFloor =
+    remainingSlots > 0 ? belowFloor.slice(0, Math.min(remainingSlots, DISCOVERY_BELOW_FLOOR_MAX)) : [];
+  const top = [...fromAboveFloor, ...fromBelowFloor];
+  const belowFloorFilled = fromBelowFloor.length;
 
   stats.qualified = top.length;
 
