@@ -39,7 +39,7 @@ faster.
 - **Framework:** Next.js 16 (App Router) + React 19 + TypeScript
 - **Styling:** Tailwind CSS v4
 - **Database:** Neon serverless Postgres (pgvector-ready for embeddings)
-- **LLM:** Claude API (content evaluation, aesthetic scoring, concept extraction, theme generation)
+- **LLM:** provider-abstracted (`lib/llm/`) — Claude API (default) or Gemini free-tier, selected by `LLM_PROVIDER`; powers content evaluation, aesthetic scoring, concept extraction, and theme + curator-note generation
 - **Delivery:** Progressive Web App (installable; no app stores)
 - **Hosting:** Vercel (daily cron triggers the pipeline)
 
@@ -48,7 +48,7 @@ faster.
 - **Node.js 22+** (the migration runner uses `process.loadEnvFile` and a global `WebSocket`)
 - **npm**
 - A **Neon** Postgres database (connection string)
-- An **Anthropic API key** (required — without it, aesthetic scoring/concept extraction are skipped and articles rank by source score only)
+- An **LLM API key** for the active provider — **Anthropic** (`ANTHROPIC_API_KEY`, the default) or **Gemini** (`GEMINI_API_KEY`, when `LLM_PROVIDER=gemini`). Without a valid key, aesthetic scoring / concept extraction / curator notes are skipped and articles rank by source score only.
 - A **Brave Search API key** (for the proactive discovery pipeline)
 
 ## Getting started
@@ -78,7 +78,9 @@ Copy `.env.example` to `.env.local` and set:
 
 | Variable | Required? | Purpose |
 |----------|-----------|---------|
-| `ANTHROPIC_API_KEY` | **Yes** | Aesthetic scorer, concept extractor, LLM content evaluator, theme generator. |
+| `ANTHROPIC_API_KEY` | Yes, unless `LLM_PROVIDER=gemini` | Aesthetic scorer, concept extractor, content evaluator, theme + curator-note generator (the default provider). |
+| `LLM_PROVIDER` | Optional | Active LLM backend: `anthropic` (default) or `gemini`. |
+| `GEMINI_API_KEY` | If `LLM_PROVIDER=gemini` | Google AI Studio (Gemini) free-tier key. See the LLM-provider notes below. |
 | `DATABASE_URL` | **Yes** | Neon serverless Postgres connection string. |
 | `BRAVE_SEARCH_API_KEY` | For discovery | Proactive Small-Web / web discovery pass. |
 | `CRON_SECRET` | For cron | Bearer token authenticating the daily `/api/pipeline/run` trigger. Generate with `openssl rand -hex 32`. |
@@ -91,6 +93,37 @@ Copy `.env.example` to `.env.local` and set:
 > The auth system ships but is disabled; the deployment should sit behind external
 > access control (e.g. Vercel password protection) while it is off. See
 > [`CLAUDE.md`](CLAUDE.md) and the review tracker for details.
+
+### LLM provider (Round 6)
+
+All LLM work goes through a provider abstraction in [`lib/llm/`](lib/llm) (`getLlm()`),
+so the backend is chosen by config rather than hardcoded:
+
+- **`anthropic` (default)** — Claude Haiku via `@anthropic-ai/sdk`, key `ANTHROPIC_API_KEY`.
+- **`gemini`** — Gemini 2.0 Flash (free tier) via `@google/genai`, key `GEMINI_API_KEY`.
+  Switch with `LLM_PROVIDER=gemini` in the environment (no code change).
+
+A shared rate limiter ([`lib/llm/limiter.ts`](lib/llm/limiter.ts)) spaces every LLM
+call to the active provider's RPM (a no-op for Anthropic; ~15 RPM for the Gemini free
+tier). Under Gemini the pipeline lowers its discovery-evaluation cap and the per-article
+scoring phase is bounded by a wall-clock deadline, so a daily run fits the free-tier
+rate **and** the function's time budget — and the batch is always written even if some
+articles end up unscored (they fall back to source-score ranking).
+
+Caveats when running on the Gemini **free tier**:
+
+- **Training-data privacy.** Google may use free-tier prompts to improve its products.
+  The app sends public article text plus a compact taste digest (your concept labels /
+  tone) to scoring and curator-note calls. Acceptable for a private single-user app, but
+  noted; keep `LLM_PROVIDER=anthropic` (a paid tier) for anything sensitive.
+- **Taste-model drift.** Aesthetic scores already in the DB were produced by Claude Haiku;
+  Gemini scores on a slightly different internal scale, so the taste centroid sits in a
+  *mixed* space for a while. Default: accept the drift (old scores age out as feedback
+  accrues). A one-time re-score of recent articles is optional if rankings feel off.
+- **Daily request cap.** The free tier has a daily request ceiling; one cron run/day is
+  fine, but avoid repeated `forceOverwrite` refreshes (each re-spends the cap).
+- **Per-instance limiter.** The rate limiter is per serverless instance (one cron run =
+  one instance, metered correctly); it does not coordinate across concurrent instances.
 
 ## Scripts
 

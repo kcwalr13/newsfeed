@@ -36,7 +36,7 @@ For full technical detail on any milestone, see the linked design documents belo
 | Platform | PWA (Progressive Web App) | Active | Installable on mobile without app stores; works on desktop too |
 | Database | Neon serverless Postgres | Active | Feedback, auth, topic weights; scales to future use cases |
 | Storage | Neon Postgres (batches, cooldown, run-lock, rate limits) | Active | Vercel's filesystem is read-only; batches moved to the `article_batches` table (migration 013) and the refresh cooldown + global run-lock + rate limiter to the `rate_limits` table (migration 019). The original JSON-file approach was local-dev only. |
-| LLM | Claude API (Anthropic SDK) | Phase 1+ | Content evaluation, quality scoring, agent orchestration, query generation |
+| LLM | Provider-abstracted (`lib/llm/`): Anthropic SDK (default) or Gemini (`@google/genai`) | Phase 1+; abstraction Round 6 | Content evaluation, quality scoring, concept/theme/curator generation, query generation. Backend chosen by `LLM_PROVIDER`; a shared RPM limiter meters all calls. |
 | Web crawling | Playwright (headless browser) | Phase 1+ | Small Web / IndieWeb crawling; hybrid API + browser agent strategy |
 | Vector storage | pgvector on Neon | Phase 2+ | Embedding storage for latent aesthetic space; already available in Neon |
 | Memory | Mem0 (open source) | Phase 3+ | Graph-enhanced long-term user memory |
@@ -378,7 +378,9 @@ Full TypeScript definitions live in `lib/types/`. Summary:
 | `NEXTAUTH_URL` | Email link generation | Base URL: `http://localhost:3000` (dev), `https://yourdomain.com` (prod). Validated to an https origin before building email links (SEC-M1). |
 | `ALLOWED_BASE_URLS` | Email link generation (optional) | Comma-separated allowlist of origins permitted in email links; when set, `NEXTAUTH_URL`'s origin must be a member or email sending fails closed (SEC-M1). |
 | `BRAVE_SEARCH_API_KEY` | Discovery pipeline (all Brave Search calls) | Obtain at https://api.search.brave.com. Free tier: 2,000 req/month. Never commit. |
-| `ANTHROPIC_API_KEY` | LLM content evaluator (Phase 1+), query bank generation script | Obtain at console.anthropic.com. Never commit. |
+| `ANTHROPIC_API_KEY` | LLM calls when `LLM_PROVIDER=anthropic` (default): evaluator, aesthetic scorer, concept extractor, theme + curator notes, query-bank script | Obtain at console.anthropic.com. Never commit. |
+| `LLM_PROVIDER` | Provider selection (Round 6, optional) | `anthropic` (default) or `gemini`. Selects the active backend in `lib/llm/`. |
+| `GEMINI_API_KEY` | LLM calls when `LLM_PROVIDER=gemini` | Google AI Studio free-tier key (Gemini 2.0 Flash). Never commit. |
 | `OWNER_EMAIL` | Account menu (single-user) | Owner email returned by `/api/auth/me`; server-only, never hardcoded in source or shipped in the client bundle (SEC-C1). |
 
 ---
@@ -582,7 +584,7 @@ older rows, this section wins.
 - **`maxDuration = 300`** on both pipeline routes; per-article LLM loops and the discovery body+LLM loop run at bounded concurrency via `lib/utils/concurrency.ts` (DAT-H2, R2-18), under a wall-clock budget.
 
 **New modules**
-- `lib/config/llm.ts` — central `LLM_MODEL` id (was duplicated across modules; PIPE-L9).
+- `lib/config/llm.ts` — central `LLM_MODEL` id (was duplicated across modules; PIPE-L9); extended in Round 6 with `LLM_PROVIDER` + a per-provider `PROVIDER_CONFIG` table (model/rpm/concurrency/dailyCap).
 - `lib/utils/bodyClean.ts` — shared body-text chrome stripper used by the RSS adapter + body extractor (PIPE-Q1, R2-17).
 - `lib/utils/promptSafety.ts` — untrusted-content fencing for all LLM call sites (PIPE-M4).
 - `lib/utils/concurrency.ts` — `forEachWithConcurrency` shared by the pipeline and discovery (R2-18).
@@ -606,6 +608,27 @@ older rows, this section wins.
 - `019_rate_limits.sql` — backs the rate limiter, cooldown, and run-lock.
 
 **Removed v1 components** (FE-L1 deleted 8 dead components): `FeedbackButtons`, `FeedSkeleton`, `ErrorState`, `BatchLabel`, `ViewSourceLink`, `LastUpdatedLabel`, `RefreshButton`, `AccountIcon` no longer exist — their "Shipped" rows above are historical. Their roles are now handled inline or by the components listed above.
+
+---
+
+## Round 6 — LLM provider abstraction + go free-tier
+
+Plan: `agents/architect/design_product_round6_llm_provider_abstraction.md`. All LLM work now flows through a small provider interface so the backend is config-selected (`LLM_PROVIDER`), with Gemini free-tier as the cost-zero default target.
+
+**The abstraction (`lib/llm/`)**
+- `types.ts` — `LlmProvider` interface (`generateStructured<T>` for tool/JSON-schema sites, `generateText` for text sites), a minimal `JsonSchema`, and a typed `LlmError {kind:'api'|'parse'}`.
+- `index.ts` — `getLlm()` factory (selects + memoizes the active adapter, then wraps it with the rate limiter) and `isLlmConfigured()` (provider-aware key check, used by the graceful-skip sites: curator notes, issue theme, the query-bank script).
+- `anthropic.ts` — `@anthropic-ai/sdk`; structured = single forced `tool_use`, text = first text block. Default provider.
+- `gemini.ts` — `@google/genai` (Gemini 2.0 Flash); structured = `responseMimeType:'application/json'` + a `responseSchema` converted from `JsonSchema` (Type enum, string `minItems`/`maxItems`), text = plain `generateContent`; `system → systemInstruction`.
+- `limiter.ts` — a shared fixed-interval (leaky-bucket) scheduler keyed on the active provider's RPM; guarantees ≤ rpm calls in every rolling 60s window. **No-op for Anthropic** (Infinity RPM). Per serverless instance (one cron run = one instance).
+
+**The 7 refactored call sites** keep their prompts, schemas, `max_tokens`, and post-parse validation byte-identical; the prompt-injection invariant (`UNTRUSTED_CONTENT_NOTICE` in `system` + `wrapUntrusted()` on user content) holds for the 6 in-app sites (the offline query-bank script is exempt — trusted labels). Gemini honors schema constraints weakly, so the client-side validation at each site is load-bearing.
+
+**Budget-fit (R6-5)** — under Gemini's ~15 RPM the limiter spaces calls ~4s apart, so `lib/config/feed.ts` lowers `DISCOVERY_MAX_EVAL_CANDIDATES` (40→15) and per-loop concurrency (4→2) for `gemini`, and `runPipeline`'s per-article scoring/concept phase gained a wall-clock **deadline** (`LlmBudget.deadlineMs = runStartMs + PIPELINE_WALL_CLOCK_BUDGET_MS`, enforced in `tryConsumeLlm`). The batch is written *after* scoring, so the deadline guarantees it is still written before `maxDuration` even when the slow rate forces some articles to stay unscored (they rank by source score — the existing DAT-H2/PIPE-H1 degraded fallback).
+
+**Caveats (free tier)** — Google may use free-tier prompts for product improvement (public article text + a taste digest are sent); aesthetic scores are now a *mixed* Haiku/Gemini space (accept the drift or one-time re-score); a daily request cap means avoiding gratuitous `forceOverwrite` refreshes.
+
+**Ops** — the active provider defaults to `anthropic`; going live on Gemini is the single Vercel env change `LLM_PROVIDER=gemini` (with `GEMINI_API_KEY` set). This is what resolves R5-C3 (curator notes weren't generating because the Anthropic account ran out of credits).
 
 ---
 
