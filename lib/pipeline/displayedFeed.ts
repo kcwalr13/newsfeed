@@ -12,7 +12,7 @@
  * caller's identity, ranks the batch, and applies the C2/C3 reorders exactly as
  * the feed route does, returning the full reordered list (the displayed issue is
  * its first `ISSUE_DISPLAY_SIZE` elements). It deliberately does NOT slice,
- * strip internal fields, or generate rationales — those are response-shaping
+ * strip internal fields, or generate curator notes — those are response-shaping
  * concerns each route owns.
  */
 
@@ -98,7 +98,7 @@ export interface DisplayedFeed {
   /**
    * False when identity/feedback reads failed and `articles` is therefore the
    * raw batch order (the ranker never ran). Callers that only do work meaningful
-   * for a ranked feed (e.g. exploration-slot rationale generation) gate on this.
+   * for a ranked feed can gate on this.
    */
   ranked: boolean;
   /** The reader's resolved taste model (R5-C); empty on the raw-order fallback. */

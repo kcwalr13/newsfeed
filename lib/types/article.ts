@@ -74,13 +74,6 @@ export interface Article {
   folio?: string;
 
   /**
-   * Per-piece curator rationale (why this piece was selected).
-   * Only present for slotted (exploration) pieces.
-   * Requires back-end LLM emission; optional UI can be hidden until available.
-   */
-  rationale?: string;
-
-  /**
    * Approximate reading time in minutes, if known.
    * Derived from bodyText word count at pipeline time.
    */

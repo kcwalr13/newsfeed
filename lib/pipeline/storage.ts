@@ -217,8 +217,8 @@ export async function findArticleInAnyBatch(
 }
 
 /**
- * Patches a subset of article fields (rationale, explorationSlotType) back into a
- * stored batch without touching generatedAt or any other metadata.
+ * Patches a subset of article fields (e.g. curatorNote) back into a stored batch
+ * without touching generatedAt or any other metadata.
  *
  * Takes a Map of articleId → partial Article fields to merge.
  * No-op if the batch doesn't exist.

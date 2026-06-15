@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { readBatch, readLatestBatch, patchBatchArticleFields } from '@/lib/pipeline/storage';
-import { generateMissingRationales } from '@/lib/pipeline/rationaleGenerator';
 import { generateMissingCuratorNotes } from '@/lib/pipeline/curatorNoteGenerator';
 import { computeDiscoveryYield } from '@/lib/pipeline/discoveryMeta';
 import { resolveDisplayedFeed } from '@/lib/pipeline/displayedFeed';
@@ -11,8 +10,9 @@ import type { Article } from '@/lib/types/article';
 export const dynamic = 'force-dynamic';
 
 /** Strips internal-only fields before sending an article to the client. Keeps
- *  explorationSlotType + rationale for display; drops bodyText (the reader page
- *  loads the body server-side via findArticleAcrossBatches). */
+ *  explorationSlotType (the exploration-slot badge) + curatorNote + format for
+ *  display; drops bodyText (the reader page loads the body server-side via
+ *  findArticleAcrossBatches). */
 function toPublicArticle(article: Article) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, bodyText: _bt, ...rest } = article;
@@ -36,10 +36,10 @@ export async function GET(req: NextRequest) {
 
   // Resolve the displayed order (rank + display-diversity reorder). Shared with
   // /api/issue/meta so the colophon credits + theme reflect the SAME seven (R4-01).
-  const { articles: displayArticles, setCookieHeader, ranked, taste } = await resolveDisplayedFeed(req, batch);
+  const { articles: displayArticles, setCookieHeader, taste } = await resolveDisplayedFeed(req, batch);
 
   // The displayed issue is the first ISSUE_DISPLAY_SIZE pieces; bound the
-  // per-issue LLM work (rationales + curator notes) to those.
+  // per-issue curator-note work to those.
   const shown = displayArticles.slice(0, ISSUE_DISPLAY_SIZE);
 
   // Resolve each displayed piece's content-format (R5-D) for the client's card
@@ -50,38 +50,22 @@ export async function GET(req: NextRequest) {
   // Personalized curator note for every displayed piece (R5-C): replaces the raw
   // RSS summary as the blurb. No-op for pieces already noted (cache hit), so
   // subsequent loads don't re-call the LLM. Generated from the taste model
-  // resolveDisplayedFeed already returned (no re-query). The note doesn't affect
-  // display order, so this runs regardless of `ranked` (cold-start → general
-  // invitation). Persisted below alongside any rationales.
+  // resolveDisplayedFeed already returned (no re-query).
   const notesGenerated = await generateMissingCuratorNotes(shown, taste);
 
-  // Generate rationales for newly-slotted exploration articles (no-op if all
-  // already set). Exploration slots are assigned by the ranker, so this is only
-  // meaningful on a ranked feed; rationale text doesn't affect display order.
-  let rationalesGenerated = 0;
-  if (ranked) {
-    rationalesGenerated = await generateMissingRationales(shown);
-  }
-
-  // Persist any newly-generated note / rationale fields back to the batch after
-  // the response is sent. after() keeps the serverless function alive for this
-  // work; a bare floating promise would be frozen once the response went out.
-  if (notesGenerated > 0 || rationalesGenerated > 0) {
+  // Persist any newly-generated curator notes back to the batch after the
+  // response is sent. after() keeps the serverless function alive for this work;
+  // a bare floating promise would be frozen once the response went out.
+  if (notesGenerated > 0) {
     const batchDate = batch.batchDate;
     const patches = new Map<string, Partial<Article>>();
     for (const a of shown) {
-      const patch: Partial<Article> = {};
-      if (a.curatorNote) patch.curatorNote = a.curatorNote;
-      if (a.explorationSlotType != null && a.rationale) {
-        patch.rationale = a.rationale;
-        patch.explorationSlotType = a.explorationSlotType;
-      }
-      if (Object.keys(patch).length > 0) patches.set(a.id, patch);
+      if (a.curatorNote) patches.set(a.id, { curatorNote: a.curatorNote });
     }
     if (patches.size > 0) {
       after(() =>
         patchBatchArticleFields(batchDate, patches).catch((err: unknown) => {
-          console.error('[feed/today] curator-note/rationale patch failed:', err);
+          console.error('[feed/today] curator-note patch failed:', err);
         })
       );
     }
