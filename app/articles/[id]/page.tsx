@@ -63,6 +63,17 @@ export default async function ArticlePage({ params, searchParams }: Props) {
     ? bodyText.split('\n').filter(Boolean)
     : [];
 
+  // A teaser/stub that slipped past the paywall guard (R5-B1) shouldn't render
+  // as a misleading 1–2-paragraph fragment: if the body is too thin to read,
+  // fall back to "Read at source" instead (R5-B2). Thin = both few paragraphs
+  // AND little total text, so a short-but-complete free post (one or two real
+  // paragraphs of substance) still renders in-app.
+  const MIN_READER_PARAGRAPHS = 3;
+  const READER_MIN_BODY_CHARS = 700;
+  const isReadableBody =
+    paragraphs.length >= MIN_READER_PARAGRAPHS ||
+    (bodyText?.length ?? 0) >= READER_MIN_BODY_CHARS;
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* Reader header */}
@@ -152,28 +163,22 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             <ArticleInteractions articleId={article.id} />
           </div>
 
-          {/* Body — client component handles position tracking */}
-          {paragraphs.length > 0 ? (
+          {/* Body — client component handles position tracking. A thin teaser
+              links out to the source rather than rendering as a stub (R5-B2). */}
+          {isReadableBody ? (
             <ArticleBodyClient
               articleId={article.id}
               paragraphs={paragraphs}
             />
-          ) : bodyText ? (
-            <div
-              className="ql-serif"
-              style={{ fontSize: '18px', lineHeight: 1.7, color: 'var(--fg)' }}
-            >
-              {bodyText.split('\n').filter(Boolean).map((para, i) => (
-                <p key={i} style={{ marginBottom: '1.2em' }}>{para}</p>
-              ))}
-            </div>
           ) : (
             <div className="py-8 text-center">
               <p
                 className="ql-serif"
                 style={{ fontSize: '17px', fontStyle: 'italic', color: 'var(--muted)', marginBottom: '12px' }}
               >
-                Full text not available here.
+                {paragraphs.length > 0
+                  ? 'The full piece is best read at the source.'
+                  : 'Full text not available here.'}
               </p>
               <a
                 href={article.articleUrl}
