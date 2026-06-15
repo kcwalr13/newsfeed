@@ -6,6 +6,7 @@ import {
   loadSources,
 } from './config';
 import { categoryForArticle } from './sourceCategory';
+import { selectPlaceForBatch } from './places';
 import {
   ARTICLES_PER_DAY,
   PIPELINE_WALL_CLOCK_BUDGET_MS,
@@ -617,6 +618,31 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       appendLog(
         `[pipeline] DEGRADED RUN: writing unranked batch for ${today}; all LLM calls failed.`
       );
+    }
+
+    // Inject a "place to explore" item on a deterministic cadence (R5-D3): a
+    // whole site to wander, not an article. Added here — after body fetch,
+    // scoring, concepts, and the probe — so it skips every per-article LLM/fetch
+    // loop (it has no body). It's surfaced into the displayed issue by
+    // ensureFormatSpread and links straight out (never the in-app reader).
+    const place = selectPlaceForBatch(today);
+    if (place) {
+      const nowIso = new Date().toISOString();
+      articles.push({
+        id: makeId(place.name, place.url),
+        title: place.name,
+        sourceName: place.name,
+        sourceUrl: place.url,
+        articleUrl: place.url,
+        publishedAt: nowIso,
+        fetchedAt: nowIso,
+        batchDate: today,
+        feedbackSlot: null,
+        format: 'place',
+        curatorNote: place.note,
+        extractedConcepts: [],
+      });
+      appendLog(`[pipeline] PLACE injected: ${place.name} (${place.url})`);
     }
 
     const batch: ArticleBatch = {

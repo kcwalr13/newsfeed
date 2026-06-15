@@ -325,12 +325,16 @@ export default function FeedPage() {
   // candidates; the feed API has already reordered so the top span includes unfamiliar sources (P3-C2).
   const ISSUE_SIZE = ISSUE_DISPLAY_SIZE;
   const displayArticles = data ? data.articles.slice(0, ISSUE_SIZE) : [];
-  const total = displayArticles.length || ISSUE_SIZE;
+  // "Place to explore" items (R5-D3) are a side-invitation, not a piece to read
+  // or action — exclude them from the seven-dot reading-ritual count so "All
+  // pieces read" stays reachable on an issue that includes one.
+  const readableArticles = displayArticles.filter(a => a.format !== 'place');
+  const total = readableArticles.length || ISSUE_SIZE;
   // "Read" = actioned: the reader has dealt with the piece — liked it, saved it,
   // or passed on it (dislike). Counting only like/save left disliked pieces
   // permanently "unread", so "All N pieces read" was unreachable once any piece
   // was passed (R2-12).
-  const read = displayArticles.filter(a => {
+  const read = readableArticles.filter(a => {
     const v = feedbackSnapshot[a.id];
     return v === 'like' || v === 'save' || v === 'dislike';
   }).length;

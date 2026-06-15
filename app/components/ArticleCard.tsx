@@ -77,12 +77,70 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
   // card in D3). A small format tag in the meta row signals the variety.
   const isVisual = article.format === 'visual';
   const isCompact = article.format === 'short' || article.format === 'potpourri';
+  const isPlace = article.format === 'place';
   const formatTag =
     article.format === 'visual' ? 'Visual'
     : article.format === 'short' ? 'Short'
     : article.format === 'potpourri' ? 'Miscellany'
     : null;
   const heroMaxHeight = isVisual ? 320 : 220;
+
+  // "A place to explore" (R5-D3): a whole site to wander, not an article. It has
+  // no body, so it links STRAIGHT OUT (new tab) rather than opening the in-app
+  // reader, and shows an Explore CTA instead of the Pass/Underline/Read-later
+  // controls. Distinct, invitation-forward treatment so it stays special.
+  if (isPlace) {
+    return (
+      <article className="relative" data-article-id={article.id}>
+        <hr className="ql-rule mb-0" />
+        <div className="pt-5 pb-6">
+          <div className="flex items-baseline gap-4 mb-3">
+            <span className="ql-folio">{folioStr(folio)}</span>
+            <span
+              className="ql-mono"
+              style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.18em', textTransform: 'uppercase' }}
+            >
+              A place to get lost in
+            </span>
+          </div>
+          <a
+            href={article.articleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+            style={{ textDecoration: 'none' }}
+            aria-label={`Explore ${article.title} (opens in a new tab)`}
+          >
+            <div
+              className="rounded-sm"
+              style={{ background: 'var(--accent-soft)', padding: '20px', border: '1px solid var(--rule)' }}
+            >
+              <h2
+                className="ql-serif"
+                style={{ fontSize: '22px', fontStyle: 'italic', fontWeight: 500, lineHeight: 1.3, color: 'var(--fg)', marginBottom: '8px' }}
+              >
+                {article.title}
+              </h2>
+              {article.curatorNote && (
+                <p
+                  className="ql-serif"
+                  style={{ fontSize: '16px', fontStyle: 'italic', color: 'var(--muted)', lineHeight: 1.55, marginBottom: '14px' }}
+                >
+                  {article.curatorNote}
+                </p>
+              )}
+              <span
+                className="ql-mono"
+                style={{ fontSize: '10px', color: 'var(--accent)', letterSpacing: '0.16em', textTransform: 'uppercase' }}
+              >
+                Explore ↗
+              </span>
+            </div>
+          </a>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article className="relative" data-article-id={article.id}>

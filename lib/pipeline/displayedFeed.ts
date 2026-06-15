@@ -57,17 +57,19 @@ function unfamiliarCount(articles: Article[], shownDomains: Map<string, string>)
 }
 
 /** Format tallies in `articles` — the quantities the R5-D mix guarantee holds. */
-function formatCounts(articles: Article[]): { short: number; visualOrPotpourri: number; longread: number } {
+function formatCounts(articles: Article[]): { short: number; visualOrPotpourri: number; longread: number; place: number } {
   let short = 0;
   let visualOrPotpourri = 0;
   let longread = 0;
+  let place = 0;
   for (const a of articles) {
     const f = formatForArticle(a);
     if (f === 'short') short++;
     else if (f === 'visual' || f === 'potpourri') visualOrPotpourri++;
     else if (f === 'longread') longread++;
+    else if (f === 'place') place++;
   }
-  return { short, visualOrPotpourri, longread };
+  return { short, visualOrPotpourri, longread, place };
 }
 
 /**
@@ -237,6 +239,7 @@ export async function resolveDisplayedFeed(
         minCategories: MIN_CATEGORIES_IN_ISSUE,
         minUnfamiliar: MIN_UNFAMILIAR_IN_ISSUE,
         isUnfamiliar: (a) => isNeverShown(a, shownDomains),
+        requirePlaceIfPresent: true,
       }
     );
     // Re-apply the consecutive-source cap after the C2/C3 reorders (R4-05): they
@@ -291,13 +294,17 @@ export async function resolveDisplayedFeed(
     const longreadCeilingHeld =
       preFmt.longread > MAX_LONGREADS_IN_ISSUE ||
       postFmt.longread <= MAX_LONGREADS_IN_ISSUE;
+    // The rare place item (R5-D3) is its own unique source, so the cap never
+    // defers it (it's never a same-source run member) — but guard it for rigor.
+    const placeHeld = preFmt.place < 1 || postFmt.place >= 1;
 
     if (
       categoryFloorHeld &&
       unfamiliarFloorHeld &&
       shortFloorHeld &&
       visualFloorHeld &&
-      longreadCeilingHeld
+      longreadCeilingHeld &&
+      placeHeld
     ) {
       displayArticles = wholeCapped;
     } else {

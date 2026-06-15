@@ -1,0 +1,52 @@
+[
+  {
+    "name": "ooh.directory",
+    "url": "https://ooh.directory",
+    "note": "A hand-kept directory of personal blogs on every subject imaginable. Open it when you want to fall down a rabbit hole of someone's twenty-year-old website about lighthouses or lichen."
+  },
+  {
+    "name": "Marginalia Search",
+    "url": "https://search.marginalia.nu",
+    "note": "A search engine that deliberately favours the small, text-heavy, non-commercial web. Type in something you love and you'll surface pages no algorithm would ever show you."
+  },
+  {
+    "name": "Wiby",
+    "url": "https://wiby.me",
+    "note": "A search engine for the old, handmade web — pages built by one person for the love of it. Hit the surprise button and let it take you somewhere strange."
+  },
+  {
+    "name": "Gossip's Web",
+    "url": "https://gossipsweb.net",
+    "note": "A cosy directory of indie and personal sites, sorted by feel as much as topic. A good place to remember the internet is still made by people."
+  },
+  {
+    "name": "Are.na",
+    "url": "https://www.are.na",
+    "note": "A quiet, ad-free space where people assemble visual collections of ideas. Wander other people's channels and watch unexpected connections form."
+  },
+  {
+    "name": "Cool Tools",
+    "url": "https://kk.org/cooltools",
+    "note": "Decades of recommendations for unusual, genuinely useful things — tools, books, techniques. You'll leave with at least one thing you didn't know you wanted."
+  },
+  {
+    "name": "Bartosz Ciechanowski",
+    "url": "https://ciechanow.ski",
+    "note": "Explorable explanations of how things actually work — clocks, light, GPS — each one an interactive essay you can play with. Set aside an afternoon."
+  },
+  {
+    "name": "Gwern",
+    "url": "https://gwern.net",
+    "note": "One person's sprawling, deeply linked research notebook on everything from statistics to cats. Follow a thread and see how far down it goes."
+  },
+  {
+    "name": "Maggie Appleton",
+    "url": "https://maggieappleton.com",
+    "note": "A digital garden of illustrated essays on ideas, tools for thought, and how we think online. Wander the patches and let one essay lead to the next."
+  },
+  {
+    "name": "The Public Domain Review",
+    "url": "https://publicdomainreview.org/collections",
+    "note": "Collections of curious, beautiful things long out of copyright — strange maps, forgotten illustrations, odd old books. Pure unhurried browsing."
+  }
+]

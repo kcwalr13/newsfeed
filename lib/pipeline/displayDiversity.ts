@@ -144,6 +144,8 @@ export interface FormatSpreadOptions {
   minUnfamiliar: number;
   /** C2 membership test (a never-before-shown source). */
   isUnfamiliar: (a: Article) => boolean;
+  /** When true, surface a `place` item into the top if one exists (R5-D3). */
+  requirePlaceIfPresent?: boolean;
 }
 
 /**
@@ -177,6 +179,7 @@ export function ensureFormatSpread(
     return f === 'visual' || f === 'potpourri';
   };
   const isLongread = (a: Article) => formatOf(a) === 'longread';
+  const isPlace = (a: Article) => formatOf(a) === 'place';
   const countTop = (pred: (a: Article) => boolean) =>
     [...topSet].filter(pred).length;
 
@@ -218,6 +221,13 @@ export function ensureFormatSpread(
     return false;
   };
 
+  // 0. Place (R5-D3): surface the rare "place to explore" item if one exists
+  //    below the fold. At most one is ever injected, so this is a single
+  //    promotion. A place is its own unique source, so the later cap never
+  //    evicts it (cap defers only same-source run members).
+  if (opts.requirePlaceIfPresent && countTop(isPlace) === 0) {
+    promote(isPlace);
+  }
   // 1. Short floor.
   while (countTop(isShort) < opts.minShort) {
     if (!promote(isShort)) break;
