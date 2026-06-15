@@ -12,6 +12,11 @@ interface Props {
   /** Destination for the card's navigation regions (image, title, excerpt). */
   href: string;
   onFeedbackChange?: (articleId: string, value: string | null) => void;
+  /**
+   * Fired when one of the card's navigation regions is clicked (R5-A1). The feed
+   * records the clicked article + scroll position so back-navigation can restore it.
+   */
+  onNavigate?: () => void;
 }
 
 type Verb = 'like' | 'dislike' | 'save' | null;
@@ -37,7 +42,7 @@ function folioStr(n: number): string {
   return `№\u00A0${String(n).padStart(2, '0')}`;
 }
 
-export default function ArticleCard({ article, folio, href, onFeedbackChange }: Props) {
+export default function ArticleCard({ article, folio, href, onFeedbackChange, onNavigate }: Props) {
   const [feedback, setFeedbackState] = useState<Verb>(
     () => getFeedback(article.id) ?? null
   );
@@ -67,7 +72,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
   const readTimeStr = article.readTime ? `${article.readTime} min` : null;
 
   return (
-    <article className="relative">
+    <article className="relative" data-article-id={article.id}>
       {/* Hairline rule above each card */}
       <hr className="ql-rule mb-0" />
 
@@ -98,6 +103,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
         {article.imageUrl && !imageError ? (
           <Link
             href={href}
+            onClick={onNavigate}
             className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
             aria-label={`Read: ${article.title}`}
           >
@@ -121,6 +127,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
         ) : (
           <Link
             href={href}
+            onClick={onNavigate}
             className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
             aria-label={`Read: ${article.title}`}
           >
@@ -156,6 +163,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange }: 
         {/* Title */}
         <Link
           href={href}
+          onClick={onNavigate}
           className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
           style={{ textDecoration: 'none' }}
         >

@@ -18,6 +18,16 @@ import type { DailyIssue } from '@/lib/types/article';
 type Status = 'loading' | 'success' | 'error';
 type IssueMetaStatus = 'idle' | 'loading' | 'ready';
 
+// Last successfully-loaded feed, persisted at module scope so it survives the
+// FeedPage unmount/remount that App-Router back-navigation triggers (R5-A1).
+// On back-nav we render this immediately (no skeleton flash, full DOM height)
+// while a fresh fetch runs in the background; a full reload resets it.
+let cachedFeed: FeedResponse | null = null;
+
+// Saved feed scroll anchor, keyed per issue so a stale entry from a different
+// day never restores. Stored on card click, consumed once on the next mount.
+const feedPosKey = (batchDate: string) => `tangent:feedpos:${batchDate}`;
+
 function SevenDotStrip({ total, read }: { total: number; read: number }) {
   return (
     <div
@@ -58,8 +68,10 @@ function FeedSkeleton() {
 }
 
 export default function FeedPage() {
-  const [status, setStatus] = useState<Status>('loading');
-  const [data, setData] = useState<FeedResponse | null>(null);
+  // Hydrate from the module cache so a back-nav remount paints the prior issue
+  // immediately (no skeleton) while the background re-fetch below runs (R5-A1).
+  const [status, setStatus] = useState<Status>(() => (cachedFeed ? 'success' : 'loading'));
+  const [data, setData] = useState<FeedResponse | null>(() => cachedFeed);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Track feedback state locally so the seven-dot strip updates live
@@ -78,6 +90,10 @@ export default function FeedPage() {
   const refreshAbortRef = useRef<AbortController | null>(null);
   const metaAbortRef = useRef<AbortController | null>(null);
 
+  // Pending scroll-restore target read once from sessionStorage on a back-nav
+  // remount (R5-A1). Cleared on first user scroll or by a safety timeout.
+  const restoreTargetRef = useRef<{ id: string; y: number } | null>(null);
+
   const fetchFeed = useCallback(async () => {
     feedAbortRef.current?.abort();
     const controller = new AbortController();
@@ -87,6 +103,7 @@ export default function FeedPage() {
       const res = await fetch('/api/feed/today', { signal: controller.signal });
       if (!res.ok) throw new Error(`Server error (${res.status})`);
       const json: FeedResponse = await res.json();
+      cachedFeed = json;
       setData(json);
       setStatus('success');
     } catch {
@@ -100,6 +117,82 @@ export default function FeedPage() {
     fetchFeed();
     return () => feedAbortRef.current?.abort();
   }, [fetchFeed]);
+
+  // R5-A1: scroll-restoration setup, once on mount. Turn off the browser's
+  // native scroll restoration (we anchor by article id instead), read any
+  // saved feed position for this issue, and arm a one-shot cancel on the first
+  // real user scroll so a late background re-fetch can't yank the reader away
+  // from where they chose to scroll.
+  useEffect(() => {
+    try {
+      window.history.scrollRestoration = 'manual';
+    } catch { /* unsupported — native restoration stays on, harmless */ }
+
+    const bd = cachedFeed?.batchDate;
+    if (bd) {
+      try {
+        const raw = sessionStorage.getItem(feedPosKey(bd));
+        if (raw) {
+          sessionStorage.removeItem(feedPosKey(bd)); // consume once
+          const parsed = JSON.parse(raw) as { id?: unknown; y?: unknown };
+          if (typeof parsed.id === 'string') {
+            restoreTargetRef.current = {
+              id: parsed.id,
+              y: typeof parsed.y === 'number' ? parsed.y : 0,
+            };
+          }
+        }
+      } catch { /* ignore malformed/unavailable storage */ }
+    }
+
+    // Programmatic scrollTo/scrollIntoView never emits these gestures, so they
+    // cleanly mark genuine user intent to take over scrolling.
+    const cancelRestore = () => { restoreTargetRef.current = null; };
+    window.addEventListener('wheel', cancelRestore, { passive: true, once: true });
+    window.addEventListener('touchstart', cancelRestore, { passive: true, once: true });
+    window.addEventListener('keydown', cancelRestore, { once: true });
+    // Backstop: stop re-anchoring once any background re-fetch has settled.
+    const timer = window.setTimeout(cancelRestore, 2500);
+
+    return () => {
+      window.removeEventListener('wheel', cancelRestore);
+      window.removeEventListener('touchstart', cancelRestore);
+      window.removeEventListener('keydown', cancelRestore);
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  // R5-A1: after the list paints (cached order first, then the re-fetched
+  // order), scroll the saved card into view — anchored by article id so it
+  // survives a per-request re-rank, falling back to the saved pixel offset.
+  useEffect(() => {
+    const target = restoreTargetRef.current;
+    if (!target || !data) return;
+    const raf = requestAnimationFrame(() => {
+      if (!restoreTargetRef.current) return; // cancelled by a user gesture
+      const el = document.querySelector(`[data-article-id="${CSS.escape(target.id)}"]`);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 72; // clear sticky masthead
+        window.scrollTo(0, Math.max(0, top));
+      } else {
+        window.scrollTo(0, target.y);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [data]);
+
+  // R5-A1: record the clicked card + scroll position so the next back-nav
+  // remount can restore it. Keyed per issue so a stale entry never applies.
+  const savePosition = useCallback((articleId: string) => {
+    const bd = data?.batchDate;
+    if (!bd) return;
+    try {
+      sessionStorage.setItem(
+        feedPosKey(bd),
+        JSON.stringify({ id: articleId, y: window.scrollY })
+      );
+    } catch { /* storage full/unavailable — restoration just no-ops */ }
+  }, [data]);
 
   // Seed the taste model from the first-run calibration (P3-E3), apply the
   // optional tone nudge, then refresh so the first issue is visibly shaped by
@@ -289,8 +382,9 @@ export default function FeedPage() {
             </div>
 
             {/* Seven-dot strip — hidden on an empty feed (a 7-dot "0/7" would
-                imply unread articles that don't exist) */}
-            {status === 'success' && data && displayArticles.length > 0 && (
+                imply unread articles that don't exist). Gated on data (not
+                status) so it stays put during a background re-fetch (R5-A1). */}
+            {data && displayArticles.length > 0 && (
               <div className="flex items-center gap-3">
                 <SevenDotStrip total={total} read={read} />
                 <span
@@ -305,9 +399,11 @@ export default function FeedPage() {
         </header>
 
         <main className="max-w-2xl mx-auto px-5">
-          {status === 'loading' && <FeedSkeleton />}
+          {/* Skeleton only on a genuine first load — never when stale cached
+              data is already on screen during a back-nav re-fetch (R5-A1). */}
+          {status === 'loading' && !data && <FeedSkeleton />}
 
-          {status === 'error' && (
+          {status === 'error' && !data && (
             <div className="py-16 text-center">
               <p
                 className="ql-serif"
@@ -325,7 +421,9 @@ export default function FeedPage() {
             </div>
           )}
 
-          {status === 'success' && data && (
+          {/* Gated on data (not status) so a back-nav remount keeps the prior
+              issue visible while the background re-fetch runs (R5-A1). */}
+          {data && (
             <>
               {/* Issue header */}
               <div className="pt-8 pb-5">
@@ -374,6 +472,7 @@ export default function FeedPage() {
                       folio={index + 1}
                       href={`/articles/${article.id}?pos=${index + 1}&total=${displayArticles.length}`}
                       onFeedbackChange={handleFeedbackChange}
+                      onNavigate={() => savePosition(article.id)}
                     />
                   ))}
 
