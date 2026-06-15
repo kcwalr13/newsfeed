@@ -68,6 +68,15 @@ const DEVICE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  */
 export function extractDeviceId(req: NextRequest): string | null {
   const raw = req.cookies.get('dd_device_id')?.value ?? req.headers.get('X-Device-ID') ?? null;
-  if (!raw || !DEVICE_ID_RE.test(raw)) return null;
-  return raw;
+  return isValidDeviceId(raw) ? raw : null;
+}
+
+/**
+ * True when `raw` is a well-formed device id (UUID shape). Exported so surfaces
+ * that read the cookie directly (e.g. the /dashboard server component) validate
+ * it with the SAME check `extractDeviceId` uses, instead of a divergent local
+ * regex (R4-11). Same caveat as above: this is a namespacing key, not auth.
+ */
+export function isValidDeviceId(raw: string | null | undefined): raw is string {
+  return !!raw && DEVICE_ID_RE.test(raw);
 }

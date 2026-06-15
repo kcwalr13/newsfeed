@@ -5,16 +5,22 @@
  * the five core health signals so the discovery promise can't fail silently:
  * discovery share, sources this week, category spread, exploration acceptance,
  * and taste-model maturity. Editorial styling to match the issue.
+ *
+ * GATING (R4-11): intentionally NOT access-gated — it's aggregate-only (counts
+ * and percentages of the single user's own feed, no per-article content) and
+ * the app is single-user with auth off, so this mirrors `/api/metrics`, which is
+ * likewise unauthenticated. It scopes to the same device identity the API does
+ * via the shared `isValidDeviceId` check (not a divergent local regex). Add a
+ * real access gate alongside the API's when multi-user auth is enabled.
  */
 
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { computeMetrics, type TangentMetrics } from '@/lib/db/metrics';
+import { isValidDeviceId } from '@/lib/auth/session';
 import { EXPLORATION_CEILING } from '@/lib/config/serendipity';
 
 export const dynamic = 'force-dynamic';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
@@ -77,7 +83,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 export default async function DashboardPage() {
   const cookieStore = await cookies();
   const raw = cookieStore.get('dd_device_id')?.value ?? null;
-  const deviceId = raw && UUID_RE.test(raw) ? raw : null;
+  const deviceId = isValidDeviceId(raw) ? raw : null;
 
   let metrics: TangentMetrics | null = null;
   let failed = false;
