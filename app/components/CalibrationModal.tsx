@@ -20,6 +20,9 @@ import { useModalA11y } from '@/app/hooks/useModalA11y';
 import { FEEDBACK_STORE_KEY } from '@/lib/feedback/store';
 
 export const CALIBRATION_DONE_KEY = 'tangent_calibration_done';
+/** Partial in-progress responses, so a mid-calibration page refresh can resume
+ *  instead of discarding everything held in React state (R4-10). */
+const CALIBRATION_PROGRESS_KEY = 'tangent_calibration_progress';
 const ONBOARDING_KEY = 'tangent_onboarding_dismissed';
 const ONBOARDING_DISMISSED_EVENT = 'tangent:onboarding-dismissed';
 
@@ -71,6 +74,8 @@ export default function CalibrationModal({ onComplete }: Props) {
   // Where the pieces came from — drives how onComplete seeds the model (R4-08).
   const [source, setSource] = useState<'batch' | 'seed'>('batch');
   const dialogRef = useRef<HTMLDivElement>(null);
+  // Guards the one-time progress restore so it can't re-run and clobber live state.
+  const restoredRef = useRef(false);
 
   // Decide whether to show: calibration not done, editor letter already seen,
   // and no prior feedback (a returning user has effectively self-calibrated).
@@ -94,6 +99,8 @@ export default function CalibrationModal({ onComplete }: Props) {
   const finish = useCallback(
     (resp: Record<string, 'like' | 'dislike'>, tn: string[]) => {
       localStorage.setItem(CALIBRATION_DONE_KEY, '1');
+      // Calibration is over — drop the resume snapshot (R4-10).
+      try { localStorage.removeItem(CALIBRATION_PROGRESS_KEY); } catch { /* ignore */ }
       setVisible(false);
       onComplete?.({ responses: resp, tones: tn, source });
     },
@@ -124,6 +131,55 @@ export default function CalibrationModal({ onComplete }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+
+  // Restore in-progress answers once the pieces are loaded (R4-10): a mid-flow
+  // page refresh otherwise loses everything held only in React state. Runs once;
+  // keeps only responses whose ids are still in the current set (the batch could
+  // have changed), and resumes at the first unanswered card.
+  useEffect(() => {
+    if (!visible || pieces.length === 0 || restoredRef.current) return;
+    restoredRef.current = true;
+    try {
+      const raw = localStorage.getItem(CALIBRATION_PROGRESS_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        responses?: Record<string, 'like' | 'dislike'>;
+        tones?: string[];
+      };
+      const validIds = new Set(pieces.map((p) => p.id));
+      const restored: Record<string, 'like' | 'dislike'> = {};
+      for (const [id, v] of Object.entries(saved.responses ?? {})) {
+        if (validIds.has(id) && (v === 'like' || v === 'dislike')) restored[id] = v;
+      }
+      const savedTones = Array.isArray(saved.tones)
+        ? saved.tones.filter((t): t is string => typeof t === 'string')
+        : [];
+      if (Object.keys(restored).length === 0 && savedTones.length === 0) return;
+      setResponses(restored);
+      if (savedTones.length > 0) setTones(savedTones);
+      const firstUnanswered = pieces.findIndex((p) => !restored[p.id]);
+      if (firstUnanswered === -1) setPhase('tone');
+      else setIndex(firstUnanswered);
+    } catch {
+      /* corrupt progress — start fresh */
+    }
+  }, [visible, pieces]);
+
+  // Persist partial progress as the user answers, so a refresh can resume (R4-10).
+  // Skips the empty initial state so it can't clobber a saved snapshot before the
+  // restore effect above has had a chance to run.
+  useEffect(() => {
+    if (!visible) return;
+    if (Object.keys(responses).length === 0 && tones.length === 0) return;
+    try {
+      localStorage.setItem(
+        CALIBRATION_PROGRESS_KEY,
+        JSON.stringify({ responses, tones, phase })
+      );
+    } catch {
+      /* storage full/disabled — non-blocking */
+    }
+  }, [visible, responses, tones, phase]);
 
   function respond(value: 'like' | 'dislike') {
     const piece = pieces[index];
