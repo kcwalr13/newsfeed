@@ -71,12 +71,25 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
 
   const readTimeStr = article.readTime ? `${article.readTime} min` : null;
 
+  // Content-format card variants (R5-D2): a compact card for short/potpourri
+  // (no hero — they're quick), an image-forward card for visual (taller hero).
+  // longread/place/undefined keep the default treatment (place gets its own
+  // card in D3). A small format tag in the meta row signals the variety.
+  const isVisual = article.format === 'visual';
+  const isCompact = article.format === 'short' || article.format === 'potpourri';
+  const formatTag =
+    article.format === 'visual' ? 'Visual'
+    : article.format === 'short' ? 'Short'
+    : article.format === 'potpourri' ? 'Miscellany'
+    : null;
+  const heroMaxHeight = isVisual ? 320 : 220;
+
   return (
     <article className="relative" data-article-id={article.id}>
       {/* Hairline rule above each card */}
       <hr className="ql-rule mb-0" />
 
-      <div className="pt-5 pb-6">
+      <div className={isCompact ? 'pt-4 pb-5' : 'pt-5 pb-6'}>
         {/* Meta row: folio + source + read time */}
         <div className="flex items-baseline justify-between mb-3">
           <div className="flex items-baseline gap-4">
@@ -88,29 +101,34 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
               {article.sourceName}
             </span>
           </div>
-          {readTimeStr && (
+          {(formatTag || readTimeStr) && (
             <span
               className="ql-mono"
               style={{ fontSize: '9px', color: 'var(--dim)', letterSpacing: '0.12em' }}
             >
+              {formatTag && (
+                <span style={{ color: 'var(--muted)', textTransform: 'uppercase' }}>{formatTag}</span>
+              )}
+              {formatTag && readTimeStr && ' · '}
               {readTimeStr}
             </span>
           )}
         </div>
 
         {/* Hero image (duotone) OR drop-cap folio (also the fallback if the
-            image fails to load) */}
-        {article.imageUrl && !imageError ? (
+            image fails to load). Suppressed for the compact short/potpourri
+            variant; taller for the image-forward visual variant (R5-D2). */}
+        {!isCompact && (article.imageUrl && !imageError ? (
           <Link
             href={href}
             onClick={onNavigate}
             className="w-full block mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
             aria-label={`Read: ${article.title}`}
           >
-            <div className="ql-duotone-wrapper rounded-sm overflow-hidden" style={{ maxHeight: '220px' }}>
+            <div className="ql-duotone-wrapper rounded-sm overflow-hidden" style={{ maxHeight: `${heroMaxHeight}px` }}>
               {/* aspect-ratio reserves the slot before the image loads (no
                   layout shift); the Article type carries no dimensions, so a
-                  fixed editorial ratio capped at 220px stands in. */}
+                  fixed editorial ratio stands in. */}
               <img
                 src={article.imageUrl}
                 alt=""
@@ -118,7 +136,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
                 loading="lazy"
                 decoding="async"
                 onError={() => setImageError(true)}
-                style={{ aspectRatio: '16 / 9', maxHeight: '220px' }}
+                style={{ aspectRatio: '16 / 9', maxHeight: `${heroMaxHeight}px` }}
               />
               <div className="ql-duotone-shadow" />
               <div className="ql-duotone-highlight" />
@@ -143,7 +161,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
               </span>
             </div>
           </Link>
-        )}
+        ))}
 
         {/* Slot badge (footnote dagger inline with title, caption below meta).
             The per-slot rationale sentence is gone — the curator note below now
@@ -167,7 +185,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
           <h2
             className="ql-serif"
             style={{
-              fontSize: '22px',
+              fontSize: isCompact ? '19px' : '22px',
               fontStyle: 'italic',
               fontWeight: 500,
               lineHeight: 1.3,
