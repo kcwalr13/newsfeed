@@ -15,6 +15,23 @@ export const MIN_UNFAMILIAR_IN_ISSUE = 2;
  *  (P3-C3) — enforced as a best-effort display reorder when the pool allows. */
 export const MIN_CATEGORIES_IN_ISSUE = 4;
 
+/** Reading time (minutes) at or above which a piece counts as a `longread`
+ *  (R5-D). Below this, a piece with a body is a `short`; source overrides it to
+ *  `visual`/`potpourri`. */
+export const LONGREAD_MIN_MINUTES = 10;
+
+/** Minimum `short` pieces the displayed issue should include (R5-D mix guarantee). */
+export const MIN_SHORT_IN_ISSUE = 1;
+
+/** Minimum `visual`-or-`potpourri` pieces the displayed issue should include
+ *  (R5-D mix guarantee) — so an issue isn't a wall of prose. */
+export const MIN_VISUAL_OR_POTPOURRI_IN_ISSUE = 1;
+
+/** Maximum `longread` pieces in the displayed issue (R5-D) — caps the wall of
+ *  4,000-word essays so oddments and curiosities get shelf space. 7 − this ≥ the
+ *  two non-longread floors above, so the guarantees are jointly satisfiable. */
+export const MAX_LONGREADS_IN_ISSUE = 5;
+
 /** Fixed-source pipeline (RSS + NewsAPI) nominal contribution per day. */
 export const PIPELINE_ARTICLES_PER_DAY = 14;
 

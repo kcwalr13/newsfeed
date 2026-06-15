@@ -4,6 +4,7 @@ import { generateMissingRationales } from '@/lib/pipeline/rationaleGenerator';
 import { generateMissingCuratorNotes } from '@/lib/pipeline/curatorNoteGenerator';
 import { computeDiscoveryYield } from '@/lib/pipeline/discoveryMeta';
 import { resolveDisplayedFeed } from '@/lib/pipeline/displayedFeed';
+import { formatForArticle } from '@/lib/pipeline/contentFormat';
 import { ISSUE_DISPLAY_SIZE } from '@/lib/config/feed';
 import type { Article } from '@/lib/types/article';
 
@@ -40,6 +41,11 @@ export async function GET(req: NextRequest) {
   // The displayed issue is the first ISSUE_DISPLAY_SIZE pieces; bound the
   // per-issue LLM work (rationales + curator notes) to those.
   const shown = displayArticles.slice(0, ISSUE_DISPLAY_SIZE);
+
+  // Resolve each displayed piece's content-format (R5-D) for the client's card
+  // variant (D2). Set BEFORE toPublicArticle strips bodyText (the `short`
+  // derivation needs it); `place` items keep their explicit format.
+  for (const a of shown) a.format = formatForArticle(a);
 
   // Personalized curator note for every displayed piece (R5-C): replaces the raw
   // RSS summary as the blurb. No-op for pieces already noted (cache hit), so

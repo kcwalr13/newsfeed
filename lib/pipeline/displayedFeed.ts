@@ -27,9 +27,17 @@ import type { AestheticProfile, AestheticScoreVector } from '@/lib/types/aesthet
 import { getTopConceptNodes, getAllConceptLabels, getAllConceptEdges } from '@/lib/db/concepts';
 import type { UserConcept } from '@/lib/types/concepts';
 import { EXPLORATION_BASELINE } from '@/lib/config/serendipity';
-import { ISSUE_DISPLAY_SIZE, MIN_UNFAMILIAR_IN_ISSUE, MIN_CATEGORIES_IN_ISSUE } from '@/lib/config/feed';
-import { promoteUnfamiliarSources, ensureCategorySpread, isNeverShown } from '@/lib/pipeline/displayDiversity';
+import {
+  ISSUE_DISPLAY_SIZE,
+  MIN_UNFAMILIAR_IN_ISSUE,
+  MIN_CATEGORIES_IN_ISSUE,
+  MIN_SHORT_IN_ISSUE,
+  MIN_VISUAL_OR_POTPOURRI_IN_ISSUE,
+  MAX_LONGREADS_IN_ISSUE,
+} from '@/lib/config/feed';
+import { promoteUnfamiliarSources, ensureCategorySpread, ensureFormatSpread, isNeverShown } from '@/lib/pipeline/displayDiversity';
 import { categoryForArticle } from '@/lib/pipeline/sourceCategory';
+import { formatForArticle } from '@/lib/pipeline/contentFormat';
 import type { Article, ArticleBatch } from '@/lib/types/article';
 
 /** Distinct editorial categories present in `articles` (discovered/unknown
@@ -46,6 +54,20 @@ function distinctCategoryCount(articles: Article[]): number {
 /** Count of never-before-shown sources in `articles` — the quantity C2 guarantees. */
 function unfamiliarCount(articles: Article[], shownDomains: Map<string, string>): number {
   return articles.filter((a) => isNeverShown(a, shownDomains)).length;
+}
+
+/** Format tallies in `articles` — the quantities the R5-D mix guarantee holds. */
+function formatCounts(articles: Article[]): { short: number; visualOrPotpourri: number; longread: number } {
+  let short = 0;
+  let visualOrPotpourri = 0;
+  let longread = 0;
+  for (const a of articles) {
+    const f = formatForArticle(a);
+    if (f === 'short') short++;
+    else if (f === 'visual' || f === 'potpourri') visualOrPotpourri++;
+    else if (f === 'longread') longread++;
+  }
+  return { short, visualOrPotpourri, longread };
 }
 
 /**
@@ -198,6 +220,25 @@ export async function resolveDisplayedFeed(
       MIN_CATEGORIES_IN_ISSUE,
       (a) => isNeverShown(a, shownDomains)
     );
+    // Content-format mix (R5-D): ≥1 short + ≥1 visual/potpourri + ≤N longreads
+    // in the top span, so an issue isn't all 4,000-word essays. Runs AFTER C2/C3
+    // and composes with them by construction — it only ever demotes longreads,
+    // never a C2 never-shown source (protect) and never the sole top rep of a
+    // category (it's category-aware), so neither C2's nor C3's floor can drop.
+    displayArticles = ensureFormatSpread(
+      displayArticles,
+      formatForArticle,
+      categoryForArticle,
+      ISSUE_DISPLAY_SIZE,
+      {
+        minShort: MIN_SHORT_IN_ISSUE,
+        minVisualOrPotpourri: MIN_VISUAL_OR_POTPOURRI_IN_ISSUE,
+        maxLongreads: MAX_LONGREADS_IN_ISSUE,
+        minCategories: MIN_CATEGORIES_IN_ISSUE,
+        minUnfamiliar: MIN_UNFAMILIAR_IN_ISSUE,
+        isUnfamiliar: (a) => isNeverShown(a, shownDomains),
+      }
+    );
     // Re-apply the consecutive-source cap after the C2/C3 reorders (R4-05): they
     // run after the ranker's own cap and could otherwise leave a >cap same-source
     // run near the fold. The whole-list cap is source-aware but NOT category/
@@ -225,6 +266,7 @@ export async function resolveDisplayedFeed(
     const preTop = displayArticles.slice(0, ISSUE_DISPLAY_SIZE);
     const preCategories = distinctCategoryCount(preTop);
     const preUnfamiliar = unfamiliarCount(preTop, shownDomains);
+    const preFmt = formatCounts(preTop);
 
     const wholeCapped = applyDiversityCap(displayArticles, SOURCE_CONSECUTIVE_CAP);
     const wholeCappedTop = wholeCapped.slice(0, ISSUE_DISPLAY_SIZE);
@@ -235,8 +277,28 @@ export async function resolveDisplayedFeed(
     const unfamiliarFloorHeld =
       preUnfamiliar < MIN_UNFAMILIAR_IN_ISSUE ||
       unfamiliarCount(wholeCappedTop, shownDomains) >= MIN_UNFAMILIAR_IN_ISSUE;
+    // R5-D: the cap must not break the format mix either. Unlike a category sole
+    // rep (always a unique source, so never a >cap run member), the sole short or
+    // visual/potpourri piece *could* be a same-source run member the cap defers —
+    // so guard these floors explicitly, same shape as the category/unfamiliar
+    // floors. (Each holds vacuously when the pre-cap top didn't meet it.)
+    const postFmt = formatCounts(wholeCappedTop);
+    const shortFloorHeld =
+      preFmt.short < MIN_SHORT_IN_ISSUE || postFmt.short >= MIN_SHORT_IN_ISSUE;
+    const visualFloorHeld =
+      preFmt.visualOrPotpourri < MIN_VISUAL_OR_POTPOURRI_IN_ISSUE ||
+      postFmt.visualOrPotpourri >= MIN_VISUAL_OR_POTPOURRI_IN_ISSUE;
+    const longreadCeilingHeld =
+      preFmt.longread > MAX_LONGREADS_IN_ISSUE ||
+      postFmt.longread <= MAX_LONGREADS_IN_ISSUE;
 
-    if (categoryFloorHeld && unfamiliarFloorHeld) {
+    if (
+      categoryFloorHeld &&
+      unfamiliarFloorHeld &&
+      shortFloorHeld &&
+      visualFloorHeld &&
+      longreadCeilingHeld
+    ) {
       displayArticles = wholeCapped;
     } else {
       const segTop = applyDiversityCap(preTop, SOURCE_CONSECUTIVE_CAP);

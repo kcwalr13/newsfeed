@@ -93,7 +93,19 @@ export interface Article {
    * back to the batch, so subsequent loads are free. Sent to the client.
    */
   curatorNote?: string;
+
+  /**
+   * Content-format of the piece (R5-D). Mostly resolved on read from readTime +
+   * source (see `formatForArticle`), so it's absent on stored batch articles
+   * except `place` items, which are explicit (set at assembly, D3) because a
+   * whole-site "place to explore" has no derivable signal. Sent to the client
+   * for the card variant (D2).
+   */
+  format?: ContentFormat;
 }
+
+/** Content-format taxonomy for the issue mix guarantee (R5-D). */
+export type ContentFormat = 'longread' | 'short' | 'visual' | 'potpourri' | 'place';
 
 /** The response shape returned by GET /api/feed/today. */
 export interface FeedResponse {
