@@ -1226,6 +1226,52 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   verify** (fetch each; drop 404/parked/login-wall/SEO-farm), **type classify** (URL+page signals). Produce link-out
   **website + thread** items + their cards. **Retire `data/sources.json` as the digest supply.** **This is the
   milestone where the digest becomes one-off gems (moltbook-class), not feed articles.** · **TODO**
+  - **Recon note (from the R7-1 session, 2026-06-23 — read before implementing):** Code map of what to reuse vs.
+    build new, so the next session moves fast.
+    - **The existing Small-Web crawler is the wrong shape — do NOT just extend it.** `lib/discovery/smallWeb/crawler.ts`
+      (`runSmallWebCrawl`) treats index/blogroll pages as **feed SOURCES**: it `upsertSource`s discovered sites for
+      *ongoing* crawling and emits each site's own **RSS feed items** as candidates. That is precisely the
+      "aggregator-of-sources" model R7-2 rejects (and it can't surface a feed-less moltbook). R7-2 needs a **new,
+      item-oriented index-miner** that emits the **outbound destination URL itself** as a one-off candidate and never
+      registers the destination as a recurring source.
+    - **Reusable as-is:** `parseBlogrollLinks(html, sourceUrl)` + `parseOpmlLinks` (`smallWeb/blogroll.ts`) for
+      outbound-link extraction from HTML/OPML; `extractBodyText(url)` (`discovery/bodyExtractor.ts`) for liveness +
+      body (it already returns typed failure reasons incl. paywall — extend its reasons for parked/login-wall/SEO);
+      `canonicalizeUrlForDedup` + `registrableDomain` (`utils/url.ts`); `noveltyKey` / `isMegaSite` /
+      `MEGA_SITE_DENYLIST` / `SHARED_HOSTS` (`discovery/novelty.ts`); `forEachWithConcurrency` (`utils/concurrency.ts`);
+      the `BraveSearchResult` candidate shape; and the **whole funnel skeleton** in `discovery/run.ts` (dedup-on-first-
+      sight → mega-site drop → novelty drop → fixed-dup drop → eval-cap interleave → bounded-concurrency eval → quota
+      fill), which R7-2 can mirror with rule-filters where the LLM eval sits today (the LLM judge is R7-3).
+    - **Permanent novelty/dedup memory (the one schema change → migration guardrail):** today `loadSeenSourceDomains`
+      (`novelty.ts`) derives the seen-set from the **last 14 batch JSONs only** (`NOVELTY_LOOKBACK_ISSUES`), so an item
+      older than ~14 issues can resurface. R7-2 adds a durable table (suggested `020_discovery_seen_urls.sql`:
+      `url_canonical TEXT PRIMARY KEY, novelty_key TEXT NOT NULL, first_seen_at TIMESTAMPTZ DEFAULT now(),
+      discovery_source TEXT` + index on `novelty_key`). New module `lib/db/discoverySeen.ts`
+      (`loadSeenNoveltyKeys()` → empty Set on any error; `recordSeenUrls(items)` → `INSERT … ON CONFLICT DO NOTHING`,
+      errors swallowed). Wire it to **union into** the existing seen-set on read and **record surfaced item URLs** after
+      a run. Make it **backward-compatible** (table absent → graceful no-op → today's behavior), so the code deploys
+      green before apply: **BLOCKED-ON-APPLY** (add the file + exact apply SQL to "Migrations awaiting Kyle"); do not
+      hard-depend on the table.
+    - **New builds:** `data/discovery_indexes.json` (seed the index list — Kyle curates; mark which need an API
+      [HN Algolia, reddit .json, are.na API] vs. plain HTML scrape); the index-miner stream; a **rule-based type
+      classifier** (`contentType` from URL host + page signals: youtube/vimeo→video, bandcamp/spotify/soundcloud→music,
+      reddit/HN→thread, long prose→article, else→website — R7-1 added the `ContentType` type + `contentType`/`media`
+      fields already); **liveness/realness** rules (404/parked-domain/login-wall/SEO-farm) layered on `extractBodyText`;
+      **website + thread link-out cards** in `ArticleCard.tsx` (the `place` card at `isPlace`/`format==='place'` is the
+      pattern to generalize — link straight out, curatorNote as blurb, no reader); and the **supply flip** in
+      `pipeline/run.ts` (today `loadSources()`→`fetchFromSource`→RSS is the base supply with discovery filling leftover
+      slots; R7-2 inverts this — agent-discovered one-offs become the supply).
+    - **Verify the product outcome, not the gate (kickoff rule):** the supply flip is a real runtime change — after it,
+      `curl /api/feed/today` must show genuine one-off gems (link-out items across types), and the batch must still fill
+      gracefully (a short digest of real finds beats a padded one). A green build is NOT sufficient.
+    - **Injection invariant (kickoff hard requirement):** the moment a fetched discovered page is sent to an LLM (the
+      R7-3 judge / curator notes), wrap it with `UNTRUSTED_CONTENT_NOTICE` + `wrapUntrusted(...)`. R7-2's funnel is
+      rule-based (no LLM), so this bites at R7-3 — but the page-fetch surface is introduced here.
+    - **Suggested gate-green sub-step order:** (a) durable novelty memory (migration + module, backward-compatible,
+      BLOCKED-ON-APPLY) → (b) index-miner stream + `discovery_indexes.json` (emit raw outbound candidates, logged, not
+      yet in the digest) → (c) rule-filter funnel (liveness + type classify + dedup against durable memory) → (d)
+      link-out website/thread items + cards → (e) supply flip + retire `sources.json` as supply + live product
+      verification. Each (a)–(e) is independently gate-green + committable.
 - [ ] **R7-3** · **LLM agentic stream + interestingness judge (replaces the essay gate).** Stream 2: LLM proposes
   lesser-known **destinations** per rotating theme (from the taste profile + structured randomness) → **fetch-and-
   verify every URL** is real/live before it advances (it hallucinates + skews popular). Add the **type-aware
