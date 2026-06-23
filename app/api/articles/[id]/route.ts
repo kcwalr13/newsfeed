@@ -15,7 +15,11 @@ export async function GET(
   }
   const article = found.article;
 
+  // Denylist: strip internal-only fields before sending to the client. Unlike
+  // toPublicArticle in /api/feed/today this route KEEPS bodyText (the reader
+  // loads the body here). discoverySource is stripped (R7-1): @internal
+  // provenance telemetry, never sent to the client.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, ...publicArticle } = article;
+  const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, discoverySource: _ds, ...publicArticle } = article;
   return NextResponse.json(publicArticle);
 }

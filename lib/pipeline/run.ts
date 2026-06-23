@@ -666,6 +666,10 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
         batchDate: today,
         feedbackSlot: null,
         format: 'place',
+        // R7-1: a place is a whole-site link-out item — the `website` content
+        // type. `format:'place'` (R5-D) still drives the existing display mix +
+        // card; `contentType` is the parallel R7 item-type dimension.
+        contentType: 'website',
         curatorNote: place.note,
         extractedConcepts: [],
       });

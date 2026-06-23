@@ -121,8 +121,8 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG.** **Last resume point: R7-1** (R4-15 still BLOCKED on Kyle's seed-vector sign-off —
-  independent).
+  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · 6 TODO (R7-2…R7-7, R7-7 optional).** **Last resume point: R7-2**
+  (R4-15 still BLOCKED on Kyle's seed-vector sign-off — independent).
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -462,12 +462,18 @@ npm run dev           # for manual/browser spot-checks
   - Status: DEFERRED (multi-user) · Notes: Only matters when sending auth/transactional email. Tiny
     fix to revisit if/when email is enabled.
 
-## Future state — multi-user rollout (deferred security & hardening)
+## Future state — multi-user rollout (PERMANENTLY CLOSED — single-user forever)
 
-Tangent is currently a **private, single-user project** (Kyle only; not shared with anyone). The
-items below are deferred until/unless Tangent is opened to additional users. They are **out of scope
-for the active campaign** and Code sessions should skip them (Status: `DEFERRED`). Treat this section
-as the security checklist for any future multi-user rollout.
+> 🔒 **PERMANENTLY CLOSED (R7-1, 2026-06-23).** Scope is now **definitively personal / single-user,
+> forever** (Kyle's Round-7 decision; recorded in `CLAUDE.md` Scope + the vision-doc note). There is no
+> multi-user future, so this whole section is **out of scope permanently** — not "deferred until rollout."
+> Do not re-open these items. The content below is retained **only as a historical security checklist**
+> on the (not-planned) hypothetical that scope ever changed; the `userId`/`deviceId` plumbing stays
+> as-is (harmless) but we **stop designing for expansion**.
+
+Tangent is a **private, single-user project** (Kyle only; never shared). The items below defended a
+multi-user/abuse threat model that **does not and will not apply**. They are **out of scope permanently**
+and Code sessions must skip them (Status: `DEFERRED` — permanent). Retained as a historical reference.
 
 **Deferred now — do before going multi-user:**
 - **Production access gating** (SEC-C1, password-protection half). Put the deployment behind real
@@ -486,8 +492,10 @@ as the security checklist for any future multi-user rollout.
 validation (SEC-H1), constant-time cron secret + no error leak (SEC-H3), validated email base URL
 (SEC-M1), owner email out of the client bundle (SEC-C1, email half).
 
-_Rationale (Kyle, 2026-06-12): single-user / private scope — these defend multi-user and abuse
-threat models that don't apply yet. Revisit this whole section as step 1 of any multi-user rollout._
+_Rationale (Kyle, 2026-06-12; made permanent 2026-06-23 / R7-1): single-user / private scope — these
+defend multi-user and abuse threat models that don't apply and, per the Round-7 scope lock, never will.
+Section permanently closed; the only reason to revisit is the (unplanned) hypothetical of opening Tangent
+to other users._
 
 ---
 
@@ -1183,7 +1191,7 @@ interestingness/taste LLM judge** replacing the essay dims · safety/spam/NSFW) 
 Order **R7-1 → R7-7**; gate green each step; **re-prove the mix by the R5-D1 simulation harness**; **`wrapUntrusted`
 every discovered page sent to an LLM** (injection surface grows — we now feed the model arbitrary web pages).
 
-- [ ] **R7-1** · **Personal-use scope lock + item model.** Record the definitively-personal/single-user scope in
+- [x] **R7-1** · **Personal-use scope lock + item model.** Record the definitively-personal/single-user scope in
   `CLAUDE.md` (Scope) + a note in `agents/ba/vision_discovery_companion.md` (vision broadened: evergreen essays →
   agent-discovered best-of-internet one-off gems, personal-use); **permanently close the DEFERRED "multi-user
   rollout" tracker section** (stop designing for expansion; keep `userId`/`deviceId` plumbing as-is). Add
@@ -1191,7 +1199,25 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   (`thumbnailUrl?/embedUrl?/durationSec?/creator?/platform?/score?`) + `discoverySource?` (provenance telemetry, NOT
   shown as a "source") to `lib/types/article.ts` (prose fields explicitly optional); migrate `place`→`website`
   (keep `data/places.json`; type-aware loader); add `contentType`+`media` to `toPublicArticle`. **Behavior-preserving
-  (no supply change yet);** gate green. · **TODO**
+  (no supply change yet);** gate green. · **DONE** (commit `COMMIT_HASH`)
+  - **Notes:** Added to `lib/types/article.ts`: `ContentType` (`article|music|video|website|thread|find`),
+    `ItemMedia` (`thumbnailUrl?/embedUrl?/durationSec?/creator?/platform?/score?`), and three optional `Article`
+    fields — `contentType?`, `media?`, and `discoverySource?` (`@internal`, never sent to the client). The R5-D
+    `format` taxonomy and the new `contentType` coexist **in parallel** (decision below): R7-1 is behavior-preserving,
+    so `format` still drives the existing display mix + cards; `contentType` is the item-type dimension R7-5's mix
+    will key on. **Type-aware place loader** (`lib/pipeline/run.ts`): the injected place item now also carries
+    `contentType:'website'` alongside its existing `format:'place'` (display/read-count still key off `format`, so
+    zero runtime change). **`toPublicArticle`** (`app/api/feed/today/route.ts`) now strips `discoverySource`;
+    `contentType`+`media` flow through its denylist to the client. **Second public endpoint** `GET /api/articles/[id]`
+    (found by the R7-1 adversarial review — it has its own inline denylist) also now strips `discoverySource`, so the
+    `@internal` invariant is locked at **both** client-facing Article serializers before any stream sets the field
+    (R7-2). **Docs:** `CLAUDE.md` "What This Is" + "Scope" rewritten (discovery-agent reframe, unit = the find,
+    single-user **forever**, vision broadened, retirement framed as R7-2/R7-3 *plan* not done) + the final Ground
+    Rule updated to match (stop designing for expansion); vision-doc Round-7 banner note; the tracker's "Future state —
+    multi-user rollout" section flipped from DEFERRED to **PERMANENTLY CLOSED**. **Verified:** `tsc` clean · `lint`
+    0 errors (3 pre-existing warnings in untouched files) · `build` EXIT=0; **adversarial review workflow** (8 agents,
+    3 reviewers × verify) confirmed behavior-preservation + caught the 3 gaps above, all fixed; re-gated green. No
+    supply change yet (R7-2 begins it).
 - [ ] **R7-2** · **Discovery engine v1: index-mining + the funnel.** New candidate stream in `lib/discovery/` that
   crawls a curated `data/discovery_indexes.json` (HN front + Show HN, are.na, r/InternetIsBeautiful + curated subs,
   Webcurios, Kottke, Waxy, ooh.directory, Marginalia, awesome-lists, blogrolls) and **harvests their outbound
@@ -1277,6 +1303,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-15 | R6-3 | Implemented the limiter as a **fixed-interval (leaky-bucket) scheduler**, not the literal "token bucket" the design named; wired it via a **factory decorator** (`withRateLimit` in `getLlm()`) rather than calling it inside each adapter | A capacity-`rpm` token bucket allows a full burst (rpm calls) plus a window's worth of refill inside a single rolling 60s window → up to ~2×rpm, which trips Gemini free-tier's rolling-window RPM limit. The stated R6-5 acceptance is "no 429 storms," and even spacing (`60000/rpm` ms apart) guarantees ≤ rpm in *every* rolling window — strictly safer. Synchronous slot reservation (`_nextFreeMs`) is also race-free without a promise-chain mutex. The decorator at `getLlm()` covers BOTH adapters and every call site (incl. the curator fan-out) with one wrapper, and gives the R6-4 Gemini adapter rate-limiting for free, vs. repeating `acquireLlmSlot()` in each adapter method. Anthropic's `rpm=Infinity` makes both the limiter and decorator a true no-op, preserving behavior until R6-5. |
 | 2026-06-15 | R6-2 | Kept `@/` imports in `lib/llm/` (codebase standard) and refactored site 7 (`scripts/refresh-query-banks.ts`) to the interface anyway, despite discovering the script is already non-runnable under `ts-node` | Probe confirmed `npm run refresh-query-banks` already fails before R6-2: Node runs the script under its ESM loader, which rejects the script's extensionless relative imports (`ERR_MODULE_NOT_FOUND`) — a pre-existing, unrelated breakage. Fixing it (tsconfig-paths/`-r` register or an ESM-aware runner) is out of scope for this finding ("touch only what the finding needs"). So the import style of `lib/llm/` is moot for the script's runtime; `@/` keeps the abstraction consistent with the rest of the codebase. The refactor is logic-behavior-preserving (verified by the adversarial review + the `kind`-aware skip/abort fix); the ESM breakage is flagged for a future cleanup, not silently inherited. |
 | 2026-06-15 | R5-D1 | `format` resolved **on read** (like category, P3-B2) not persisted at assembly; `ensureFormatSpread` composes with C2/C3 via a **precise per-swap floor check**, not a blanket `protect` | Persisting `format` at assembly would need a pipeline re-run to backfill existing batches and wouldn't cover discovered/historical pieces; resolving on read from readTime + source (the `categoryForArticle` precedent) is migration-free and uniform. `place` is the one exception (no derivable signal — explicit at assembly, D3). The design hinted at modelling `ensureFormatSpread` on `ensureCategorySpread`'s blanket-`protect` (never demote an unfamiliar / sole-category piece). The composition simulation proved that's actively wrong: when the displayed top is all-unfamiliar or all-distinct-category (cold-start / discovery-heavy — exactly the common case), *every* piece is protected, so the guarantee silently no-ops — the headline feature would do nothing. Replaced it with a per-swap check: demote a longread iff the resulting top still holds the C2/C3 floors, or (when a floor was already unmet on a thin pool) doesn't worsen it. This delivers the mix (efficacy 50000/50000) while never dropping a C2/C3 floor (400k runs, 0 violations). The cap's floor-guard was extended to the three format floors; faithful simulation (category⇒source, per-source cap 4) shows the fallback never needs to fire — the format floors, like the category/unfamiliar ones (R4-14), are unbreakable by the cap under realistic per-source-capped data. |
+| 2026-06-23 | R7-1 | Introduced `contentType` as a **new, parallel** taxonomy that **coexists** with the existing R5-D `ContentFormat` (incl. `'place'`) rather than replacing it; the place item carries **both** `format:'place'` and `contentType:'website'`. Stripped `discoverySource` at **both** public Article serializers (`toPublicArticle` + the inline denylist in `GET /api/articles/[id]`). Framed the sources.json/RSS/essay-evaluator retirement in `CLAUDE.md` as the R7-2/R7-3 **plan**, not as already-done. | R7-1 is mandated **behavior-preserving (no supply change yet)**. Ripping out `ContentFormat.'place'` and re-routing display-diversity/cards/read-count onto `contentType` now would be a large, behavior-changing refactor that belongs to R7-5 (the hard-rebalance assembler). Carrying both fields keeps every existing `format`-keyed path (display mix, card variant, read-count exclusion) byte-identical while the new item-type dimension is available for R7-2+ to populate and R7-5 to key the mix on — the lowest-risk migration. `discoverySource` is defined `@internal` ("never sent to the client"); the invariant is on the **field**, not one function name, and there are two client-facing Article endpoints, so locking it at both now (while no writer sets the field) is behavior-preserving today and prevents a silent provenance leak the moment R7-2 sets it (the reader route would otherwise never be revisited by R7-2's index-mining work). The retirement tense fix keeps `CLAUDE.md` factually true to the live code (the RSS pipeline + sources.json + essay evaluator are all still active as of R7-1) — the doc must not overclaim later-step work as done. |
 
 ---
 
@@ -1990,3 +2017,29 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   in Vercel, then live-validate (refresh completes, no 429s, batch writes, `articles[].curatorNote`
   populated → resolves R5-C3). R4-15 still BLOCKED on Kyle's seed-vector sign-off (unrelated).
 - RESUME AT: — (Round 6 complete; awaiting Kyle's `LLM_PROVIDER=gemini` flip + live re-validation).
+
+### Session 2026-06-23 — Round 7 begins
+- **R7-1 DONE** (commit `COMMIT_HASH`) — **Personal-use scope lock + item model.** Behavior-preserving; no
+  supply change yet.
+  - **Types** (`lib/types/article.ts`): added `ContentType` (`article|music|video|website|thread|find`),
+    `ItemMedia` (`thumbnailUrl?/embedUrl?/durationSec?/creator?/platform?/score?`), and optional `Article`
+    fields `contentType?`/`media?`/`discoverySource?` (last is `@internal`). The new `contentType` runs
+    **parallel** to the R5-D `ContentFormat` (incl. `'place'`) — `format` still drives the live display
+    mix/cards; `contentType` is for the R7-5 mix (Decisions Log).
+  - **Type-aware place loader** (`lib/pipeline/run.ts`): the injected place item now also sets
+    `contentType:'website'` next to its `format:'place'` (display/read-count still key off `format` → zero
+    runtime change).
+  - **Client-payload invariant locked at both endpoints:** `toPublicArticle` (`/api/feed/today`) and the
+    inline denylist in `GET /api/articles/[id]` now both strip `discoverySource`; `contentType`+`media` flow
+    to the client. (The `[id]` route was caught by the adversarial review — it was a second public Article
+    serializer that would have leaked provenance the moment R7-2 sets the field.)
+  - **Scope/vision docs:** `CLAUDE.md` rewritten (discovery-agent reframe, unit = the find, single-user
+    **forever**, vision broadened, retirement = R7-2/R7-3 *plan*) + final Ground Rule aligned; vision-doc
+    Round-7 banner; the tracker's "Future state — multi-user rollout" section → **PERMANENTLY CLOSED**.
+  - **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings, untouched files) · `build` EXIT=0.
+    Ran an 8-agent adversarial review workflow (behavior / completeness / docs reviewers, each finding
+    independently verified): 3 confirmed gaps (the `[id]` leak, CLAUDE.md retirement tense, a Ground-Rule
+    contradiction) — all fixed, re-gated green. Product outcome: R7-1 changes nothing the user sees yet (by
+    design); it lays the type model + scope lock the rest of Round 7 builds on.
+- RESUME AT: **R7-2** (Discovery engine v1: index-mining + the funnel — retires `data/sources.json` as the
+  digest supply). R4-15 still BLOCKED on Kyle's seed-vector sign-off (independent).

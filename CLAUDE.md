@@ -1,23 +1,42 @@
 # Project: Tangent (Discovery Companion)
 
 ## What This Is
-A personalized content discovery application that acts as a trusted companion,
-surfacing genuinely interesting, original, and evergreen content from across the
+A personalized content **discovery agent** that acts as a trusted companion,
+hunting down genuinely interesting, original, one-off finds from across the
 internet — including the decentralized Small Web (digital gardens, IndieWeb,
-independent blogs). This is not a news aggregator. The goal is to help the user
-encounter ideas, essays, and perspectives they would never find on their own, and
-to learn their taste deeply over time.
+independent blogs). This is not a news aggregator, and (as of Round 7) **not a
+feed reader**: each day it surfaces a small mix of *the best things on the
+internet* — not just essays but websites/web-toys, music, video, threads, and
+standalone curiosities (e.g. a feed-less `moltbook.com`). **The unit is the
+*find*, not the source.** An index (Hacker News, are.na, r/InternetIsBeautiful)
+is mined only for the outbound links it points at — never its own posts. The
+goal is to help Kyle encounter ideas and perspectives he'd never find on his own,
+and to learn his taste deeply over time.
 
 ## Scope
-**Single-user first.** The app is built for one person (Kyle) as the sole user.
-All personalization, taste modeling, and discovery is optimized for a single deep
-relationship rather than a multi-user platform. The codebase uses parameterized
-identity (userId, deviceId) throughout so that multi-user expansion is possible
-later without rearchitecting.
+**Single-user, permanently.** The app is built for one person (Kyle) as the sole
+user, and (decided 2026-06-23, Round 7) this is **definitive and forever** — no
+multi-user, no extensibility-for-others. All personalization, taste modeling, and
+discovery is opinionated to Kyle's taste. The codebase keeps its parameterized
+identity (`userId`, `deviceId`) plumbing as-is (harmless), but we **stop designing
+for expansion**: the "Future state — multi-user rollout" backlog in
+`agents/review/REVIEW_TRACKER.md` is permanently closed. (The economics flip the
+right way: one daily digest of ~7 items means we can spend a lot of effort per
+item — fetch + verify + LLM-judge each candidate — to find a few genuinely great
+one-offs, instead of cheaply ingesting volume.)
 
-**Starter sources provided.** The user will supply an initial set of trusted content
-sources (blogs, newsletters, digital gardens, authors) to seed the discovery
-system and calibrate quality. The system is not starting from a cold blank slate.
+**Vision broadened (Round 7).** Tangent is deliberately widened from "evergreen
+essays" to "agent-discovered best-of-the-internet, one-off gems" across content
+types — personal-use only. See `agents/architect/design_product_round7_content_types.md`
+(rev 2) and the note at the top of `agents/ba/vision_discovery_companion.md`.
+
+**Discovery seeds, not subscriptions.** Round 7 will retire `data/sources.json` as
+the digest's content supply, the RSS-feed path as the primary pipeline, and the
+essay-only evaluator as the universal gate — this happens across R7-2 (supply) and
+R7-3 (evaluator); as of R7-1 the existing pipeline is still live (behavior-
+preserving). Curated index/seed lists
+(`data/discovery_indexes.json`, `data/places.json`) are *crawl seeds* for
+harvesting outbound destinations — never feeds-of-items.
 
 ## Vision
 The product vision is documented in `agents/ba/vision_discovery_companion.md`.
@@ -113,4 +132,8 @@ with the long-term direction.
 - Leave clear artifacts at the end of every session so the next session can orient quickly.
 - When in doubt about scope, do less and document the decision.
 - All requirements, stories, designs, and tasks live in /agents before any code is written.
-- Design for single-user now, but keep identity parameterized for future expansion.
+- Single-user is permanent (Round 7 scope lock): build opinionated for Kyle and
+  **stop designing for multi-user expansion**. Keep the existing `userId`/`deviceId`
+  identity plumbing as-is (harmless), but do not add new abstraction for other users.
+  See the Scope section above and the permanently-closed "Future state — multi-user
+  rollout" section in `agents/review/REVIEW_TRACKER.md`.

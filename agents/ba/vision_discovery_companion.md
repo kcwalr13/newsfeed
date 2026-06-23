@@ -1,5 +1,23 @@
 # **Architecting the Trusted Companion: Frontier Paradigms in Content Discovery and Deep Personalization**
 
+> **Scope & vision note (Round 7, 2026-06-23).** This document remains the
+> foundational vision, but two decisions now refine it. **(1) Scope is
+> definitively personal / single-user, forever** — Tangent is built for one
+> person (Kyle); there is no multi-user future. Designing for expansion is
+> explicitly stopped (the "Future state — multi-user rollout" backlog in the
+> review tracker is permanently closed). **(2) The product is deliberately
+> broadened from "evergreen essays" to "agent-discovered best-of-the-internet,
+> one-off gems."** Tangent becomes a *discovery agent, not a feed reader*: the
+> unit is the **find, not the source**, and the digest is a mix of content types
+> (essays, websites/web-toys, music, video, threads, standalone curiosities such
+> as a feed-less `moltbook.com`), not just articles. Indexes (HN, are.na,
+> r/InternetIsBeautiful, Webcurios) are mined for their **outbound links**, never
+> their own posts. This is Pillar 1 (Agentic Web Discovery) resurrected and
+> generalized. Precise plan: `agents/architect/design_product_round7_content_types.md`
+> (rev 2). The four pillars below are unchanged in spirit; "evergreen essays"
+> throughout should be read as "evergreen, genuinely-interesting one-off finds of
+> any type."
+
 The contemporary digital ecosystem is characterized by an overwhelming abundance of information, managed predominantly by algorithmic aggregation designed to maximize short-term engagement and prioritize recency. This paradigm often flattens the nuances of human edification, education, and entertainment into a single optimization metric, resulting in homogenous content delivery and the entrenchment of isolated filter bubbles.1 To construct a system that acts not as a passive news aggregator but as a "trusted companion"—capable of surfacing obscure architecture essays, niche music subcultures, or unexpected behavioral economics papers—requires a fundamental paradigm shift in system architecture. Such an infrastructure must marry the qualitative depth of master human curation with advanced, autonomous web discovery mechanisms. Furthermore, it must transcend basic collaborative filtering by embedding cognitive science models of intellectual curiosity and latent aesthetic spaces into its personalization engines.4
 
 This document provides an exhaustive exploration of the theoretical, methodological, and architectural frontiers necessary to build this advanced discovery and personalization system. The analysis is divided into the mechanics of high-signal discovery, unconventional autonomous architectures, the cognitive foundations of human taste, advanced longitudinal user modeling, and the computational engineering of serendipity and the unknown.

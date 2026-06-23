@@ -95,10 +95,62 @@ export interface Article {
    * for the card variant (D2).
    */
   format?: ContentFormat;
+
+  /**
+   * Item type for the Round-7 discovery engine. `'article'` (the default when
+   * absent, for back-compat) is the only type that has prose / a body / the
+   * in-app reader; every other type is a link-out item (the `place` pattern —
+   * no `bodyText`/`readTime`/reader, `curatorNote` is the blurb, card links
+   * straight out). Sent to the client (picks the card variant). The R5-D
+   * `format` taxonomy is parallel and still drives the existing display mix;
+   * `contentType` is the item-type dimension the R7 mix (R7-5) keys on.
+   */
+  contentType?: ContentType;
+
+  /**
+   * Media metadata for non-article (link-out) items — thumbnail, embed, runtime,
+   * creator, platform, popularity score. Absent for plain `article`s. Sent to
+   * the client for the per-type card (R7-4).
+   */
+  media?: ItemMedia;
+
+  /**
+   * Provenance: which candidate stream / index discovered this item (R7-2),
+   * e.g. "hacker-news" or "llm-hunt". Telemetry only — NEVER shown to the user
+   * as a "source" (the unit is the find, not the source) and never sent to the
+   * client. @internal
+   */
+  discoverySource?: string;
 }
 
 /** Content-format taxonomy for the issue mix guarantee (R5-D). */
 export type ContentFormat = 'longread' | 'short' | 'visual' | 'potpourri' | 'place';
+
+/**
+ * Item-type taxonomy for the Round-7 discovery engine. `article` is the only
+ * type with prose / a body / the in-app reader; the rest are link-out items.
+ */
+export type ContentType = 'article' | 'music' | 'video' | 'website' | 'thread' | 'find';
+
+/**
+ * Media metadata attached to a non-article (link-out) item. Every field is
+ * optional — a given type populates only what's relevant (a video has a
+ * `durationSec`, a thread a `score`, music a `creator`, etc.).
+ */
+export interface ItemMedia {
+  /** Representative image (cover art, video thumbnail, screenshot). */
+  thumbnailUrl?: string;
+  /** Embeddable player URL where available (Bandcamp/YouTube — R7-7). */
+  embedUrl?: string;
+  /** Runtime in seconds, for video/audio. */
+  durationSec?: number;
+  /** Artist / author / channel / maker. */
+  creator?: string;
+  /** Hosting platform (e.g. "youtube", "bandcamp", "hacker-news"). */
+  platform?: string;
+  /** Popularity signal where the platform exposes one (HN points, etc.). */
+  score?: number;
+}
 
 /** The response shape returned by GET /api/feed/today. */
 export interface FeedResponse {

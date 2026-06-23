@@ -10,12 +10,14 @@ import type { Article } from '@/lib/types/article';
 export const dynamic = 'force-dynamic';
 
 /** Strips internal-only fields before sending an article to the client. Keeps
- *  explorationSlotType (the exploration-slot badge) + curatorNote + format for
- *  display; drops bodyText (the reader page loads the body server-side via
- *  findArticleAcrossBatches). */
+ *  explorationSlotType (the exploration-slot badge) + curatorNote + format +
+ *  contentType + media (R7-1, for the per-type card) for display; drops bodyText
+ *  (the reader page loads the body server-side via findArticleAcrossBatches) and
+ *  discoverySource (R7-1 provenance telemetry — the unit is the find, not the
+ *  source, so the stream that found it is never shown). */
 function toPublicArticle(article: Article) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, bodyText: _bt, ...rest } = article;
+  const { discoveryTopic: _dt, llmScore: _ls, extractedConcepts: _ec, serendipityScore: _ss, probeInfo: _pi, bodyText: _bt, discoverySource: _ds, ...rest } = article;
   return rest;
 }
 
