@@ -2,15 +2,24 @@ You are working in the **Tangent** repo. We are running a systematic remediation
 to fix every finding from a code + UX/UI review, one finding at a time, committing and pushing
 after each so we never lose progress if a session ends mid-way.
 
-## Status note (2026-06-15) — Round 6 COMPLETE + LIVE; R5-C3 RESOLVED
-**Round 6 is done and live in production on the Gemini free tier.** `LLM_PROVIDER=gemini` + `GEMINI_API_KEY`
-are set in Vercel; the active model is **`gemini-2.5-flash-lite`** (the design's `gemini-2.0-flash` was
-deprecated/shut down 2026-06-01 → free-tier quota 0 → 429; swapped in commit `0dbd842`). **R5-C3 is resolved**
-— curator notes verified generating live ($0, 7/7). There is **no active TODO**: the only open backlog item is
-**R4-15** (BLOCKED on Kyle's seed-vector sign-off in `data/calibration_seed.json`). The structured
-discovery/scoring calls get their first live exercise at the next daily cron — worth a look, but not a code task.
-Do not hardcode or echo any API key value; reference keys by name only. If starting a *new* round, repoint the
-"Your job this session" + "Start now" sections below to the new backlog; the Round-6 instructions are historical.
+## Status note (2026-06-23, rev 2) — ROUND 7 is the active backlog (agentic one-off discovery)
+Rounds 1–6 are complete and live (R6 put prod on the Gemini free tier, `gemini-2.5-flash-lite`; R5-C3 resolved).
+**The active work is ROUND 7 — Tangent becomes a personal DISCOVERY AGENT, not a feed reader.** Start at **R7-1**.
+**Read the precise plan first:** `agents/architect/design_product_round7_content_types.md` (**rev 2** — it
+SUPERSEDES the rev-1 "tagged RSS palette," which was an aggregator-of-sources). Non-negotiable framing: scope is
+**definitively personal/single-user**; **drop content feeds entirely** (retire `data/sources.json` as the digest
+supply + the RSS-feed path + the essay-only evaluator); the digest is **agent-discovered one-off items** — the unit
+is the *find, not the source* (e.g. a feed-less `moltbook.com`). An index (HN/are.na/r/InternetIsBeautiful/Webcurios)
+is mined for the **outbound links it points at**, never its own posts. Engine = candidate streams (index-mining,
+LLM-hunt+verify, creative search, graph-follow) → funnel (permanent novelty/dedup memory, liveness/realness verify,
+type classify, **type-aware interestingness LLM judge** replacing the essay dims, safety/spam/NSFW) → hard-rebalance
+mix. **Keeps** the `place`-style link-out item, the content-type model, type cards, the mix. Build order
+**R7-1 → R7-7** (R7-7 optional); gate green each step. **Hard requirements:** (1) `wrapUntrusted` + 
+`UNTRUSTED_CONTENT_NOTICE` on **every discovered web page** sent to an LLM (injection surface grew — we now feed the
+model arbitrary pages); (2) the **R7-5 hard-rebalance assembler must be re-proven by the R5-D1 simulation harness**
+(composition with C2/C3 + the source cap; graceful degradation) — do not ship the mix on a green build alone.
+The only other open item, **R4-15**, stays BLOCKED on Kyle's seed-vector sign-off (independent of Round 7). Do not
+hardcode/echo any API key value.
 
 ## Read these first (in order)
 1. `CLAUDE.md` — project context, agent pipeline, and ground rules. Follow them.

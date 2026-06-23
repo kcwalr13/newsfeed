@@ -112,8 +112,17 @@ npm run dev           # for manual/browser spot-checks
   **R5-C3 is RESOLVED** — curator notes verified generating live at $0 (`/api/feed/today` → 7/7 displayed
   pieces, personalized, persisted+cached; no 429s on the working model). **Model fix:** the design's
   `gemini-2.0-flash` was **deprecated/shut down 2026-06-01** (free-tier quota → 0 → `429 RESOURCE_EXHAUSTED`),
-  so the active model switched to **`gemini-2.5-flash-lite`** (commit `0dbd842`). No migration. Last resume
-  point: — (Round 6 live; the only open item is **R4-15**, BLOCKED on Kyle's seed-vector sign-off).
+  so the active model switched to **`gemini-2.5-flash-lite`** (commit `0dbd842`). No migration.
+- **Round 7 (agentic one-off discovery — personal "best of the internet" engine, 2026-06-23, rev 2): 7 NEW items.**
+  Plan: `agents/architect/design_product_round7_content_types.md`. Scope is now **definitively personal/single-user**.
+  Tangent becomes a **discovery agent, not a feed reader** — **drop content feeds entirely**; the digest is
+  agent-discovered **one-off items** (the unit is the find, not the source; e.g. a feed-less `moltbook.com`). Engine =
+  candidate streams (**index-mining** for outbound links · **LLM-hunt+verify** · creative search · graph-follow) →
+  funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
+  replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
+  websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
+  optional). **▶ ACTIVE BACKLOG.** **Last resume point: R7-1** (R4-15 still BLOCKED on Kyle's seed-vector sign-off —
+  independent).
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -1147,6 +1156,72 @@ user content (sites 1–6) and all post-parse validation** at every refactored s
   - **Notes:** `.env.example` already updated in R6-4 (`LLM_PROVIDER=anthropic` + `GEMINI_API_KEY`). Added to **README.md**: provider-abstraction in the tech-stack + prerequisites lines; `LLM_PROVIDER`/`GEMINI_API_KEY` rows in the env table (and `ANTHROPIC_API_KEY` now "Yes, unless `LLM_PROVIDER=gemini`"); a new **"LLM provider (Round 6)"** subsection covering the two adapters, the shared limiter, the budget-fit/deadline behavior, and the four free-tier caveats (training-data privacy, taste-model drift, daily RPD cap, per-instance limiter). Added to **agents/architect/ARCHITECTURE.md**: updated the LLM stack row + env table (`LLM_PROVIDER`/`GEMINI_API_KEY`, `ANTHROPIC_API_KEY` scoped to the default), noted the `lib/config/llm.ts` Round-6 extension, and a full **"Round 6 — LLM provider abstraction + go free-tier"** section (the `lib/llm/` modules, the 7 refactored sites + preserved invariants, R6-5 budget-fit + deadline, caveats, and the one-env-var go-live → resolves R5-C3). Also kept **CLAUDE.md**'s env section accurate (added the LLM-provider block; `ANTHROPIC_API_KEY` scoped to the default). The "create a key" Kyle-action is already done (kickoff); the only remaining Kyle-action is the `LLM_PROVIDER=gemini` Vercel flip (flagged under R6-5). Verified: `tsc` clean · `build` EXIT=0 (docs-only change; lint unaffected — no `.ts`/`.tsx` touched).
 - [~] **R6-7** · (Optional, phase 2) **Batch** the high-volume structured calls — score N articles per request (one prompt → array of N score objects) for aesthetic scoring + discovery eval — collapsing ~40 evals → ~4–8 calls. Reclaims throughput/quality under the free tier; improves cost/latency on any provider. Defer; the round works without it. · **DEFERRED** (optional phase-2; per design "the round works without it")
   - **Notes:** Deferred per the design's explicit recommendation and the campaign's optional-item policy (P3-D4 precedent). The round is **functionally complete without it**: R6-5's lowered `DISCOVERY_MAX_EVAL_CANDIDATES` (15) + per-article scoring **wall-clock deadline** already make a full Gemini run fit the ~15 RPM free tier and the wall-clock budget (sim: 55 calls write the batch ~260s < 300s), degrading gracefully (thinner discovery / some unscored items rank by source score) on busy days. Batching is a throughput *optimization*, not a correctness requirement. **What it would entail when wanted:** change the two high-volume structured sites — `aestheticScorer` (`scoreAesthetic`) and `llmEvaluator` (`evaluateWithLLMClient`) — to accept N items and return an array of N score objects via a `generateStructured` schema of `type:'array'` (or `{results:[…]}`), with the prompt enumerating the N pieces and the post-parse validation extended to validate each element + handle a short/misaligned array (fall back to per-item or skip). That collapses ~40 discovery evals → ~4–8 calls and ~20 aesthetic → ~2–4, comfortably under the free tier and faster on any provider. It's a meaningful change to the scorer prompts/parsers (and the discovery eval loop that calls them one-at-a-time), so it's correctly phased after the abstraction. Revisit if free-tier discovery breadth feels thin in practice.
+
+---
+
+## ROUND 7 — Agentic one-off discovery (personal "best of the internet" engine) (2026-06-23, rev 2)
+
+Kyle's standing feedback after extended use: the feed is **still all long articles in a similar pattern**; he wants
+a **wide variety of item TYPES** AND **truly unique one-off items** (e.g. `moltbook.com` — an interesting standalone
+site that is NOT an ongoing source, surfaced as one item). *"A mix of the best of the internet… it specifically
+shouldn't be an aggregator of just other sources."* **Decisions (scoping Q&A 2026-06-23):** scope = **definitively
+personal/single-user, forever** (no multi-user, ever); types = **music, websites/web-toys/games, video, threads &
+finds**; mix = **rebalance hard** (cap articles ≤3/issue); curation = **blend** (curated base + wildcard pulse);
+discovery = **blend: index-mining + LLM agentic hunt** (mine human link-collections for their **outbound links** +
+LLM-proposes-and-verifies); **drop content feeds entirely** — the digest is agent-discovered **one-off items**, not
+subscriptions. Precise plan: `agents/architect/design_product_round7_content_types.md` (**rev 2** — supersedes the
+rev-1 "tagged RSS palette," which was itself an aggregator-of-sources and couldn't surface a feed-less moltbook).
+
+**The reframe:** Tangent becomes a **discovery agent**, not a feed reader — the unit is the **find, not the source**.
+An index (HN/are.na/r/InternetIsBeautiful/Webcurios) is mined for the **outbound links it points at** (the gem),
+never its own posts. This is **Pillar 1 of the original vision** (Agentic Web Discovery), generalized to all types +
+oriented to one-off gems + novelty. **Retires** `data/sources.json` as the digest supply, the RSS-feed path, and the
+essay-only evaluator as the universal gate. **Keeps** the `place`-style link-out item, the content-type model, type
+cards, the hard-rebalance mix. Engine = candidate streams (index-mine · LLM-hunt+verify · creative search ·
+graph-follow) → funnel (permanent novelty/dedup memory · liveness/realness verify · type classify · **type-aware
+interestingness/taste LLM judge** replacing the essay dims · safety/spam/NSFW) → hard-rebalance assembly.
+Order **R7-1 → R7-7**; gate green each step; **re-prove the mix by the R5-D1 simulation harness**; **`wrapUntrusted`
+every discovered page sent to an LLM** (injection surface grows — we now feed the model arbitrary web pages).
+
+- [ ] **R7-1** · **Personal-use scope lock + item model.** Record the definitively-personal/single-user scope in
+  `CLAUDE.md` (Scope) + a note in `agents/ba/vision_discovery_companion.md` (vision broadened: evergreen essays →
+  agent-discovered best-of-internet one-off gems, personal-use); **permanently close the DEFERRED "multi-user
+  rollout" tracker section** (stop designing for expansion; keep `userId`/`deviceId` plumbing as-is). Add
+  `ContentType` (`'article'|'music'|'video'|'website'|'thread'|'find'`) + `ItemMedia`
+  (`thumbnailUrl?/embedUrl?/durationSec?/creator?/platform?/score?`) + `discoverySource?` (provenance telemetry, NOT
+  shown as a "source") to `lib/types/article.ts` (prose fields explicitly optional); migrate `place`→`website`
+  (keep `data/places.json`; type-aware loader); add `contentType`+`media` to `toPublicArticle`. **Behavior-preserving
+  (no supply change yet);** gate green. · **TODO**
+- [ ] **R7-2** · **Discovery engine v1: index-mining + the funnel.** New candidate stream in `lib/discovery/` that
+  crawls a curated `data/discovery_indexes.json` (HN front + Show HN, are.na, r/InternetIsBeautiful + curated subs,
+  Webcurios, Kottke, Waxy, ooh.directory, Marginalia, awesome-lists, blogrolls) and **harvests their outbound
+  destination links** (the index's own posts are NOT items). The funnel's **rule-filters** (no LLM): a **permanent
+  novelty/dedup memory** (new DB table — every URL+domain ever seen, long lookback, never repeat), **liveness/realness
+  verify** (fetch each; drop 404/parked/login-wall/SEO-farm), **type classify** (URL+page signals). Produce link-out
+  **website + thread** items + their cards. **Retire `data/sources.json` as the digest supply.** **This is the
+  milestone where the digest becomes one-off gems (moltbook-class), not feed articles.** · **TODO**
+- [ ] **R7-3** · **LLM agentic stream + interestingness judge (replaces the essay gate).** Stream 2: LLM proposes
+  lesser-known **destinations** per rotating theme (from the taste profile + structured randomness) → **fetch-and-
+  verify every URL** is real/live before it advances (it hallucinates + skews popular). Add the **type-aware
+  interestingness/taste LLM judge** (1–5 + reason, type-appropriate criteria, fed Kyle's profile) that replaces
+  `llmEvaluator`'s 5 essay dims, plus the **safety/spam/NSFW** guards. **`wrapUntrusted` every fetched page sent to an
+  LLM.** Adds true wildcards + the real quality bar. · **TODO**
+- [ ] **R7-4** · **Multi-type coverage (music + video + finds), discovered not fed.** Type detection + enrichment +
+  link-out cards for `music`/`video`/`find`; make the streams surface them (music/video/find indexes + the LLM hunt +
+  search). Video thumbnails from page/oEmbed; music cover art where free. **No subscriptions** — all discovered. · **TODO**
+- [ ] **R7-5** · **Hard-rebalance assembler.** `ensureTypeSpread` in `lib/pipeline/displayDiversity.ts` (cap articles
+  `MAX_ARTICLES_IN_ISSUE`=3, guarantee `MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE`=4, a wildcard slot for the agentic gem)
+  + config in `lib/config/feed.ts`; per-type candidate targets in the engine; compose in `resolveDisplayedFeed`
+  (after C2/C3, before the source cap). **Re-prove composition by the R5-D1 simulation harness** (no floor broken,
+  graceful degradation when gems are thin — a short digest of real finds beats a padded one). · **TODO**
+- [ ] **R7-6** · **Cross-type taste v1 + creative search + graph-follow + polish.** Track like/skip/save/dwell **per
+  `contentType`** + per domain (single global profile, personal-use); a modest per-type affinity multiplier in
+  ranking + as judge context (engaged types/domains surface more; ignored fade, never to zero); cheap tags
+  (domain/type/topic) into the concept graph. Add stream 3 (rotating creative Brave searches) + stream 4 (graph-follow
+  a verified gem's outbound links); the curated/wildcard blend guarantee; per-type curator-note registers. · **TODO**
+- [ ] **R7-7** · (Optional, phase 2) Richer media/embeds (Bandcamp/YouTube players), deeper agentic crawling, true
+  platform-trending via APIs, within-type taste (genre/creator affinity). **Defer** — the round delivers full value
+  without it. · **TODO (optional)**
 
 ---
 
