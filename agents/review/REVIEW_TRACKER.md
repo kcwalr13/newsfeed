@@ -1199,7 +1199,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   (`thumbnailUrl?/embedUrl?/durationSec?/creator?/platform?/score?`) + `discoverySource?` (provenance telemetry, NOT
   shown as a "source") to `lib/types/article.ts` (prose fields explicitly optional); migrate `place`→`website`
   (keep `data/places.json`; type-aware loader); add `contentType`+`media` to `toPublicArticle`. **Behavior-preserving
-  (no supply change yet);** gate green. · **DONE** (commit `COMMIT_HASH`)
+  (no supply change yet);** gate green. · **DONE** (commit `b1741b5`)
   - **Notes:** Added to `lib/types/article.ts`: `ContentType` (`article|music|video|website|thread|find`),
     `ItemMedia` (`thumbnailUrl?/embedUrl?/durationSec?/creator?/platform?/score?`), and three optional `Article`
     fields — `contentType?`, `media?`, and `discoverySource?` (`@internal`, never sent to the client). The R5-D
@@ -2019,7 +2019,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - RESUME AT: — (Round 6 complete; awaiting Kyle's `LLM_PROVIDER=gemini` flip + live re-validation).
 
 ### Session 2026-06-23 — Round 7 begins
-- **R7-1 DONE** (commit `COMMIT_HASH`) — **Personal-use scope lock + item model.** Behavior-preserving; no
+- **R7-1 DONE** (commit `b1741b5`) — **Personal-use scope lock + item model.** Behavior-preserving; no
   supply change yet.
   - **Types** (`lib/types/article.ts`): added `ContentType` (`article|music|video|website|thread|find`),
     `ItemMedia` (`thumbnailUrl?/embedUrl?/durationSec?/creator?/platform?/score?`), and optional `Article`
