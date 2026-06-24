@@ -122,8 +122,9 @@ npm run dev           # for manual/browser spot-checks
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
   optional). **▶ ACTIVE BACKLOG: 2/7 DONE (R7-1, R7-2) · R7-3 IN-PROGRESS · 4 TODO (R7-4…R7-7, R7-7 optional).** **Last
-  resume point: R7-3(b)** (the type-aware interestingness/safety judge — funnel's universal gate; **R7-3(a)
-  exactly-1-essay HARD RULE is DONE**: `ARTICLES_PER_ISSUE`=1 + supply-keep + `ensureExactlyOneArticle`). **✅ R7-2 COMPLETE (a–e):** Tangent is now a **discovery agent, not a feed reader** — the
+  resume point: R7-3(c)** (the LLM agentic stream; **R7-3(a) exactly-1-essay HARD RULE + R7-3(b) interestingness/safety
+  judge are DONE** — `ARTICLES_PER_ISSUE`=1 + supply-keep + `ensureExactlyOneArticle`; the funnel's universal LLM judge
+  drops carbonads/bunny via a cheap backstop + the must-reject long tail via the LLM gate). **✅ R7-2 COMPLETE (a–e):** Tangent is now a **discovery agent, not a feed reader** — the
   digest supply is agent-discovered one-off link-out gems (index-mining funnel: liveness-verify + type-classify +
   durable dedup) + **exactly 1 essay (HARD RULE, Kyle 2026-06-24 — was a ≤3 cap)** + the curated place;
   **`data/sources.json` is retired as supply** (kept only as the discovery novelty filter); every link-out card
@@ -1427,12 +1428,40 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       (replaces the `MAX_ARTICLES_IN_ISSUE`=3 supply cap); the pipeline keeps ALL scored essays in the batch (supply
       keeps ≥1 so one can always be placed); new `ensureExactlyOneArticle` (`displayDiversity.ts`) places **precisely
       one** essay in the displayed issue (demote excess / promote one if zero), composed LAST in `resolveDisplayedFeed`
-      + on the unranked fallback. · **DONE** (commit `pending-A`)
-    - [ ] **(b)** **Type-aware interestingness/safety judge + `wrapUntrusted`** — the funnel's universal LLM gate that
+      + on the unranked fallback. · **DONE** (commit `a84a6de`)
+    - [x] **(b)** **Type-aware interestingness/safety judge + `wrapUntrusted`** — the funnel's universal LLM gate that
       drops the must-reject junk targets (carbonads/bunny/krea) + safety/spam/NSFW; cheap commercial/infra denylist
-      backstop. · **TODO ← RESUME HERE**
+      backstop. · **DONE** (commit `pending-B`)
     - [ ] **(c)** **LLM agentic stream 2** (LLM-proposed gems per rotating theme → fetch-and-verify) feeding the funnel
-      through the judge. · **TODO**
+      through the judge. · **TODO ← RESUME HERE**
+  - **Notes — (b) interestingness/safety judge (DONE):** New `lib/discovery/interestingnessJudge.ts` — a single
+    type-aware LLM call per verified funnel survivor → `{interestingness 1–5, reason, is_safe, is_commercial_or_spam}`,
+    fed Kyle's taste (top concepts + tone). `judgePasses()` ships a candidate only if **safe AND not commercial/spam
+    AND score ≥ `INDEX_FUNNEL_JUDGE_THRESHOLD`(3)**; the flags are **fail-closed** (a missing/garbled flag defaults to
+    unsafe+commercial → drop), so a degenerate response can't wave junk through. `judgeInterestingnessWithClient`
+    (provider-injectable, testable) + `judgeInterestingness` (active provider). **`wrapUntrusted` + `UNTRUSTED_CONTENT_NOTICE`
+    fence the page title/description/body sample** (the injection invariant — we now feed the model arbitrary discovered
+    pages); only the registrable domain + Kyle's own taste sit outside the fence. New `lib/discovery/tasteContext.ts`
+    `loadTasteContext()` resolves the most-recent feedback identity → centroid tone + top concepts (graceful empty on
+    cold-start/DB error). **Cheap rule backstop** (`COMMERCIAL_INFRA_DENYLIST` + `isCommercialInfra` in `novelty.ts`):
+    ad networks / CDNs / cloud-infra-corporate / analytics-payment domains are dropped in the funnel's cheap filter
+    **before** the LLM (saves a judge call AND guarantees the worst offenders never ship if the judge is unavailable);
+    `carbonads.net` + `bunny.net` land here. `krea.ai` (a product page, not infra) is left to the LLM judge. **Funnel
+    wiring** (`indexFunnel.ts`): `verifyLiveness` now also returns the body sample it already extracted (no second
+    fetch); the judge runs on the top `INDEX_FUNNEL_MAX_JUDGE` verified survivors (interleaved by source), bounded by
+    `INDEX_FUNNEL_JUDGE_CONCURRENCY` + an internal `deadlineMs` (returns partial under budget); kept gems are ranked
+    best-first by judge score. **Graceful degradation:** no LLM configured → ship the rule-filtered pool unjudged
+    (R7-2 behavior). **Config** (`feed.ts`): `INDEX_FUNNEL_MAX_JUDGE` (Gemini 12 / Anthropic 30),
+    `INDEX_FUNNEL_JUDGE_CONCURRENCY` (2/4), `INDEX_FUNNEL_JUDGE_THRESHOLD`=3; `INDEX_FUNNEL_BUDGET_MS` 45s→90s (the
+    funnel now does LLM work); `DISCOVERY_ARTICLES_PER_DAY` 6→4 (R7-3a) frees budget. Pipeline passes the funnel a
+    judge deadline (8s before the outer race). **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) ·
+    `build` EXIT=0; **targeted check (throwaway ts-node, removed) — 15/15 deterministic PASS:** carbonads + bunny
+    dropped by the rule backstop (no LLM); `judgePasses` drops commercial/unsafe/low-score + keeps gems; schema
+    parse/validation + fail-closed defaults correct (mock provider); a krea-like commercial verdict is DROPPED. **Live
+    LLM judge unavailable locally** (Anthropic returns `400 — "credit balance is too low"`, a billing rejection that
+    confirms the request format is VALID; no `GEMINI_API_KEY` locally) → the real model's verdicts on krea.ai + a live
+    gem run on the **Gemini deploy/cron**, per the project's standing pattern. **Injection invariant:** every fetched
+    page reaching the judge is `wrapUntrusted`-fenced.
   - **Notes — (a) exactly-1-essay (DONE):** `lib/config/feed.ts`: `MAX_ARTICLES_IN_ISSUE`=3 → `ARTICLES_PER_ISSUE`=1
     (a precise DISPLAY quota, not a supply cap), `DISCOVERY_ARTICLES_PER_DAY` 6→4 (only 1 essay displays; a smaller
     essay buffer frees per-run LLM budget for the R7-3 judge while still keeping a paywall-resilient choice).
@@ -1489,6 +1518,9 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
 
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
+
+| 2026-06-24 | R7-3(b) | The judge gates the **funnel/link-out streams** (where the junk targets live — R7-2 was rule-only there); the **Brave essay stream keeps its 5-dim `llmEvaluator`** for now (NOT replaced this commit). Added a cheap `COMMERCIAL_INFRA_DENYLIST` rule backstop AND made the judge the LLM gate; flags are **fail-closed** | The session's must-reject targets (carbonads/bunny/krea) are all link-out funnel items, and R7-2's funnel had **no** LLM gate at all — so adding the judge there is the high-value, junk-fixing change. The Brave essay path already has a strong, well-tuned 5-dim LLM gate (essays aren't the junk problem); swapping its threshold/floor/below-floor selection logic onto the new 1–5 interestingness scale is a behavior-changing refactor with real regression risk and **zero** junk-rejection benefit, so it's deferred (CLAUDE.md ground rule: "when in doubt about scope, do less and document"). The "universal gate" intent is met where it matters — the dominant gem supply (now exactly-1-essay) is judge-gated. The cheap denylist is **defense-in-depth** (design §4 "domain reputation lists"): it drops obvious ad/CDN/infra junk with zero LLM (and keeps the digest junk-free even if the LLM is down), while the LLM judge handles the arbitrary long tail (product pages like krea.ai, SEO slop). Fail-closed flags (missing → unsafe+commercial) follow the design's "when unsure, drop" — a personal digest should never surface something jarring or commercial. |
+| 2026-06-24 | R7-3(b) | **Live LLM-judge validation deferred to the Gemini deploy**; locally verified the rule backstop (deterministic) + the gate/parse logic (mock provider) + that the request format is valid (reaches Anthropic, rejected only for billing) | No working LLM is available locally — the committed provider is Anthropic (out of credits → `400 "credit balance is too low"`) and there is no `GEMINI_API_KEY` in `.env.local`. This is the project's standing constraint (R5-C3/R6/R7-2e all deferred representative LLM validation to the Vercel/Gemini deploy). carbonads + bunny are dropped deterministically by the rule backstop (no LLM needed), and the gate logic that drops a krea-class commercial verdict is proven with a mock provider; the only thing that can't run locally is the *real model's* verdict on krea.ai + a live gem, which the next cron/refresh on Gemini exercises. I did NOT hardcode krea.ai onto the rule denylist to force a deterministic local drop — that would be test-gaming (krea.ai is a product page, the LLM judge's job), not a principled infra entry. |
 
 | 2026-06-24 | R7-3(a) | Enforce the exactly-1-essay rule at the **DISPLAY layer** (`ensureExactlyOneArticle` in `resolveDisplayedFeed`) while the SUPPLY keeps **all** scored essays — instead of a supply-level "keep exactly 1" cap; placed the reorder **LAST** (after the consecutive-source cap) and **also on the unranked fallback** | The rule is about the **displayed** issue ("precisely one essay, never 0 or 2+"), and the displayed issue is the rank+diversity-reordered top-7 — so the count must be enforced where the 7 are chosen (the display layer), not at supply. Keeping the full essay supply (vs capping it) is what guarantees "≥1 can always be placed": a supply cap of 1 would mean a single paywalled/deduped essay → 0 (the 2026-06-24 bug), whereas keeping ~4 leaves a fallback essay AND a choice for the display to anchor with. The exactly-1 reorder runs LAST because it's a HARD rule (must win over the best-effort cap) and an essay is its own unique source, so the cap never needs to move it — making the ordering safe in practice (R7-5 formally re-proves it via simulation). Applying it on the unranked fallback too holds the rule even when identity/feedback reads fail (it's a pure reorder, no DB). Lowered `DISCOVERY_ARTICLES_PER_DAY` 6→4 since only one essay displays — a smaller buffer frees per-run LLM budget for the R7-3 judge without risking the essay slot. Full `ensureTypeSpread` + simulation re-proof stays R7-5 (the session brief's "do the config + supply-keep part and note the rest for R7-5"). |
 
@@ -2411,7 +2443,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   R7-2's rule funnel deliberately leaves that to the judge. R4-15 still BLOCKED on Kyle's seed-vector sign-off.
 
 ### Session 2026-06-24 (cont.) — R7-3(a) exactly-1-essay HARD RULE
-- **R7-3(a) DONE** (commit `pending-A`) — the displayed issue now contains **precisely one** `article`-type essay
+- **R7-3(a) DONE** (commit `a84a6de`) — the displayed issue now contains **precisely one** `article`-type essay
   (never 0 — the 2026-06-24 live run — never 2+). Pulled forward from R7-5 per the session brief (the self-contained
   config + supply-keep + display-enforcement part; the full type-spread composition + simulation re-proof stays R7-5).
   - **`lib/config/feed.ts`:** `MAX_ARTICLES_IN_ISSUE`=3 → **`ARTICLES_PER_ISSUE`=1** (precise DISPLAY quota, not a
@@ -2428,3 +2460,25 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - RESUME AT: **R7-3(b)** — type-aware interestingness/safety LLM judge (the funnel's universal gate that drops
   carbonads/bunny/krea + safety/spam/NSFW) + `wrapUntrusted` on every fetched page sent to it. Then (c) the LLM
   agentic stream. R4-15 still BLOCKED on Kyle's seed-vector sign-off.
+
+### Session 2026-06-24 (cont.) — R7-3(b) interestingness/safety judge
+- **R7-3(a) committed `a84a6de`** (hash back-filled above).
+- **R7-3(b) DONE** (commit `pending-B`) — the funnel now has a **type-aware interestingness/safety LLM judge**, the
+  universal gate that kills alive-but-junky link-out finds (R7-2's funnel was rule-only).
+  - New `lib/discovery/interestingnessJudge.ts` (1–5 + reason + is_safe + is_commercial_or_spam, type-aware, taste-fed,
+    `wrapUntrusted`-fenced, fail-closed flags) + `judgePasses` gate. New `lib/discovery/tasteContext.ts`
+    (`loadTasteContext` — most-recent identity → centroid tone + top concepts; graceful empty).
+  - Cheap rule backstop `COMMERCIAL_INFRA_DENYLIST`/`isCommercialInfra` (`novelty.ts`): ad networks / CDNs / infra
+    corp / analytics-payment dropped before the LLM (carbonads.net + bunny.net land here).
+  - `indexFunnel.ts`: `verifyLiveness` returns the body sample; the judge stage runs on the top `INDEX_FUNNEL_MAX_JUDGE`
+    verified survivors (concurrency + internal deadline → partial under budget), keeps passers ranked best-first;
+    graceful degradation ships rule-filtered gems unjudged when no LLM. `feed.ts`: judge config + `INDEX_FUNNEL_BUDGET_MS`
+    45s→90s. `run.ts`: passes the funnel a judge deadline.
+  - **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing) · `build` EXIT=0; **15/15 deterministic checks PASS**
+    (carbonads + bunny dropped by the backstop; gate drops commercial/unsafe/low-score + keeps gems; mock-provider
+    parse/validation + fail-closed defaults; krea-class commercial verdict DROPPED). **Live judge** = Anthropic
+    `400 "credit balance is too low"` (valid request, billing-only) + no Gemini key locally → real-model verdicts on
+    krea.ai + a live gem deferred to the Gemini deploy/cron (project's standing pattern).
+- RESUME AT: **R7-3(c)** — the LLM agentic stream (stream 2): LLM proposes lesser-known destinations per rotating,
+  taste-anchored theme → fed into the funnel as `extraCandidates` (fetch-verify-judge each). R4-15 still BLOCKED on
+  Kyle's seed-vector sign-off.

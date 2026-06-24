@@ -37,6 +37,44 @@ export const MEGA_SITE_DENYLIST = new Set<string>([
 ]);
 
 /**
+ * Commercial / infrastructure domains that are NEVER one-off gems no matter how
+ * novel — ad networks, CDNs/edge/hosting/cloud CORPORATE sites, analytics, and
+ * payment platforms (R7-3). A cheap rule-based backstop layered alongside
+ * `MEGA_SITE_DENYLIST`: it drops obvious commercial-infra junk BEFORE the LLM
+ * interestingness judge (saving a judge call AND guaranteeing the worst offenders
+ * never ship even if the judge is unavailable). The LLM judge remains the primary
+ * gate for the long tail (arbitrary product/marketing pages, SEO slop — e.g.
+ * krea.ai). Two of R7-2's must-reject live targets live here: `carbonads.net`
+ * (ad network) and `bunny.net` (CDN corporate site). Keyed by registrable domain.
+ *
+ * IMPORTANT: list only the CORPORATE/marketing domains (e.g. `netlify.com`,
+ * `vercel.com`), never the user-content app subdomains where gems actually live
+ * (`*.netlify.app`, `*.vercel.app`, `*.b-cdn.net`) — those resolve to a different
+ * registrable domain (already in SHARED_HOSTS) and must stay discoverable.
+ */
+export const COMMERCIAL_INFRA_DENYLIST = new Set<string>([
+  // Ad networks / ad tech / sponsorship marketplaces
+  'carbonads.net', 'buysellads.com', 'doubleclick.net', 'googlesyndication.com',
+  'adsense.com', 'taboola.com', 'outbrain.com', 'media.net', 'adroll.com',
+  'criteo.com', 'ezoic.com', 'mediavine.com', 'adthrive.com',
+  // CDNs / edge / asset hosts (corporate sites; NOT their app subdomains)
+  'bunny.net', 'bunnycdn.com', 'cloudflare.com', 'fastly.com', 'akamai.com',
+  'jsdelivr.net', 'cdnjs.com', 'unpkg.com', 'cloudinary.com', 'imgix.com',
+  // Cloud / hosting / dev-platform CORPORATE marketing sites
+  'vercel.com', 'netlify.com', 'heroku.com', 'digitalocean.com', 'render.com',
+  'railway.app', 'fly.io', 'linode.com', 'vultr.com',
+  // Analytics / monitoring / payments / auth SaaS
+  'segment.com', 'mixpanel.com', 'amplitude.com', 'datadoghq.com', 'sentry.io',
+  'stripe.com', 'paypal.com', 'squareup.com', 'twilio.com', 'auth0.com',
+]);
+
+/** True when a candidate's domain is a commercial/infrastructure site (R7-3) —
+ *  never a gem; dropped by the funnel's cheap filter before the LLM judge. */
+export function isCommercialInfra(url: string): boolean {
+  return COMMERCIAL_INFRA_DENYLIST.has(registrableDomain(url));
+}
+
+/**
  * Shared blogging / newsletter hosts where every author lives on the SAME
  * registrable domain (a subdomain or path) — substack.com, medium.com,
  * github.io, wordpress.com, etc. For these, novelty must key on the full host

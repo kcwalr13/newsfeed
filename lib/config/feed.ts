@@ -180,14 +180,44 @@ export const INDEX_FUNNEL_CONCURRENCY = 6;
 /**
  * Wall-clock budget (ms) for the index-mining funnel. The funnel runs HTTP-only
  * liveness fetches (≈ ceil(INDEX_FUNNEL_MAX_VERIFY / INDEX_FUNNEL_CONCURRENCY)
- * rounds × the 8s per-fetch timeout in the worst case), and it runs BEFORE the
- * per-article LLM loops — so it must leave the post-discovery reserve intact for
- * body-fetch + scoring + concept extraction + the batch write. The pipeline
- * skips the funnel when less than this remains, and cuts it short via a race so
- * the batch always writes (graceful degradation — a shorter digest of real gems
- * beats a missed write).
+ * rounds × the 8s per-fetch timeout in the worst case) PLUS, since R7-3, the LLM
+ * interestingness judge over the verified survivors — so it now needs more head-
+ * room. It runs BEFORE the per-article LLM loops, so it must leave the
+ * post-discovery reserve intact for body-fetch + scoring + concept extraction +
+ * the batch write. The pipeline skips the funnel when less than this remains, and
+ * cuts it short via a race + an internal judge deadline so the batch always
+ * writes (graceful degradation — a shorter digest of real gems beats a missed
+ * write).
  */
-export const INDEX_FUNNEL_BUDGET_MS = 45_000;
+export const INDEX_FUNNEL_BUDGET_MS = 90_000;
+
+/**
+ * The type-aware interestingness/taste/safety JUDGE (R7-3) — the funnel's
+ * universal LLM gate that replaces the rule-only filter for link-out finds. Three
+ * provider-aware knobs bound its per-run LLM spend (the design's "spend the LLM
+ * judge only on the top-K rule-survivors" — §7):
+ *  - MAX_JUDGE: the most verified candidates judged per run. Under Gemini's
+ *    ~15 RPM the shared limiter spaces calls ~4s apart, so this is the dominant
+ *    new cost; kept modest so the funnel + the per-article scoring phase + the
+ *    Brave-essay evals all fit PIPELINE_WALL_CLOCK_BUDGET_MS.
+ *  - CONCURRENCY: in-flight judge calls (the limiter sets the real rate).
+ *  - THRESHOLD: a candidate ships only if interestingness ≥ this (1–5) AND it's
+ *    safe AND not commercial/spam. 3 keeps "interesting but unremarkable" and
+ *    above; drops generic/commercial (1–2). The junk targets are also dropped by
+ *    the commercial flag regardless of score.
+ */
+export const INDEX_FUNNEL_MAX_JUDGE = LLM_PROVIDER === 'gemini' ? 12 : 30;
+export const INDEX_FUNNEL_JUDGE_CONCURRENCY = LLM_PROVIDER === 'gemini' ? 2 : 4;
+export const INDEX_FUNNEL_JUDGE_THRESHOLD = 3;
+
+/**
+ * How many destinations the LLM agentic stream (R7-3 stream 2) proposes per run.
+ * One LLM call returns up to this many lesser-known URLs for a rotating,
+ * taste-anchored theme; every proposed URL is then fetched + verified + judged by
+ * the same funnel as the index-mined candidates (the model hallucinates URLs and
+ * skews popular, so verification + the judge are load-bearing).
+ */
+export const LLM_HUNT_PROPOSALS = 10;
 
 /**
  * Wall-clock budget for a full pipeline run (ms). Kept below the route

@@ -516,7 +516,15 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     } else {
       try {
         const existingCanonical = new Set(articles.map((a) => canonicalizeUrlForDedup(a.articleUrl)));
-        const funnelPromise = runIndexFunnel({ excludeCanonical: existingCanonical });
+        // Give the funnel's R7-3 judge an internal deadline a touch before the
+        // outer Promise.race fires, so it returns the gems it judged so far
+        // instead of being hard-cut (graceful partial degradation). The 8s margin
+        // leaves room for in-flight liveness fetches + the final assembly.
+        const funnelDeadlineMs = Date.now() + Math.max(0, funnelBudgetMs - 8000);
+        const funnelPromise = runIndexFunnel({
+          excludeCanonical: existingCanonical,
+          deadlineMs: funnelDeadlineMs,
+        });
         funnelPromise.catch(() => {}); // absorb a late rejection if the race times out first
         let timer: ReturnType<typeof setTimeout> | undefined;
         const raced = await Promise.race([

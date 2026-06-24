@@ -17,7 +17,7 @@ import { parse, type HTMLElement } from 'node-html-parser';
 import type { ContentType } from '@/lib/types/article';
 import { canonicalizeUrlForDedup, registrableDomain } from '@/lib/utils/url';
 import { decodeHtmlEntities } from '@/lib/utils/htmlEntities';
-import { isMegaSite, noveltyKey } from './novelty';
+import { isMegaSite, isCommercialInfra, noveltyKey } from './novelty';
 import { loadSeenCanonicalUrls, loadSeenNoveltyKeys } from '@/lib/db/discoverySeen';
 import { runIndexMining, type IndexCandidate } from './indexMiner';
 import { forEachWithConcurrency } from '@/lib/utils/concurrency';
@@ -25,8 +25,13 @@ import {
   INDEX_FUNNEL_ITEMS_PER_DAY,
   INDEX_FUNNEL_MAX_VERIFY,
   INDEX_FUNNEL_CONCURRENCY,
+  INDEX_FUNNEL_MAX_JUDGE,
+  INDEX_FUNNEL_JUDGE_CONCURRENCY,
 } from '@/lib/config/feed';
 import { appendLog } from '@/lib/pipeline/storage';
+import { isLlmConfigured } from '@/lib/llm';
+import { judgeInterestingness, judgePasses } from './interestingnessJudge';
+import { loadTasteContext, type TasteContext } from './tasteContext';
 
 /** A verified, type-classified link-out candidate ready to become a digest item. */
 export interface FunnelItem {
@@ -49,6 +54,12 @@ export interface FunnelItem {
   siteName?: string;
   /** Popularity signal the index exposed (HN points, reddit ups). */
   score?: number;
+  /** Sample of the page's visible text (captured at liveness verify) — fed to the
+   *  R7-3 interestingness judge. Funnel-internal; never shipped to the client. */
+  bodySample?: string;
+  /** R7-3 judge interestingness (1–5) once judged — used to rank the kept gems
+   *  best-first within the funnel. Funnel-internal; never shipped. */
+  judgeScore?: number;
 }
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -81,6 +92,9 @@ export interface LivePage {
   description?: string;
   thumbnailUrl?: string;
   siteName?: string;
+  /** Sample of the page's visible text (already extracted for the liveness
+   *  heuristics) — reused by the R7-3 judge instead of a second fetch. */
+  bodySample?: string;
 }
 export interface DeadPage {
   alive: false;
@@ -185,7 +199,7 @@ export async function verifyLiveness(url: string): Promise<LivenessResult> {
     return { alive: false, reason: 'parked' };
   }
 
-  return { alive: true, finalUrl, title, description, thumbnailUrl, siteName };
+  return { alive: true, finalUrl, title, description, thumbnailUrl, siteName, bodySample: bodyText };
 }
 
 // --- rule-based type classification (R7-2: website + thread; coarse music/video) ---
@@ -243,6 +257,18 @@ export interface RunIndexFunnelOptions {
    */
   seenCanonical?: Set<string>;
   seenKeys?: Set<string>;
+  /** Kyle's taste context for the R7-3 interestingness judge (and stream 2).
+   *  Default: loaded once via `loadTasteContext()`. Injectable for tests. */
+  taste?: TasteContext;
+  /** Absolute epoch-ms after which the judge stage stops issuing new LLM calls
+   *  and returns what it has (graceful partial degradation under the funnel's
+   *  wall-clock budget). Default: no internal deadline (the pipeline's outer
+   *  Promise.race is the only bound). */
+  deadlineMs?: number;
+  /** Extra candidates to fold into the index-mined pool before the funnel runs —
+   *  the LLM agentic stream's proposals (R7-3 stream 2) join here so they get the
+   *  same cheap filters → liveness verify → judge gauntlet. Default: none. */
+  extraCandidates?: IndexCandidate[];
 }
 
 /** Round-robins items by `discoverySource` so the kept set spans many indexes
@@ -286,7 +312,20 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
   const maxVerify = opts.maxVerify ?? INDEX_FUNNEL_MAX_VERIFY;
   const exclude = opts.excludeCanonical ?? new Set<string>();
 
-  const raw: IndexCandidate[] = await runIndexMining();
+  // Candidate pool = index-mined outbound links (stream 1) + any extra candidates
+  // folded in by the caller (the R7-3 LLM agentic stream, stream 2). Cross-source
+  // dedup by canonical URL so a URL surfaced by both streams is verified once.
+  const mined = await runIndexMining();
+  const extra = opts.extraCandidates ?? [];
+  const rawSeen = new Set<string>();
+  const raw: IndexCandidate[] = [];
+  for (const c of [...mined, ...extra]) {
+    if (!c.url) continue;
+    const k = canonicalizeUrlForDedup(c.url);
+    if (rawSeen.has(k)) continue;
+    rawSeen.add(k);
+    raw.push(c);
+  }
   if (raw.length === 0) {
     appendLog('[index-funnel] no raw candidates from index mining');
     return [];
@@ -304,6 +343,7 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
   const seenDomainThisRun = new Set<string>();
   let dupCount = 0;
   let megaCount = 0;
+  let commercialCount = 0;
   const survivors: IndexCandidate[] = [];
   for (const c of raw) {
     if (!c.url) continue;
@@ -319,6 +359,13 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
     }
     if (isMegaSite(c.url)) {
       megaCount++;
+      continue;
+    }
+    // R7-3: cheap commercial/infra backstop — ad networks / CDNs / SaaS-marketing
+    // are never gems; drop them before the LLM judge (saves a judge call and
+    // guarantees the worst offenders never ship even if the judge is unavailable).
+    if (isCommercialInfra(c.url)) {
+      commercialCount++;
       continue;
     }
     if (seenDomainThisRun.has(key)) continue; // one per domain per run
@@ -349,7 +396,7 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
       failTally[result.reason] = (failTally[result.reason] ?? 0) + 1;
       return;
     }
-    if (isMegaSite(result.finalUrl)) {
+    if (isMegaSite(result.finalUrl) || isCommercialInfra(result.finalUrl)) {
       redirectMegaCount++;
       return;
     }
@@ -376,19 +423,94 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
       thumbnailUrl: result.thumbnailUrl,
       siteName: result.siteName,
       score: c.score,
+      bodySample: result.bodySample,
     });
   });
 
-  // Source-interleave and cap to the digest budget.
-  const selected = interleaveBySource(verified).slice(0, limit);
+  // R7-3 INTERESTINGNESS / SAFETY JUDGE — the universal LLM gate. A type-aware,
+  // taste-fed call per verified survivor decides whether it's a genuinely
+  // interesting one-off (keep) or generic/commercial/spam/unsafe (drop): this is
+  // where alive-but-junky pages the rule filters let through (ad/CDN/product
+  // pages, SEO slop) get killed. Bounded to the top INDEX_FUNNEL_MAX_JUDGE
+  // survivors (interleaved by source so it spends the budget diversely), gated by
+  // the shared Gemini limiter, and deadline-aware (returns partial under the
+  // funnel's wall-clock budget). Fail-CLOSED per item: a judge error or a
+  // non-passing verdict drops the candidate.
+  //
+  // GRACEFUL DEGRADATION: when no LLM is configured the judge can't run, so the
+  // funnel ships the rule-filtered verified pool (R7-2 behavior) — the cheap
+  // commercial/infra + mega + liveness filters still applied, so the worst junk is
+  // already gone. A digest of rule-filtered gems beats no digest.
+  const taste: TasteContext = opts.taste ?? (await loadTasteContext());
+  const toJudge = interleaveBySource(verified).slice(0, INDEX_FUNNEL_MAX_JUDGE);
+
+  let kept: FunnelItem[];
+  let judgeStats = '';
+  if (!isLlmConfigured()) {
+    kept = toJudge;
+    judgeStats = `judge=skipped(no-llm) kept=${kept.length}`;
+    appendLog('[index-funnel] LLM not configured — shipping rule-filtered gems unjudged (graceful)');
+  } else {
+    const passed: FunnelItem[] = [];
+    let judged = 0;
+    let droppedUnsafe = 0;
+    let droppedCommercial = 0;
+    let droppedLowScore = 0;
+    let judgeFailed = 0;
+    let deadlineSkipped = 0;
+    await forEachWithConcurrency(toJudge, INDEX_FUNNEL_JUDGE_CONCURRENCY, async (item) => {
+      if (opts.deadlineMs != null && Date.now() >= opts.deadlineMs) {
+        deadlineSkipped++;
+        return; // out of budget — drop the rest (fail-closed)
+      }
+      const r = await judgeInterestingness(
+        {
+          url: item.url,
+          contentType: item.contentType,
+          title: item.title,
+          description: item.description,
+          bodySample: item.bodySample,
+        },
+        taste
+      );
+      judged++;
+      if (!r.success) {
+        judgeFailed++;
+        appendLog(`[index-funnel] JUDGE_FAIL ${registrableDomain(item.url)} -- ${r.reason}`);
+        return;
+      }
+      const v = r.verdict;
+      if (judgePasses(v)) {
+        passed.push({ ...item, judgeScore: v.interestingness });
+      } else {
+        if (!v.safe) droppedUnsafe++;
+        else if (v.commercialOrSpam) droppedCommercial++;
+        else droppedLowScore++;
+        appendLog(
+          `[index-funnel] JUDGE_DROP ${registrableDomain(item.url)} ` +
+            `(score=${v.interestingness} safe=${v.safe} commercial=${v.commercialOrSpam}) -- ${v.reason}`
+        );
+      }
+    });
+    kept = passed;
+    judgeStats =
+      `judged=${judged}/${toJudge.length} kept=${passed.length} ` +
+      `dropped(unsafe=${droppedUnsafe} commercial=${droppedCommercial} lowScore=${droppedLowScore} ` +
+      `judgeFail=${judgeFailed} deadline=${deadlineSkipped})`;
+  }
+
+  // Rank kept gems best-first by judge score (popularity score as tiebreak), then
+  // source-interleave and cap to the digest budget so the kept set stays diverse.
+  kept.sort((a, b) => (b.judgeScore ?? 0) - (a.judgeScore ?? 0) || (b.score ?? 0) - (a.score ?? 0));
+  const selected = interleaveBySource(kept).slice(0, limit);
 
   const failSummary =
     Object.entries(failTally).map(([k, v]) => `${k}=${v}`).join(' ') || 'none';
   appendLog(
     `[index-funnel] YIELD raw=${raw.length} ` +
-      `dropped(dup=${dupCount} mega=${megaCount} redirectDup=${redirectDupCount} redirectMega=${redirectMegaCount}) ` +
+      `dropped(dup=${dupCount} mega=${megaCount} commercial=${commercialCount} redirectDup=${redirectDupCount} redirectMega=${redirectMegaCount}) ` +
       `survivors=${survivors.length} verified=${toVerify.length}→${verified.length} ` +
-      `selected=${selected.length}/${limit} :: fails ${failSummary}`
+      `${judgeStats} selected=${selected.length}/${limit} :: liveness-fails ${failSummary}`
   );
   return selected;
 }
