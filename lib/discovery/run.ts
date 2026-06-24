@@ -18,6 +18,7 @@ import { runSmallWebCrawl } from './smallWeb/crawler';
 import { appendLog, readLatestBatch } from '@/lib/pipeline/storage';
 import { canonicalizeUrlForDedup, registrableDomain } from '@/lib/utils/url';
 import { loadSeenSourceDomains, isMegaSite, noveltyKey } from './novelty';
+import { loadSeenNoveltyKeys, recordSeenUrls } from '@/lib/db/discoverySeen';
 import {
   getTopicWeightsForUser,
   getAllTopicWeightsAveraged,
@@ -259,6 +260,14 @@ export async function runDiscovery(
   // dropped before the expensive eval. Loaded once per run; degrades to the
   // fixed-source set on any DB error.
   const seenDomains = await loadSeenSourceDomains(NOVELTY_LOOKBACK_ISSUES);
+  // R7-2: union the durable, PERMANENT novelty memory so a previously-surfaced
+  // find never resurfaces beyond the batch-window lookback. Empty (no-op) until
+  // migration 020 is applied — so this is safe to deploy first.
+  const durableKeys = await loadSeenNoveltyKeys();
+  for (const k of durableKeys) seenDomains.add(k);
+  if (durableKeys.size > 0) {
+    appendLog(`[discovery] durable novelty: ${durableKeys.size} permanent key(s) unioned into seen-set`);
+  }
   let notNovelCount = 0;
   let megaSiteCount = 0;
 
@@ -456,6 +465,16 @@ export async function runDiscovery(
 
   // Save updated rotation state
   await saveRotationState(updatedRotationState);
+
+  // R7-2: permanently record every surfaced one-off so it can never resurface
+  // (URL + novelty key), beyond the batch-window lookback. Best-effort and a
+  // no-op until migration 020 is applied (recordSeenUrls swallows its errors).
+  const recorded = await recordSeenUrls(
+    top.map(({ result, topic }) => ({ url: result.url, discoverySource: topic.id }))
+  );
+  if (recorded > 0) {
+    appendLog(`[discovery] durable novelty: recorded ${recorded} surfaced URL(s)`);
+  }
 
   // Map to Article objects
   const now = new Date().toISOString();

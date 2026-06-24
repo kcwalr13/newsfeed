@@ -121,8 +121,10 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · 6 TODO (R7-2…R7-7, R7-7 optional).** **Last resume point: R7-2**
-  (R4-15 still BLOCKED on Kyle's seed-vector sign-off — independent).
+  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-step a done; b–e TODO) · 5 TODO
+  (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(b)** (index-miner stream + `data/discovery_indexes.json`).
+  **Migration 020 PENDING** (R7-2(a); BLOCKED-ON-APPLY — see "Migrations awaiting Kyle"). R4-15 still BLOCKED on
+  Kyle's seed-vector sign-off (independent).
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -1225,7 +1227,31 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   novelty/dedup memory** (new DB table — every URL+domain ever seen, long lookback, never repeat), **liveness/realness
   verify** (fetch each; drop 404/parked/login-wall/SEO-farm), **type classify** (URL+page signals). Produce link-out
   **website + thread** items + their cards. **Retire `data/sources.json` as the digest supply.** **This is the
-  milestone where the digest becomes one-off gems (moltbook-class), not feed articles.** · **TODO**
+  milestone where the digest becomes one-off gems (moltbook-class), not feed articles.** · **IN-PROGRESS**
+  - **Sub-steps** (each independently gate-green + committed; see the recon note for the rationale of this order):
+    - [x] **(a)** Durable novelty/dedup memory (migration + backward-compatible module, wired into the discovery
+      novelty filter). · **DONE** (commit `COMMIT_A`) · **migration 020 BLOCKED-ON-APPLY** (see "Migrations awaiting Kyle").
+    - [ ] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
+      the digest). · **TODO ← RESUME HERE**
+    - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO**
+    - [ ] **(d)** Link-out `website` + `thread` items + their cards. · **TODO**
+    - [ ] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **TODO**
+  - **Notes — (a) durable novelty memory (DONE):** New migration `lib/db/migrations/020_discovery_seen_urls.sql`
+    (`discovery_seen_urls`: `url_canonical` PK, `novelty_key` NOT NULL, `first_seen_at`, `discovery_source`; + index on
+    `novelty_key`; idempotent `IF NOT EXISTS`). New module `lib/db/discoverySeen.ts` — `loadSeenNoveltyKeys()` /
+    `loadSeenCanonicalUrls()` (empty Set on any error) + `recordSeenUrls(items)` (JS-dedup by canonical URL, derive
+    `noveltyKey`, single-round-trip `INSERT … SELECT FROM UNNEST(...) ON CONFLICT (url_canonical) DO NOTHING`, returns
+    count). **Every function swallows errors** (incl. the table not existing), so the code is **deploy-safe before the
+    migration is applied** (degrades to today's batch-window-only novelty). Wired into `lib/discovery/run.ts`: the
+    durable novelty keys are **unioned into** the existing `seenDomains` set on read (making the novelty filter
+    PERMANENT, not just a 14-issue window), and the **surfaced `top` URLs are recorded** after each run (provenance =
+    topic id). Union done at the call site (not inside `novelty.ts`) to avoid a `novelty ↔ discoverySeen` import cycle.
+    `CLAUDE.md` migration range note bumped 019 → 020. **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing
+    warnings) · `build` EXIT=0; **targeted check against live Neon** (throwaway ts-node script, since removed) proved
+    all 3 DB calls degrade gracefully while `discovery_seen_urls` is absent (`relation … does not exist` → swallowed →
+    empty Set / 0, no throw) AND the dedup/key logic is correct (tracking-param + trailing-slash canonicalization,
+    shared-host authors distinguished, regular domains collapse). **Behavior today = unchanged** (durable store empty
+    until Kyle applies 020); after apply, novelty becomes permanent + monotonic (a shown find never resurfaces).
   - **Recon note (from the R7-1 session, 2026-06-23 — read before implementing):** Code map of what to reuse vs.
     build new, so the next session moves fast.
     - **The existing Small-Web crawler is the wrong shape — do NOT just extend it.** `lib/discovery/smallWeb/crawler.ts`
@@ -1350,17 +1376,24 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-15 | R6-2 | Kept `@/` imports in `lib/llm/` (codebase standard) and refactored site 7 (`scripts/refresh-query-banks.ts`) to the interface anyway, despite discovering the script is already non-runnable under `ts-node` | Probe confirmed `npm run refresh-query-banks` already fails before R6-2: Node runs the script under its ESM loader, which rejects the script's extensionless relative imports (`ERR_MODULE_NOT_FOUND`) — a pre-existing, unrelated breakage. Fixing it (tsconfig-paths/`-r` register or an ESM-aware runner) is out of scope for this finding ("touch only what the finding needs"). So the import style of `lib/llm/` is moot for the script's runtime; `@/` keeps the abstraction consistent with the rest of the codebase. The refactor is logic-behavior-preserving (verified by the adversarial review + the `kind`-aware skip/abort fix); the ESM breakage is flagged for a future cleanup, not silently inherited. |
 | 2026-06-15 | R5-D1 | `format` resolved **on read** (like category, P3-B2) not persisted at assembly; `ensureFormatSpread` composes with C2/C3 via a **precise per-swap floor check**, not a blanket `protect` | Persisting `format` at assembly would need a pipeline re-run to backfill existing batches and wouldn't cover discovered/historical pieces; resolving on read from readTime + source (the `categoryForArticle` precedent) is migration-free and uniform. `place` is the one exception (no derivable signal — explicit at assembly, D3). The design hinted at modelling `ensureFormatSpread` on `ensureCategorySpread`'s blanket-`protect` (never demote an unfamiliar / sole-category piece). The composition simulation proved that's actively wrong: when the displayed top is all-unfamiliar or all-distinct-category (cold-start / discovery-heavy — exactly the common case), *every* piece is protected, so the guarantee silently no-ops — the headline feature would do nothing. Replaced it with a per-swap check: demote a longread iff the resulting top still holds the C2/C3 floors, or (when a floor was already unmet on a thin pool) doesn't worsen it. This delivers the mix (efficacy 50000/50000) while never dropping a C2/C3 floor (400k runs, 0 violations). The cap's floor-guard was extended to the three format floors; faithful simulation (category⇒source, per-source cap 4) shows the fallback never needs to fire — the format floors, like the category/unfamiliar ones (R4-14), are unbreakable by the cap under realistic per-source-capped data. |
 | 2026-06-23 | R7-1 | Introduced `contentType` as a **new, parallel** taxonomy that **coexists** with the existing R5-D `ContentFormat` (incl. `'place'`) rather than replacing it; the place item carries **both** `format:'place'` and `contentType:'website'`. Stripped `discoverySource` at **both** public Article serializers (`toPublicArticle` + the inline denylist in `GET /api/articles/[id]`). Framed the sources.json/RSS/essay-evaluator retirement in `CLAUDE.md` as the R7-2/R7-3 **plan**, not as already-done. | R7-1 is mandated **behavior-preserving (no supply change yet)**. Ripping out `ContentFormat.'place'` and re-routing display-diversity/cards/read-count onto `contentType` now would be a large, behavior-changing refactor that belongs to R7-5 (the hard-rebalance assembler). Carrying both fields keeps every existing `format`-keyed path (display mix, card variant, read-count exclusion) byte-identical while the new item-type dimension is available for R7-2+ to populate and R7-5 to key the mix on — the lowest-risk migration. `discoverySource` is defined `@internal` ("never sent to the client"); the invariant is on the **field**, not one function name, and there are two client-facing Article endpoints, so locking it at both now (while no writer sets the field) is behavior-preserving today and prevents a silent provenance leak the moment R7-2 sets it (the reader route would otherwise never be revisited by R7-2's index-mining work). The retirement tense fix keeps `CLAUDE.md` factually true to the live code (the RSS pipeline + sources.json + essay evaluator are all still active as of R7-1) — the doc must not overclaim later-step work as done. |
+| 2026-06-23 | R7-2(a) | Durable novelty memory is **domain-level** (`noveltyKey` unioned into the existing `seenDomains` set) for the read filter, with a **URL-canonical** column for stronger future dedup; only the **surfaced `top`** URLs are recorded (not all evaluated candidates); the union is wired at the **call site** (`discovery/run.ts`), not inside `novelty.ts`; and the whole module is **error-swallowing / deploy-safe before apply** (BLOCKED-ON-APPLY, not held). | Domain-level keying reuses the existing novelty filter unchanged (a one-line union into `seenDomains`), so the durable store simply makes the already-correct filter **permanent** instead of a 14-issue window — minimal, consistent, monotonic. A `url_canonical` PK additionally gives exact-URL dedup for the index-miner funnel (sub-step c) where many candidates can share a still-novel domain. Recording only **surfaced** finds (not all evaluated) is correct: an evaluated-but-not-shipped candidate should be allowed to return and rank higher next run; only what Kyle has actually *seen* is permanently retired. Wiring the union in `run.ts` avoids a `novelty ↔ discoverySeen` import cycle (`discoverySeen` already imports `noveltyKey` from `novelty`). Per the migration guardrail the code is backward-compatible (every `sql` call wrapped, returns the safe default on missing-table) so it ships green before apply — verified live against Neon (the relation genuinely doesn't exist yet → all three calls swallowed cleanly). |
 
 ---
 
 ## Migrations awaiting Kyle (apply to Neon)
 _List each new migration file + the exact apply step. Code must NOT apply these to prod._
 
-> ✅ **All applied to Neon on 2026-06-12** via `npm run db:migrate` (19 migrations); verified live by
+> ✅ **001–019 applied to Neon on 2026-06-12** via `npm run db:migrate` (19 migrations); verified live by
 > the reviewer (save 200, discovery running, limiter active, NULLS-NOT-DISTINCT live). Rows kept for history.
+>
+> ⏳ **020 is NEW and PENDING (R7-2(a), 2026-06-23).** Apply with `npm run db:migrate` (preview:
+> `npm run db:migrate:status`). The app is deploy-safe before it's applied (durable novelty memory degrades to
+> a no-op — verified live: the calls swallow `relation … does not exist`). After applying, the discovery
+> novelty filter becomes permanent (a surfaced find never resurfaces). No data migration / backfill needed.
 
 | Migration file | For finding | Apply note |
 |----------------|-------------|------------|
+| `lib/db/migrations/020_discovery_seen_urls.sql` | **R7-2(a)** ⏳ **PENDING** | Creates `discovery_seen_urls` (durable, permanent novelty/dedup memory for discovery). Idempotent (`CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`). Apply via `npm run db:migrate`. **Exact SQL:** `CREATE TABLE IF NOT EXISTS discovery_seen_urls (url_canonical TEXT PRIMARY KEY, novelty_key TEXT NOT NULL, first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), discovery_source TEXT); CREATE INDEX IF NOT EXISTS idx_discovery_seen_urls_novelty_key ON discovery_seen_urls (novelty_key);` Until applied, `loadSeenNoveltyKeys()`/`recordSeenUrls()` are graceful no-ops (no behavior change). After applying, verify: run discovery once, then `SELECT COUNT(*) FROM discovery_seen_urls` > 0 and `[discovery] durable novelty: recorded N surfaced URL(s)` appears in the log. |
 | `lib/db/migrations/015_query_rotation_state.sql` | DAT-C1 | Run the file's SQL against Neon (psql or console). Idempotent (`CREATE TABLE IF NOT EXISTS`). Until applied, discovery works but the query-rotation cursor resets each run (logged as a warning, non-fatal). After applying, flip DAT-C1 to DONE. |
 | `lib/db/migrations/016_nulls_not_distinct_unique.sql` | DAT-C2 | Requires PG ≥ 15 (`SHOW server_version` to confirm; Neon qualifies). Runs in one transaction: de-dups the five identity tables, then swaps the unique constraints to `UNIQUE NULLS NOT DISTINCT`. Idempotent — safe to re-run. Until applied, anonymous upserts keep duplicating (current prod behavior, no worse). After applying, verify: repeat a like → `SELECT COUNT(*) FROM user_aesthetic_profiles WHERE user_id IS NULL` stays constant and `feedback_count` increments; then flip DAT-C2 to DONE. |
 | `lib/db/migrations/017_article_batches_gin.sql` | DAT-H3 (perf only) | Optional/low-urgency: GIN index for the cross-batch article lookup. The feature works without it; apply whenever convenient. Idempotent. |
@@ -2089,3 +2122,26 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
     design); it lays the type model + scope lock the rest of Round 7 builds on.
 - RESUME AT: **R7-2** (Discovery engine v1: index-mining + the funnel — retires `data/sources.json` as the
   digest supply). R4-15 still BLOCKED on Kyle's seed-vector sign-off (independent).
+
+### Session 2026-06-23 (cont.) — R7-2(a) durable novelty memory
+- **R7-2(a) DONE** (commit `COMMIT_A`) — durable, permanent novelty/dedup memory; first sub-step of R7-2.
+  Backward-compatible; **migration 020 BLOCKED-ON-APPLY** (deploy is safe before apply).
+  - **New migration** `lib/db/migrations/020_discovery_seen_urls.sql`: table `discovery_seen_urls`
+    (`url_canonical` PK, `novelty_key` NOT NULL, `first_seen_at`, `discovery_source`) + index on `novelty_key`.
+    Idempotent (`IF NOT EXISTS`). Added to "Migrations awaiting Kyle" with exact apply SQL.
+  - **New module** `lib/db/discoverySeen.ts`: `loadSeenNoveltyKeys()` / `loadSeenCanonicalUrls()` (empty Set on
+    any error) + `recordSeenUrls(items)` (JS-dedup by canonical URL → `noveltyKey` → one-round-trip
+    `INSERT … SELECT FROM UNNEST(...) ON CONFLICT DO NOTHING`). All error-swallowing → graceful no-op until 020
+    is applied.
+  - **Wired** in `lib/discovery/run.ts`: durable novelty keys **unioned into** `seenDomains` on read (novelty
+    becomes permanent, not a 14-issue window); surfaced `top` URLs **recorded** after each run. Union at the call
+    site (not inside `novelty.ts`) to avoid an import cycle. `CLAUDE.md` migration range 019 → 020.
+  - **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build` EXIT=0; **live targeted check
+    against Neon** (throwaway ts-node script, removed after) — all 3 DB calls degraded gracefully (`relation
+    "discovery_seen_urls" does not exist` → swallowed → empty Set / 0, no throw), and the dedup/novelty-key logic
+    is correct (tracking-param + trailing-slash canonicalization; shared-host authors distinguished; regular
+    domains collapse). Behavior today unchanged (store empty until apply); monotonic after.
+- RESUME AT: **R7-2(b)** — index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates,
+  logged, not yet in the digest). Then (c) rule-filter funnel → (d) link-out cards → (e) supply flip + live
+  product verification. **Apply migration 020 to Neon** when convenient (deploy is safe without it). R4-15 still
+  BLOCKED on Kyle's seed-vector sign-off (independent).
