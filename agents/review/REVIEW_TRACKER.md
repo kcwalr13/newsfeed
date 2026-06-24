@@ -1230,7 +1230,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   milestone where the digest becomes one-off gems (moltbook-class), not feed articles.** · **IN-PROGRESS**
   - **Sub-steps** (each independently gate-green + committed; see the recon note for the rationale of this order):
     - [x] **(a)** Durable novelty/dedup memory (migration + backward-compatible module, wired into the discovery
-      novelty filter). · **DONE** (commit `COMMIT_A`) · **migration 020 BLOCKED-ON-APPLY** (see "Migrations awaiting Kyle").
+      novelty filter). · **DONE** (commit `6183966`) · **migration 020 BLOCKED-ON-APPLY** (see "Migrations awaiting Kyle").
     - [ ] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
       the digest). · **TODO ← RESUME HERE**
     - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO**
@@ -2124,7 +2124,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   digest supply). R4-15 still BLOCKED on Kyle's seed-vector sign-off (independent).
 
 ### Session 2026-06-23 (cont.) — R7-2(a) durable novelty memory
-- **R7-2(a) DONE** (commit `COMMIT_A`) — durable, permanent novelty/dedup memory; first sub-step of R7-2.
+- **R7-2(a) DONE** (commit `6183966`) — durable, permanent novelty/dedup memory; first sub-step of R7-2.
   Backward-compatible; **migration 020 BLOCKED-ON-APPLY** (deploy is safe before apply).
   - **New migration** `lib/db/migrations/020_discovery_seen_urls.sql`: table `discovery_seen_urls`
     (`url_canonical` PK, `novelty_key` NOT NULL, `first_seen_at`, `discovery_source`) + index on `novelty_key`.
