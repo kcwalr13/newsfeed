@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db/client';
+import type { ContentType, ContentFormat } from '@/lib/types/article';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,11 @@ interface BatchSummaryArticle {
   imageUrl?: string;
   publishedAt: string;
   readTime?: number;
+  /** Destination URL — the shelf links a saved LINK-OUT gem straight out (R7-2). */
+  articleUrl?: string;
+  /** R7-2 item type + R5 format, so the shelf can detect a link-out item. */
+  contentType?: ContentType;
+  format?: ContentFormat;
 }
 
 export interface BatchSummary {
@@ -41,6 +47,9 @@ export async function GET() {
         imageUrl:    a.imageUrl    ? String(a.imageUrl)    : undefined,
         publishedAt: String(a.publishedAt ?? ''),
         readTime:    typeof a.readTime === 'number' ? a.readTime : undefined,
+        articleUrl:  a.articleUrl  ? String(a.articleUrl)  : undefined,
+        contentType: typeof a.contentType === 'string' ? (a.contentType as ContentType) : undefined,
+        format:      typeof a.format === 'string' ? (a.format as ContentFormat) : undefined,
       }));
 
       return {

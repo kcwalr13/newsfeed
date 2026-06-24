@@ -101,10 +101,57 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
     : null;
   const heroMaxHeight = isVisual ? 320 : 220;
 
+  // The standard feedback row (Pass / Underline / Read later), shared by the
+  // article card AND every link-out card (R7-2d) — so a loved one-off gem
+  // (a place like ciechanowski, a discovered site/thread) is rateable. It feeds
+  // the same /api/feedback path (centroid/concepts/Wilson). Link-out items stay
+  // out of the seven-dot read-count (app/page.tsx) but ARE in the like/dislike
+  // signal — rateable, not "read".
+  const feedbackRow = (
+    <div className="mt-5">
+      <div
+        role="radiogroup"
+        aria-label="Your response to this piece"
+        className="flex items-stretch justify-around"
+        style={{ borderTop: '1px solid var(--rule)', paddingTop: '12px' }}
+      >
+        {(['dislike', 'like', 'save'] as const).map((verb) => {
+          const meta = VERB_META[verb];
+          const isActive = feedback === verb;
+          return (
+            <button
+              key={verb}
+              onClick={() => handleVerb(verb)}
+              role="radio"
+              aria-checked={isActive}
+              className="ql-verb-btn flex-1 flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+              style={isActive ? { color: 'var(--accent)' } : undefined}
+            >
+              <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: '17px' }}>
+                {meta.verb}
+              </span>
+              <span className="ql-verb-label">{meta.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Confirmation copy */}
+      {confirmed && (
+        <p
+          className="ql-confirmation mt-3"
+          style={{ fontSize: '13px', color: 'var(--muted)' }}
+        >
+          <em>{VERB_META[confirmed].confirm}</em>
+        </p>
+      )}
+    </div>
+  );
+
   // Link-out item (R7-2): a one-off find — a whole site to wander, a thread, a
   // track. It has no body, so it links STRAIGHT OUT (new tab) rather than opening
-  // the in-app reader, with a per-type kicker + CTA. The standard feedback row
-  // (dislike/like/save) is added in R7-2d so these gems are rateable.
+  // the in-app reader, with a per-type kicker + CTA, and carries the standard
+  // feedback row alongside the CTA (R7-2d) so these gems are rateable.
   if (isLinkOut) {
     const meta = LINK_OUT_META[linkOutType];
     const blurb = article.curatorNote ?? cleanDesc(article.description ?? '');
@@ -155,6 +202,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
               </span>
             </div>
           </a>
+          {feedbackRow}
         </div>
       </article>
     );
@@ -307,45 +355,8 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
           )}
         </Link>
 
-        {/* Feedback row: Pass / Underline / Read later */}
-        <div className="mt-5">
-          <div
-            role="radiogroup"
-            aria-label="Your response to this piece"
-            className="flex items-stretch justify-around"
-            style={{ borderTop: '1px solid var(--rule)', paddingTop: '12px' }}
-          >
-            {(['dislike', 'like', 'save'] as const).map((verb) => {
-              const meta = VERB_META[verb];
-              const isActive = feedback === verb;
-              return (
-                <button
-                  key={verb}
-                  onClick={() => handleVerb(verb)}
-                  role="radio"
-                  aria-checked={isActive}
-                  className="ql-verb-btn flex-1 flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
-                  style={isActive ? { color: 'var(--accent)' } : undefined}
-                >
-                  <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: '17px' }}>
-                    {meta.verb}
-                  </span>
-                  <span className="ql-verb-label">{meta.desc}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Confirmation copy */}
-          {confirmed && (
-            <p
-              className="ql-confirmation mt-3"
-              style={{ fontSize: '13px', color: 'var(--muted)' }}
-            >
-              <em>{VERB_META[confirmed].confirm}</em>
-            </p>
-          )}
-        </div>
+        {/* Feedback row: Pass / Underline / Read later (shared with link-out cards) */}
+        {feedbackRow}
       </div>
     </article>
   );

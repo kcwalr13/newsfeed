@@ -121,13 +121,13 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-steps a+b+c done; d–e TODO) · 5 TODO
-  (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(d)** (link-out cards: add the standard feedback row —
-  dislike/like/save — to every link-out card, incl. the R5 place card; re-include link-out items in the
-  like/dislike signal). **R7-2(c) DONE:** index-funnel (liveness/realness verify + type classify + durable dedup)
-  wired into the digest as link-out items; the link-out card now links straight out for every `contentType` (not
-  just `place`). **Migration 020 APPLIED 2026-06-23** (R7-2(a); durable novelty memory now live). R4-15 still
-  BLOCKED on Kyle's seed-vector sign-off (independent).
+  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-steps a+b+c+d done; e TODO) · 5 TODO
+  (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(e)** (supply flip — retire `data/sources.json` as the
+  digest supply; agent-discovered one-offs become the supply; live product verification). **R7-2(d) DONE:** the
+  standard feedback row (dislike/like/save) now renders on every link-out card (incl. the R5 place card — the
+  R7-8(a) fix), the shelf links saved link-out gems straight out, and link-out items are in the like/dislike signal
+  (out of the read-count). **Migration 020 APPLIED 2026-06-23** (R7-2(a); durable novelty memory now live). R4-15
+  still BLOCKED on Kyle's seed-vector sign-off (independent).
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -1236,12 +1236,12 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       novelty filter). · **DONE** (commit `6183966`) · **migration 020 APPLIED 2026-06-23** (durable novelty memory live).
     - [x] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
       the digest). · **DONE** (commit `a2d8580`)
-    - [x] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **DONE** (commit `pending-c`)
-    - [ ] **(d)** Link-out `website` + `thread` items + their cards — **each card MUST include the standard feedback
+    - [x] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **DONE** (commit `9c51fb3`)
+    - [x] **(d)** Link-out `website` + `thread` items + their cards — **each card MUST include the standard feedback
       row (dislike/like/save) alongside the Explore/Read CTA** (design §10a). Fixes the R5 place card's missing
       feedback so a loved gem (e.g. ciechanowski) is rateable, and builds feedback into the new link-out cards from
       the start so the no-feedback decision never propagates. Also re-include link-out items in the like/dislike
-      signal (they stay out of the *read*-count). · **TODO**
+      signal (they stay out of the *read*-count). · **DONE** (commit `pending-d`)
     - [ ] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **TODO**
   - **Notes — (a) durable novelty memory (DONE):** New migration `lib/db/migrations/020_discovery_seen_urls.sql`
     (`discovery_seen_urls`: `url_canonical` PK, `novelty_key` NOT NULL, `first_seen_at`, `discovery_source`; + index on
@@ -1312,6 +1312,23 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     run-1's finds → re-ran → **0 resurfaced**, incl. a caught redirect-dup). reddit `.json` still 403s from this
     sandbox IP (isolated/non-fatal). Known: ad pages (carbonads) that are alive + non-mega still pass the rule
     filters — left for R7-3's interestingness/SEO-slop LLM judge, per design §4.
+  - **Notes — (d) link-out feedback row (DONE):** The standard feedback row (Pass/Underline/Read-later =
+    dislike/like/save) was extracted to a single shared `feedbackRow` element in `ArticleCard.tsx` and is now rendered
+    by BOTH the article card and the link-out card (the generalized R7-2c branch) — so every link-out gem (the R5
+    curated `place` like ciechanowski, and every discovered website/thread/…) is rateable alongside its straight-out
+    CTA. This is the design §10a / R7-8(a) fix: the R5 place card's missing feedback is reversed, and the no-feedback
+    decision can never propagate to the new cards. The row feeds the existing `/api/feedback` path unchanged
+    (centroid/concepts/Wilson); on a link-out item the aesthetic EMA + concept-graph steps simply no-op (no score / no
+    body — the shape/style axis is R7-8b), while the **like/dislike signal is recorded** (a feedback row + the source
+    Wilson the ranker reads), so the model can learn "more of that domain/shape." Link-out items remain **out of the
+    seven-dot read-count** (R7-2c, `app/page.tsx`) — rateable, not "read." **Shelf fix:** enabling `save` on link-out
+    items meant a saved gem would have linked to the in-app reader's dead "full text unavailable" stub — so the archive
+    API now projects `articleUrl`/`contentType`/`format` and the shelf (`app/archive/page.tsx`) links a saved link-out
+    item **straight out** (new tab, ↗) exactly like its feed card; saved articles still open the reader. **Verified:**
+    `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build` EXIT=0; card structure confirmed valid (the
+    feedback buttons are a sibling of the straight-out `<a>`, not nested in it); the `save`-on-link-out path is
+    graceful (no body → concept extraction skips; no score → EMA skips; no throw). Full live visual confirmation of
+    the rendered card happens at (e) (where the supply flip puts link-out gems in the displayed issue).
   - **Recon note (from the R7-1 session, 2026-06-23 — read before implementing):** Code map of what to reuse vs.
     build new, so the next session moves fast.
     - **The existing Small-Web crawler is the wrong shape — do NOT just extend it.** `lib/discovery/smallWeb/crawler.ts`
@@ -1445,6 +1462,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-24 | R7-2(c) | Index-mined finds become **LINK-OUT items only** in R7-2 (`classifyContentType` returns website/thread/music/video/find — never `article`); the in-app-readable `article` type stays sourced from the existing Brave discovery stream | The design's "long prose → article" type wants the funnel to mint readable articles, but a readable article needs aesthetic scoring + the **R7-3 interestingness/taste LLM judge** to vet it for the per-item LLM spend — neither exists in R7-2 (rule-only). Classifying a discovered prose page as `website` (link straight out to the source — an honest "go read this") keeps every funnel item free (zero LLM), bypasses body-fetch/scoring/concepts, and avoids re-introducing the essay-evaluator path the round is retiring. R7-3/R7-4 add the judge + can then promote vetted prose finds to scored `article` items. Reversible (one classifier function). |
 | 2026-06-24 | R7-2(c) | Durable novelty for funnel items = **record-on-DISPLAY** (the feed route's `after()` records the shown link-out items), NOT record-on-write like the Brave discovery path | The funnel appends more link-out candidates to a batch than will ever display (the displayed 7 are personalized + diversity-reordered per request). Recording at *write* time (Brave's pattern) would permanently retire genuinely great gems that simply ranked below today's fold — wasting them against the round's whole "find a few great one-offs" mission. Recording only the **displayed** items retires exactly what Kyle saw and leaves the rest eligible to resurface another day (re-mined, still novel until shown). The asymmetry with the Brave path is justified: Brave writes only its small `DISCOVERY_ARTICLES_PER_DAY` quota (mostly displayed), so write-time recording wastes little there. Idempotent (`ON CONFLICT DO NOTHING`); no-op before migration 020. |
 | 2026-06-24 | R7-2(c) | Pulled the link-out **straight-out routing + read-count exclusion forward from (d) into (c)**, and folded all 5 adversarial-review findings into the (c) commit; only the feedback ROW stays deferred to (d) | (c) wires funnel link-out items into the *displayed* batch, and each push deploys live — so shipping (c) without the card linking straight out would put **broken in-app-reader stubs** ("full text unavailable") on the live digest (review finding #2) and mis-count them in the seven-dot ritual (#5). The straight-out routing is therefore a correctness property of (c)'s own append, not polish for (d). Generalizing `ArticleCard`'s `place` branch to `isLinkOutItem` fixes it everywhere the card renders (feed + archive) regardless of the `href` passed. The feedback row (the R7-8(a) deliverable) is genuinely separable and stays (d). The other review fixes — post-redirect `isMegaSite` re-check (#1), dropping `discoverySource` from client-visible `media.platform` (#3), and the funnel wall-clock guard (#4) — are funnel-internal and belong in (c). |
+| 2026-06-24 | R7-2(d) | Enabling `save` on link-out cards required a **shelf fix too**: the archive API now projects `articleUrl`/`contentType`/`format` and the shelf links a saved link-out gem **straight out**, rather than to `/articles/[id]` | The (d) feedback row includes `save`, so a link-out gem can now be shelved — but the shelf rendered every saved item as `<Link href={/articles/${id}}>`, which for a body-less link-out item lands on the in-app reader's dead "full text unavailable" stub (the same regression class as R7-2c finding #2, now reachable via the shelf). The minimal, consistent fix is to make the shelf link-out-aware exactly like the feed card: detect `isLinkOutItem(item)` and render a straight-out `<a target=_blank>` (with a ↗), which needs the destination URL + type on the summary — so `BatchSummaryArticle` gains `articleUrl`/`contentType`/`format` (loosely validated, optional, back-compat for old batches that lack them). Saved articles still open the reader. The archive *issues*-tab "X/Y read" count is left as-is (a pre-existing rough metric; place items were already counted there). |
 | 2026-06-15 | R6-2 | Kept `@/` imports in `lib/llm/` (codebase standard) and refactored site 7 (`scripts/refresh-query-banks.ts`) to the interface anyway, despite discovering the script is already non-runnable under `ts-node` | Probe confirmed `npm run refresh-query-banks` already fails before R6-2: Node runs the script under its ESM loader, which rejects the script's extensionless relative imports (`ERR_MODULE_NOT_FOUND`) — a pre-existing, unrelated breakage. Fixing it (tsconfig-paths/`-r` register or an ESM-aware runner) is out of scope for this finding ("touch only what the finding needs"). So the import style of `lib/llm/` is moot for the script's runtime; `@/` keeps the abstraction consistent with the rest of the codebase. The refactor is logic-behavior-preserving (verified by the adversarial review + the `kind`-aware skip/abort fix); the ESM breakage is flagged for a future cleanup, not silently inherited. |
 | 2026-06-15 | R5-D1 | `format` resolved **on read** (like category, P3-B2) not persisted at assembly; `ensureFormatSpread` composes with C2/C3 via a **precise per-swap floor check**, not a blanket `protect` | Persisting `format` at assembly would need a pipeline re-run to backfill existing batches and wouldn't cover discovered/historical pieces; resolving on read from readTime + source (the `categoryForArticle` precedent) is migration-free and uniform. `place` is the one exception (no derivable signal — explicit at assembly, D3). The design hinted at modelling `ensureFormatSpread` on `ensureCategorySpread`'s blanket-`protect` (never demote an unfamiliar / sole-category piece). The composition simulation proved that's actively wrong: when the displayed top is all-unfamiliar or all-distinct-category (cold-start / discovery-heavy — exactly the common case), *every* piece is protected, so the guarantee silently no-ops — the headline feature would do nothing. Replaced it with a per-swap check: demote a longread iff the resulting top still holds the C2/C3 floors, or (when a floor was already unmet on a thin pool) doesn't worsen it. This delivers the mix (efficacy 50000/50000) while never dropping a C2/C3 floor (400k runs, 0 violations). The cap's floor-guard was extended to the three format floors; faithful simulation (category⇒source, per-source cap 4) shows the fallback never needs to fire — the format floors, like the category/unfamiliar ones (R4-14), are unbreakable by the cap under realistic per-source-capped data. |
 | 2026-06-23 | R7-1 | Introduced `contentType` as a **new, parallel** taxonomy that **coexists** with the existing R5-D `ContentFormat` (incl. `'place'`) rather than replacing it; the place item carries **both** `format:'place'` and `contentType:'website'`. Stripped `discoverySource` at **both** public Article serializers (`toPublicArticle` + the inline denylist in `GET /api/articles/[id]`). Framed the sources.json/RSS/essay-evaluator retirement in `CLAUDE.md` as the R7-2/R7-3 **plan**, not as already-done. | R7-1 is mandated **behavior-preserving (no supply change yet)**. Ripping out `ContentFormat.'place'` and re-routing display-diversity/cards/read-count onto `contentType` now would be a large, behavior-changing refactor that belongs to R7-5 (the hard-rebalance assembler). Carrying both fields keeps every existing `format`-keyed path (display mix, card variant, read-count exclusion) byte-identical while the new item-type dimension is available for R7-2+ to populate and R7-5 to key the mix on — the lowest-risk migration. `discoverySource` is defined `@internal` ("never sent to the client"); the invariant is on the **field**, not one function name, and there are two client-facing Article endpoints, so locking it at both now (while no writer sets the field) is behavior-preserving today and prevents a silent provenance leak the moment R7-2 sets it (the reader route would otherwise never be revisited by R7-2's index-mining work). The retirement tense fix keeps `CLAUDE.md` factually true to the live code (the RSS pipeline + sources.json + essay evaluator are all still active as of R7-1) — the doc must not overclaim later-step work as done. |
@@ -2240,7 +2258,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   verification. **Apply migration 020 to Neon** when convenient (deploy safe without it). R4-15 still BLOCKED.
 
 ### Session 2026-06-24 — R7-2(c) rule-filter funnel + wire into the digest
-- **R7-2(c) DONE** (commit `pending-c`) — the cheap, no-LLM gauntlet that turns raw index-mined outbound links into
+- **R7-2(c) DONE** (commit `9c51fb3`) — the cheap, no-LLM gauntlet that turns raw index-mined outbound links into
   verified link-out digest items, wired **additively** alongside the fixed/Brave supply (the supply flip is (e)).
   - **New** `lib/discovery/indexFunnel.ts`: `runIndexFunnel()` = mine → cheap filters (durable canonical/novelty-key
     dedup · `isMegaSite` drop · one-per-domain) → `verifyLiveness()` (drop 404/parked/login-wall/bot-challenge/empty;
@@ -2264,3 +2282,22 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   (incl. the R5 place card — the R7-8(a) fix so a loved gem like ciechanowski is rateable); re-include link-out items
   in the like/dislike signal (they stay out of the read-count). Then (e) supply flip + live product verification.
   R4-15 still BLOCKED on Kyle's seed-vector sign-off.
+
+### Session 2026-06-24 (cont.) — R7-2(d) link-out feedback row
+- **R7-2(c) committed `9c51fb3`** (hash back-filled above).
+- **R7-2(d) DONE** (commit `pending-d`) — the standard feedback row (dislike/like/save) now renders on every
+  link-out card.
+  - **`ArticleCard.tsx`**: extracted the feedback row to one shared `feedbackRow` element; rendered by BOTH the
+    article card and the generalized link-out card — so the R5 `place` card (ciechanowski et al.) and every discovered
+    website/thread/… gem are rateable alongside the straight-out CTA (design §10a / R7-8(a)). Feeds `/api/feedback`
+    unchanged; like/dislike is recorded (source Wilson), EMA/concept steps no-op on body-less items (shape/style axis
+    = R7-8b). Link-out items stay out of the seven-dot read-count (R7-2c) but ARE in the like/dislike signal.
+  - **Shelf fix:** enabling `save` on link-out items meant a saved gem would have opened the dead in-app-reader stub →
+    `app/api/archive/route.ts` now projects `articleUrl`/`contentType`/`format` and `app/archive/page.tsx` links a
+    saved link-out item straight out (↗), saved articles still open the reader.
+  - **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build` EXIT=0; card structure valid
+    (feedback buttons are a sibling of the `<a>`, not nested); `save`-on-link-out path graceful (no throw). Full live
+    visual confirmation at (e).
+- RESUME AT: **R7-2(e)** — supply flip: retire `data/sources.json` as the digest supply; agent-discovered one-offs
+  (index-funnel link-out gems + the Brave essay stream) become the supply; **live product verification** (the digest
+  should now be real one-off gems, not feed articles). Then R7-3+. R4-15 still BLOCKED on Kyle's seed-vector sign-off.

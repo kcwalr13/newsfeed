@@ -12,6 +12,7 @@ function cleanDesc(text: string): string {
 }
 import { getAllFeedback } from '@/lib/feedback/store';
 import { localTodayString } from '@/lib/utils/localDate';
+import { isLinkOutItem } from '@/lib/types/article';
 import type { BatchSummary } from '@/app/api/archive/route';
 
 type Tab = 'issues' | 'shelf';
@@ -332,57 +333,84 @@ export default function ArchivePage() {
                   </p>
                 </div>
 
-                {shelfItems.map((item) => (
-                  <div key={item.id}>
-                    <hr className="ql-rule" />
-                    <div className="py-4">
-                      <div className="flex items-baseline justify-between gap-4 mb-2">
-                        <span
-                          className="ql-mono"
-                          style={{ fontSize: '8px', color: 'var(--muted)', letterSpacing: '0.14em' }}
-                        >
-                          {item.sourceName.toUpperCase()}
-                        </span>
-                        <span
-                          className="ql-mono"
-                          style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '0.12em', whiteSpace: 'nowrap' }}
-                        >
-                          {daysAgo(item.batchDate).toUpperCase()}
-                        </span>
-                      </div>
-
-                      <Link
-                        href={`/articles/${item.id}`}
-                        className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
-                        style={{ textDecoration: 'none' }}
+                {shelfItems.map((item) => {
+                  // A saved LINK-OUT gem (R7-2: place / discovered site / thread)
+                  // has no in-app reader — it links STRAIGHT OUT to its
+                  // destination, exactly like its feed card. A saved article
+                  // opens the in-app reader as before.
+                  const linkOut = isLinkOutItem(item);
+                  const innerContent = (
+                    <>
+                      <h3
+                        className="ql-serif"
+                        style={{ fontSize: '19px', fontStyle: 'italic', fontWeight: 500, color: 'var(--fg)', lineHeight: 1.3 }}
                       >
-                        <h3
-                          className="ql-serif"
-                          style={{ fontSize: '19px', fontStyle: 'italic', fontWeight: 500, color: 'var(--fg)', lineHeight: 1.3 }}
-                        >
-                          {item.title}
-                        </h3>
-                        {item.description && (
-                          <p
-                            className="ql-serif mt-1"
-                            style={{
-                              fontSize: '15px',
-                              fontStyle: 'italic',
-                              color: 'var(--muted)',
-                              lineHeight: 1.5,
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                            }}
-                          >
-                            {cleanDesc(item.description)}
-                          </p>
+                        {item.title}
+                        {linkOut && (
+                          <span style={{ color: 'var(--accent)', fontStyle: 'normal', marginLeft: '4px' }}>↗</span>
                         )}
-                      </Link>
+                      </h3>
+                      {item.description && (
+                        <p
+                          className="ql-serif mt-1"
+                          style={{
+                            fontSize: '15px',
+                            fontStyle: 'italic',
+                            color: 'var(--muted)',
+                            lineHeight: 1.5,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {cleanDesc(item.description)}
+                        </p>
+                      )}
+                    </>
+                  );
+                  return (
+                    <div key={item.id}>
+                      <hr className="ql-rule" />
+                      <div className="py-4">
+                        <div className="flex items-baseline justify-between gap-4 mb-2">
+                          <span
+                            className="ql-mono"
+                            style={{ fontSize: '8px', color: 'var(--muted)', letterSpacing: '0.14em' }}
+                          >
+                            {item.sourceName.toUpperCase()}
+                          </span>
+                          <span
+                            className="ql-mono"
+                            style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '0.12em', whiteSpace: 'nowrap' }}
+                          >
+                            {daysAgo(item.batchDate).toUpperCase()}
+                          </span>
+                        </div>
+
+                        {linkOut && item.articleUrl ? (
+                          <a
+                            href={item.articleUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+                            style={{ textDecoration: 'none' }}
+                          >
+                            {innerContent}
+                          </a>
+                        ) : (
+                          <Link
+                            href={`/articles/${item.id}`}
+                            className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
+                            style={{ textDecoration: 'none' }}
+                          >
+                            {innerContent}
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <hr className="ql-rule" />
                 <p
