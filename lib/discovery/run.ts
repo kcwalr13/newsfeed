@@ -93,11 +93,17 @@ function selectTopics(
  * @param fixedArticleUrls - Canonical URLs of articles already in the fixed pipeline.
  * @param userId - Optional user ID for user-specific topic weights.
  * @param deviceId - Optional device ID for anonymous topic weights.
+ * @param deadlineMs - Optional absolute epoch-ms after which the expensive
+ *   body+LLM eval loop stops starting new evals and returns the essays scored so
+ *   far. Lets a slow run degrade to PARTIAL essays (so ≥1 survives for the
+ *   exactly-1-essay rule) instead of being hard-cut to [] by the caller's outer
+ *   race — which would lose all eval work AND leave 0 essays (R7-3 review).
  */
 export async function runDiscovery(
   fixedArticleUrls: Set<string>,
   userId?: string | null,
-  deviceId?: string | null
+  deviceId?: string | null,
+  deadlineMs?: number
 ): Promise<Article[]> {
   appendLog(`[discovery] Starting discovery run. Topics available: ${DISCOVERY_TOPICS.length}`);
 
@@ -350,7 +356,16 @@ export async function runDiscovery(
   // atomic between awaits; `qualified` is sorted by composite below, so its
   // completion-order here doesn't matter. (`llmWallTimeMs` now sums per-call
   // durations across overlapping calls — a cumulative figure, not wall time.)
+  let deadlineSkipped = 0;
   await forEachWithConcurrency(toEvaluate, DISCOVERY_LLM_CONCURRENCY, async ({ topic, result }) => {
+    // Internal wall-clock deadline (R7-3): stop starting new evals past it so the
+    // essays scored so far survive (≥1 for the exactly-1-essay rule) instead of
+    // the caller's outer race hard-cutting the whole run to []. The selection +
+    // mapping below runs on whatever `qualified` holds.
+    if (deadlineMs != null && Date.now() >= deadlineMs) {
+      deadlineSkipped++;
+      return;
+    }
     stats.candidatesAttempted++;
 
     // Group B: body text extraction
@@ -436,7 +451,7 @@ export async function runDiscovery(
   // below-floor count when the last-resort backfill had to dip under the floor.
   const yieldLine =
     `[discovery] YIELD candidatesFound=${allCandidatePairs.length} ` +
-    `megaSite=${megaSiteCount} notNovel=${notNovelCount} gatePassed=${toProcess.length} evaluated=${toEvaluate.length} scored=${qualified.length} ` +
+    `megaSite=${megaSiteCount} notNovel=${notNovelCount} gatePassed=${toProcess.length} evaluated=${toEvaluate.length} deadlineSkipped=${deadlineSkipped} scored=${qualified.length} ` +
     `aboveThreshold=${aboveThreshold.length} aboveFloor=${aboveFloor.length} ` +
     `slotsFilled=${top.length}/${DISCOVERY_ARTICLES_PER_DAY} belowFloor=${belowFloorFilled} ` +
     `(threshold=${LLM_EVAL_THRESHOLD} floor=${LLM_EVAL_FLOOR})`;

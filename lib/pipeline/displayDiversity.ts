@@ -133,64 +133,57 @@ export function ensureCategorySpread(
 
 /**
  * Enforces the EXACTLY-ONE-ESSAY hard rule (Kyle, 2026-06-24): the displayed
- * issue (top `displaySize`) contains precisely ONE `article`-type essay — never
- * 0, never 2+. Tangent is a discovery agent whose dominant supply is one-off
- * link-out gems; exactly one readable essay anchors each issue. An "essay" is any
- * piece that is NOT a link-out item (`!isLinkOutItem` — Brave-discovered articles
- * with a body / the in-app reader; link-out gems + the curated place are not).
+ * issue (the first `displaySize` of the returned list — the client slices to
+ * exactly that) contains precisely ONE `article`-type essay — never 0, never 2+.
+ * Tangent is a discovery agent whose dominant supply is one-off link-out gems;
+ * exactly one readable essay anchors each issue. An "essay" is any piece that is
+ * NOT a link-out item (`!isLinkOutItem` — Brave-discovered articles with a body /
+ * the in-app reader; link-out gems + the curated place are not).
  *
- * A pure reorder across the fold (never drops, never shrinks the issue):
- *  - exactly 1 essay in the top → no-op.
- *  - >1 essay → keep the highest-ranked essay; demote each excess essay
- *    (lowest-ranked first), promoting the highest-ranked below-fold link-out gem
- *    into its slot.
- *  - 0 essays → promote the highest-ranked below-fold essay, demoting the
- *    lowest-ranked top link-out gem (skipping exploration slots where possible).
- * Degrades to a no-op when the pool can't satisfy the count (0 essays anywhere,
- * or too few gems to swap excess essays for) rather than under-filling the issue
- * — a gem-dominant supply makes both shortfalls rare.
+ * Mechanism — keep the highest-ranked essay, DROP the rest from the displayed
+ * list, and rebuild as [non-essays in their (already diversity-ordered) rank
+ * order, with the kept essay inserted at its rank position but clamped into the
+ * window]. This GUARANTEES the displayed top-`displaySize` holds exactly one essay
+ * regardless of gem supply: when the non-essay pool can't fill the window the
+ * issue is simply SHORTER (a short gem+essay issue beats an essay-wall — design §4
+ * graceful degradation), and a below-fold best essay is promoted into the window.
+ * Returns `ranked` unchanged only when there are 0 essays anywhere (the supply
+ * yielded none — can't manufacture one) or it's already correct.
  *
- * Self-contained (R7-3, pulled forward from R7-5). R7-5 folds this into the full
- * `ensureTypeSpread` (≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE` types + a wildcard
- * slot) and re-proves the composition (incl. the consecutive-source cap) via the
- * R5-D1 simulation harness — this minimal version just nails the essay quota.
+ * Dropping the excess essays from the DISPLAY (not the batch — they stay in the
+ * stored batch JSON and can resurface; durable novelty records only DISPLAYED
+ * items) is safe and order-preserving: the non-essays keep their relative order,
+ * so the C2/C3 + consecutive-source-cap work upstream is preserved (every link-out
+ * item is a distinct source — the funnel keeps one-per-domain and the place is
+ * unique — so removing an essay between two gems can't create a same-source run).
+ *
+ * Self-contained (R7-3, pulled forward from R7-5). KNOWN residual: dropping an
+ * essay can still drop an R5-D format floor (e.g. the only `short` piece was an
+ * essay) — R7-5 folds this into the full `ensureTypeSpread`
+ * (≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE` types + a wildcard slot) and re-proves
+ * the whole composition via the R5-D1 simulation harness. This minimal version
+ * nails only the (hard) essay quota.
  */
 export function ensureExactlyOneArticle(ranked: Article[], displaySize: number): Article[] {
   const isEssay = (a: Article) => !isLinkOutItem(a);
-  const top = ranked.slice(0, displaySize);
-  const below = ranked.slice(displaySize);
-  const essaysInTop = top.filter(isEssay);
-  if (essaysInTop.length === 1) return ranked;
+  const essays = ranked.filter(isEssay);
+  // 0 essays anywhere → can't place one (graceful — the supply yielded none).
+  if (essays.length === 0) return ranked;
+  // Exactly one essay total AND it already sits in the displayed window → done.
+  // (With >1 essay we must act even if the window currently shows one, since the
+  // slice could otherwise include a second.)
+  if (essays.length === 1 && ranked.slice(0, displaySize).some(isEssay)) return ranked;
 
-  const topSet = new Set(top);
-
-  if (essaysInTop.length === 0) {
-    const essayBelow = below.find(isEssay);
-    if (!essayBelow) return ranked; // no essay anywhere → can't place one (graceful)
-    // Demote the lowest-ranked top link-out gem; avoid exploration slots first.
-    const reversedTop = [...top].reverse();
-    const demote =
-      reversedTop.find((a) => isLinkOutItem(a) && a.explorationSlotType == null) ??
-      reversedTop.find((a) => isLinkOutItem(a));
-    if (!demote) return ranked;
-    topSet.delete(demote);
-    topSet.add(essayBelow);
-  } else {
-    // >1 essay: keep the highest-ranked (essaysInTop is in rank order), demote the
-    // rest, each replaced by the highest-ranked below-fold link-out gem.
-    const excess = essaysInTop.slice(1);
-    const gemsBelow = below.filter(isLinkOutItem);
-    let gi = 0;
-    for (const essay of excess) {
-      if (gi >= gemsBelow.length) break; // no gem to swap → leave it (don't shrink)
-      topSet.delete(essay);
-      topSet.add(gemsBelow[gi++]);
-    }
+  const keep = essays[0]; // highest-ranked essay anchors the issue
+  const keepIdx = ranked.indexOf(keep);
+  let nonEssaysAboveKeep = 0;
+  for (let i = 0; i < keepIdx; i++) {
+    if (!isEssay(ranked[i])) nonEssaysAboveKeep++;
   }
-
-  const topArr = ranked.filter((a) => topSet.has(a));
-  const restArr = ranked.filter((a) => !topSet.has(a));
-  return [...topArr, ...restArr];
+  const insertAt = Math.min(nonEssaysAboveKeep, Math.max(0, displaySize - 1));
+  const out = ranked.filter((a) => !isEssay(a));
+  out.splice(insertAt, 0, keep);
+  return out;
 }
 
 /** Options for the content-format mix guarantee (R5-D). */

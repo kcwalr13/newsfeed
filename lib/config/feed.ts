@@ -40,17 +40,21 @@ export const MAX_LONGREADS_IN_ISSUE = 5;
 
 /**
  * EXACTLY how many `article`-type (essay) pieces a displayed issue contains —
- * the HARD RULE (Kyle, 2026-06-24): precisely ONE, never 0, never 2+. A precise
- * quota, not a `≤N` cap (it replaced the R7-2e `MAX_ARTICLES_IN_ISSUE`=3 cap).
- * Tangent is a discovery agent: one-off link-out gems (websites/web-toys/threads/
- * …) dominate the issue and exactly one readable essay anchors it.
+ * the HARD RULE (Kyle, 2026-06-24): precisely ONE. A precise quota, not a `≤N`
+ * cap (it replaced the R7-2e `MAX_ARTICLES_IN_ISSUE`=3 cap). Tangent is a
+ * discovery agent: one-off link-out gems (websites/web-toys/threads/…) dominate
+ * the issue and exactly one readable essay anchors it.
  *
  * Enforced at the DISPLAY layer by `ensureExactlyOneArticle` (composed in
  * `resolveDisplayedFeed`), NOT as a supply cap — the pipeline keeps ALL scored
  * essays in the batch so ≥1 always survives to be placed (the 2026-06-24 live run
- * showed 0 essays, which this rule fixes). R7-5 folds this into the full
- * `ensureTypeSpread` (≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE` types + a wildcard
- * slot) and re-proves composition with the R5-D1 simulation harness. */
+ * showed 0 essays, which this rule fixes). It keeps the best essay and DROPS the
+ * rest from the display, so the displayed top is NEVER 2+ essays (a gem-poor day
+ * just yields a shorter issue). The only way the display shows 0 essays is a total
+ * supply failure — the batch contains no essay at all (discovery yielded none);
+ * the supply-keep minimizes that. R7-5 folds this into the full `ensureTypeSpread`
+ * (≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE` types + a wildcard slot) and re-proves
+ * composition with the R5-D1 simulation harness. */
 export const ARTICLES_PER_ISSUE = 1;
 
 /**
@@ -209,6 +213,18 @@ export const INDEX_FUNNEL_BUDGET_MS = 90_000;
 export const INDEX_FUNNEL_MAX_JUDGE = LLM_PROVIDER === 'gemini' ? 12 : 30;
 export const INDEX_FUNNEL_JUDGE_CONCURRENCY = LLM_PROVIDER === 'gemini' ? 2 : 4;
 export const INDEX_FUNNEL_JUDGE_THRESHOLD = 3;
+
+/**
+ * Fraction of the funnel's remaining wall-clock budget the LIVENESS phase may use
+ * before it stops fetching, reserving the rest for the judge (R7-3). Without this,
+ * a slow-network liveness phase (up to INDEX_FUNNEL_MAX_VERIFY × the 8s fetch
+ * timeout) could consume the whole budget and leave the judge no time — and the
+ * outer Promise.race would then hard-cut the run to zero gems. 0.5 splits the
+ * remaining budget evenly between liveness (HTTP) and the judge (LLM); both phases
+ * then self-limit and the funnel returns its best partial set instead of losing
+ * everything to the outer race.
+ */
+export const INDEX_FUNNEL_LIVENESS_BUDGET_FRACTION = 0.5;
 
 /**
  * How many destinations the LLM agentic stream (R7-3 stream 2) proposes per run.

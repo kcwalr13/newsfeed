@@ -1426,8 +1426,8 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   LLM.** Adds true wildcards + the real quality bar. **Must-reject test targets from R7-2's live run (2026-06-24):
   `carbonads.net` (ad network), `bunny.net` (CDN corp site), `krea.ai` (commercial product) — the judge has to drop
   these alive-but-junky pages the rule funnel let through.** · **DONE (a–c)** (commits `a84a6de` · `ce4cabc` ·
-  `pending-C`) · **Live LLM validation (the model's verdicts on the 3 junk targets + a live gem, and the live
-  end-to-end gem digest) is deferred to the Gemini deploy/cron** — no working LLM locally (Anthropic out of credits,
+  `ecde07d`; adversarial-review fixes `pending-D`) · **Live LLM validation (the model's verdicts on the 3 junk targets
+  + a live gem, and the live end-to-end gem digest) is deferred to the Gemini deploy/cron** — no working LLM locally (Anthropic out of credits,
   no `GEMINI_API_KEY`); the rule backstop drops carbonads/bunny deterministically and the gate/parse logic + a
   krea-class commercial verdict are proven via a mock provider (project's standing pattern). **Scope note:** the judge
   is the universal gate for the **funnel/link-out streams** (where the junk targets live); the single Brave essay keeps
@@ -1443,7 +1443,42 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       drops the must-reject junk targets (carbonads/bunny/krea) + safety/spam/NSFW; cheap commercial/infra denylist
       backstop. · **DONE** (commit `ce4cabc`)
     - [x] **(c)** **LLM agentic stream 2** (LLM-proposed gems per rotating theme → fetch-and-verify) feeding the funnel
-      through the judge. · **DONE** (commit `pending-C`)
+      through the judge. · **DONE** (commit `ecde07d`)
+    - [x] **(d)** **Adversarial-review fixes** (7-dimension workflow over the a–c diff, find→verify, 23 agents → 7
+      confirmed findings, all fixed). · **DONE** (commit `pending-D`)
+  - **Notes — (d) adversarial-review fixes (DONE):** A workflow reviewed the a–c diff across 7 dimensions (essay-rule,
+    judge, funnel, injection, budget, types) with adversarial per-finding verification; **7 confirmed, all fixed:**
+    1. **(HIGH) "never 2+ essays" wasn't guaranteed on a gem-poor batch.** The old swap-based reorder couldn't push
+       excess essays out of the displayed window when there were no below-fold gems (and the client slices a FIXED 7),
+       so an essay-only/thin batch showed 2–4 essays. **Fix:** `ensureExactlyOneArticle` rewritten to keep the
+       highest-ranked essay and **DROP the rest from the displayed list** (rebuild = non-essays in rank order + the kept
+       essay clamped into the window). Now the displayed top holds **exactly one** essay regardless of gem supply — a
+       gem-poor day just yields a SHORTER issue (design §4 graceful degradation); a below-fold best essay is promoted in.
+       Dropping is display-only (batch JSON intact; durable memory records only displayed items) and order-preserving
+       (link-out items are all distinct sources, so the cap/C2/C3 work upstream is preserved).
+    2. **(MED) `railway.app` over-broad in the commercial denylist** — Railway user apps live at `*.up.railway.app`
+       (registrable domain `railway.app`), so denylisting it killed hosted gems. **Fix:** denylist the corporate apex
+       `railway.com` instead; add `railway.app` (+ `onrender.com`/`herokuapp.com`/`fly.dev`) to `SHARED_HOSTS` for
+       per-author novelty. (carbonads/bunny still dropped; verified.)
+    3. **(MED) funnel liveness phase had no deadline** — only the judge did, so a slow-network liveness run could
+       blow the budget and the outer race would hard-cut the funnel to []. **Fix:** `INDEX_FUNNEL_LIVENESS_BUDGET_FRACTION`
+       (0.5) caps liveness to half the remaining budget, reserving the rest for the judge; the funnel returns its best
+       partial set.
+    4. **(MED) discovery had no internal deadline** — the outer race hard-cut it to [], discarding all essay-eval work
+       AND leaving 0 essays (the exact bug R7-3a fixes). **Fix:** `runDiscovery` takes a `deadlineMs`; the body+LLM loop
+       stops past it and returns the essays scored so far; the pipeline passes `discoveryBudgetMs − 10s`.
+    5. **(LOW) `topConcepts` (LLM-derived from scraped pages) sat OUTSIDE the judge/hunt fence** — a second-order
+       (laundered) injection channel that `curatorNoteGenerator` already fences. **Fix:** sanitize labels at the
+       `tasteContext` boundary (strip control chars/newlines, clamp 60); fence the taste lines INSIDE the judge prompt
+       (consistent with curatorNote); correct the judge header comment. Hunt relies on the boundary sanitization.
+    6/7. **(LOW/MED) `ensureExactlyOneArticle` composition** — the drop rewrite (#1) resolves the consecutive-source-cap
+       interaction (non-essays keep order; all distinct sources). **Documented residual:** dropping an essay can still
+       drop an R5-D format floor (the only `short` was an essay) — explicitly deferred to **R7-5**'s `ensureTypeSpread`
+       + R5-D1 simulation re-proof; comments softened to say so.
+    **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build` EXIT=0; **16/16 targeted checks PASS**
+    — exactly-1-essay now holds on the essay-only/thin batches that were the HIGH bug (shows exactly 1, issue shortens),
+    keeps the highest-ranked essay, no dup/phantom; denylist drops carbonads/bunny/railway.com but spares
+    `*.railway.app`/`netlify.app`/`fly.dev` gems. Judge fences taste (2 `wrapUntrusted` calls).
   - **Notes — (c) LLM agentic stream (DONE):** New `lib/discovery/llmHunt.ts` — `runLlmHunt(taste)` asks the LLM to
     **propose** lesser-known one-off destinations for a rotating, taste-anchored theme (`pickHuntAngle(dayOfMonth)`
     rotates 7 angles spanning the type families — sites/web-toys/blogs/curiosities/music/video/threads — stable within
@@ -1547,6 +1582,8 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
 
+| 2026-06-24 | R7-3(d) | The exactly-1-essay rule **DROPS** excess essays from the displayed list (not a pure reorder) to make "never 2+" unconditional; a gem-poor day yields a SHORTER issue rather than an essay-wall | The adversarial review proved the original swap-reorder couldn't honor "never 2+" because the client slices a FIXED `ISSUE_DISPLAY_SIZE` and a gem-poor batch has no below-fold gem to swap excess essays for — so 2–4 essays showed. Kyle's rule is HARD ("never 2+"); the only way to guarantee it when the non-essay pool can't fill the window is to drop the excess essays from the *display* (they stay in the batch JSON, durable memory records only displayed items, so they can resurface). A short gem+essay issue beats an essay-wall — the design (§4) explicitly endorses "a short digest of real gems beats a padded one." Dropping is order-preserving for the upstream cap/C2/C3 because every link-out item is a distinct source (funnel one-per-domain + unique place), so removing an essay between two gems can't create a same-source run. The residual R5-D format-floor interaction (a dropped essay was the only `short`) is explicitly R7-5's `ensureTypeSpread` + simulation re-proof, per the session brief's "do the self-contained part, note the rest for R7-5." |
+| 2026-06-24 | R7-3(d) | Gave BOTH the index funnel's liveness phase and `runDiscovery` internal wall-clock deadlines (not just the judge), so a slow run returns PARTIAL best-effort work instead of the outer `Promise.race` hard-cutting it to [] | The review showed the R7-3 internal deadline only guarded the judge — a slow-network liveness phase (up to ~56s) or a slow discovery eval phase could overrun the budget, the outer race would fire, and ALL the funnel/discovery work (incl. the expensive LLM evals) would be discarded; worse, a discovery hard-cut to [] leaves 0 essays — the exact failure the exactly-1-essay rule exists to fix. Mirroring the funnel-judge's existing `deadlineMs` pattern (and the per-article `tryConsumeLlm` deadline) for both phases is consistent and keeps the always-write/graceful-degradation invariant: each phase self-limits and returns what it has, the outer race becomes a rarely-fired backstop. Split the funnel budget 50/50 between liveness and the judge (`INDEX_FUNNEL_LIVENESS_BUDGET_FRACTION`) so neither starves the other under Gemini's tight per-run budget. |
 | 2026-06-24 | R7-3(c) | Stream 2 lives **inside the funnel** (runIndexFunnel calls runIndexMining + runLlmHunt concurrently and folds both into one raw pool), NOT as a separate pipeline step; theme rotates by **UTC day-of-month** (not Math.random / a DB cursor); the proposal call is **not** wrapUntrusted-fenced | The funnel already owns stream 1 (it calls runIndexMining internally) and already loads taste (for the judge), so folding stream 2 in beside it reuses the taste load + the entire cheap-filter→verify→judge gauntlet for free and needs zero pipeline change — the proposals get verified+judged exactly like mined candidates (the design's "every proposed URL is fetched and verified before it can advance"). Day-of-month rotation is stable within a UTC day (re-run-safe, like the R5-D3 place cadence's date-keying) while still rotating across days, without adding a DB cursor table (no migration) — variety accrues over days. The proposal call carries no fetched web page (only Kyle's trusted concepts + our angle, exactly like the query-bank script site 7 R6-2 exempted), so wrapUntrusted is not required there; the untrusted surface is the fetched destination pages, which the judge fences. (A test asserts the proposal prompt contains no `<untrusted_content>` fence, locking this in.) |
 | 2026-06-24 | R7-3(b) | The judge gates the **funnel/link-out streams** (where the junk targets live — R7-2 was rule-only there); the **Brave essay stream keeps its 5-dim `llmEvaluator`** for now (NOT replaced this commit). Added a cheap `COMMERCIAL_INFRA_DENYLIST` rule backstop AND made the judge the LLM gate; flags are **fail-closed** | The session's must-reject targets (carbonads/bunny/krea) are all link-out funnel items, and R7-2's funnel had **no** LLM gate at all — so adding the judge there is the high-value, junk-fixing change. The Brave essay path already has a strong, well-tuned 5-dim LLM gate (essays aren't the junk problem); swapping its threshold/floor/below-floor selection logic onto the new 1–5 interestingness scale is a behavior-changing refactor with real regression risk and **zero** junk-rejection benefit, so it's deferred (CLAUDE.md ground rule: "when in doubt about scope, do less and document"). The "universal gate" intent is met where it matters — the dominant gem supply (now exactly-1-essay) is judge-gated. The cheap denylist is **defense-in-depth** (design §4 "domain reputation lists"): it drops obvious ad/CDN/infra junk with zero LLM (and keeps the digest junk-free even if the LLM is down), while the LLM judge handles the arbitrary long tail (product pages like krea.ai, SEO slop). Fail-closed flags (missing → unsafe+commercial) follow the design's "when unsure, drop" — a personal digest should never surface something jarring or commercial. |
 | 2026-06-24 | R7-3(b) | **Live LLM-judge validation deferred to the Gemini deploy**; locally verified the rule backstop (deterministic) + the gate/parse logic (mock provider) + that the request format is valid (reaches Anthropic, rejected only for billing) | No working LLM is available locally — the committed provider is Anthropic (out of credits → `400 "credit balance is too low"`) and there is no `GEMINI_API_KEY` in `.env.local`. This is the project's standing constraint (R5-C3/R6/R7-2e all deferred representative LLM validation to the Vercel/Gemini deploy). carbonads + bunny are dropped deterministically by the rule backstop (no LLM needed), and the gate logic that drops a krea-class commercial verdict is proven with a mock provider; the only thing that can't run locally is the *real model's* verdict on krea.ai + a live gem, which the next cron/refresh on Gemini exercises. I did NOT hardcode krea.ai onto the rule denylist to force a deterministic local drop — that would be test-gaming (krea.ai is a product page, the LLM judge's job), not a principled infra entry. |
@@ -2514,7 +2551,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 
 ### Session 2026-06-24 (cont.) — R7-3(c) LLM agentic stream ✅ R7-3 COMPLETE
 - **R7-3(b) committed `ce4cabc`** (hash back-filled above).
-- **R7-3(c) DONE** (commit `pending-C`) — **R7-3 complete (a–c).** New `lib/discovery/llmHunt.ts`: `runLlmHunt(taste)`
+- **R7-3(c) DONE** (commit `ecde07d`) — **R7-3 complete (a–c).** New `lib/discovery/llmHunt.ts`: `runLlmHunt(taste)`
   proposes lesser-known one-off destinations for a rotating, taste-anchored theme (`pickHuntAngle` — 7 angles across
   the type families, UTC-day rotation, re-run-stable within a day). Proposals are URL-validated/deduped/capped and
   folded into the funnel's raw pool (`indexFunnel.ts` runs mining + hunt concurrently), so every proposed URL runs the
@@ -2531,3 +2568,24 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - RESUME AT: **R7-4** — multi-type coverage (music + video + finds), discovered not fed: type detection + enrichment +
   link-out cards for `music`/`video`/`find`; make the streams surface them. (Also pending: **live Gemini-deploy
   validation of R7-3** — confirm the judge drops carbonads/bunny/krea + a gem passes + exactly 1 essay shows.)
+
+### Session 2026-06-24 (cont.) — R7-3(d) adversarial-review fixes ✅ R7-3 hardened
+- **R7-3(c) committed `ecde07d`** (hash back-filled above).
+- Ran a **7-dimension adversarial-review workflow** over the a–c diff (23 agents, find→verify) → **7 confirmed
+  findings, all fixed** in commit `pending-D`:
+  - **(HIGH)** "never 2+ essays" failed on a gem-poor batch (client slices a fixed 7; no gem to swap excess essays
+    for) → `ensureExactlyOneArticle` now **drops** excess essays from the display (keeps the best, rebuild =
+    non-essays + 1 essay clamped into the window); a gem-poor day yields a shorter issue. **Unconditional now.**
+  - **(MED)** `railway.app` over-broad denylist (kills `*.up.railway.app` gems) → denylist `railway.com`, add
+    railway.app/onrender.com/herokuapp.com/fly.dev to SHARED_HOSTS.
+  - **(MED)** funnel liveness had no deadline → `INDEX_FUNNEL_LIVENESS_BUDGET_FRACTION`=0.5 caps it, reserving judge time.
+  - **(MED)** `runDiscovery` had no internal deadline (outer race → [] → 0 essays) → added `deadlineMs`; partial essays survive.
+  - **(LOW)** `topConcepts` unfenced in judge/hunt (second-order injection) → sanitize labels at the tasteContext
+    boundary + fence taste inside the judge prompt + correct the header comment.
+  - **(LOW/MED)** `ensureExactlyOneArticle` cap/floor composition → resolved for the cap (drop is order-preserving,
+    distinct sources); R5-D format-floor residual explicitly deferred to R7-5 (documented).
+- **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing) · `build` EXIT=0; **16/16 targeted checks PASS** (the
+  essay-only/thin batches that were the HIGH bug now show exactly 1; denylist drops carbonads/bunny/railway.com, spares
+  `*.railway.app`/netlify.app/fly.dev). No migration.
+- RESUME AT: **R7-4** (multi-type coverage). Pending: **live Gemini-deploy validation of R7-3** (judge drops
+  carbonads/bunny/krea + a gem passes + exactly 1 essay shows). R4-15 still BLOCKED on Kyle's seed-vector sign-off.

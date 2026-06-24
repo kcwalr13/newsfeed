@@ -60,9 +60,16 @@ export const COMMERCIAL_INFRA_DENYLIST = new Set<string>([
   // CDNs / edge / asset hosts (corporate sites; NOT their app subdomains)
   'bunny.net', 'bunnycdn.com', 'cloudflare.com', 'fastly.com', 'akamai.com',
   'jsdelivr.net', 'cdnjs.com', 'unpkg.com', 'cloudinary.com', 'imgix.com',
-  // Cloud / hosting / dev-platform CORPORATE marketing sites
+  // Cloud / hosting / dev-platform CORPORATE marketing sites. NB: list the
+  // corporate apex only — Railway's user apps live at *.up.railway.app /
+  // *.railway.app, whose registrable domain IS `railway.app`, so we deny the
+  // marketing apex `railway.com` (and keep railway.app in SHARED_HOSTS, below,
+  // for per-author novelty) rather than `railway.app`, which would kill hosted
+  // gems. (vercel.com→vercel.app, netlify.com→netlify.app, render.com→onrender.com,
+  // heroku.com→herokuapp.com, fly.io→fly.dev all resolve to a DIFFERENT
+  // registrable domain, so denying the corporate apex there is already safe.)
   'vercel.com', 'netlify.com', 'heroku.com', 'digitalocean.com', 'render.com',
-  'railway.app', 'fly.io', 'linode.com', 'vultr.com',
+  'railway.com', 'fly.io', 'linode.com', 'vultr.com',
   // Analytics / monitoring / payments / auth SaaS
   'segment.com', 'mixpanel.com', 'amplitude.com', 'datadoghq.com', 'sentry.io',
   'stripe.com', 'paypal.com', 'squareup.com', 'twilio.com', 'auth0.com',
@@ -90,6 +97,9 @@ export const SHARED_HOSTS = new Set<string>([
   'svbtle.com', 'micro.blog', 'posthaven.com', 'hashnode.dev',
   'notion.site', 'netlify.app', 'vercel.app', 'pages.dev', 'neocities.org',
   'dreamwidth.org', 'wixsite.com', 'weebly.com', 'webflow.io',
+  // App-hosting domains whose corporate apex differs (so they're NOT denylisted)
+  // and where each user app is its own subdomain — key novelty on the full host.
+  'railway.app', 'onrender.com', 'herokuapp.com', 'fly.dev',
 ]);
 
 /** Full lowercased hostname (www-stripped) of a URL, or '' if unparseable. */

@@ -330,11 +330,13 @@ export async function resolveDisplayedFeed(
 
   // EXACTLY-ONE-ESSAY hard rule (Kyle 2026-06-24) — applied LAST so it has the
   // final say on the displayed `article` count: precisely one essay anchors the
-  // gem-dominant issue, never 0 (the 2026-06-24 live run) or 2+. A pure reorder;
-  // it runs after the consecutive-source cap because the essay quota is a hard
-  // rule and an essay is its own unique source (so the cap never has to move it
-  // anyway). R7-5 folds this into ensureTypeSpread + re-proves the full
-  // composition (cap interaction included) via the R5-D1 simulation harness.
+  // gem-dominant issue, never 0 (the 2026-06-24 live run) or 2+. It keeps the
+  // best essay and DROPS the rest from the displayed list (the non-essays keep
+  // their order, so the consecutive-source cap + C2/C3 work above is preserved —
+  // link-out items are all distinct sources). KNOWN residual: dropping an essay
+  // can drop an R5-D format floor (the only `short` was an essay) — R7-5 folds
+  // this into ensureTypeSpread and re-proves the full composition via the R5-D1
+  // simulation harness.
   displayArticles = ensureExactlyOneArticle(displayArticles, ISSUE_DISPLAY_SIZE);
 
   return { articles: displayArticles, setCookieHeader, ranked: true, taste };

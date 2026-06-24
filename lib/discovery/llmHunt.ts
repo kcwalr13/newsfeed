@@ -85,6 +85,10 @@ function buildUserPrompt(angle: string, taste: TasteContext, count: number): str
     `  ${angle}`,
   ];
   if (taste.topConcepts.length > 0) {
+    // topConcepts are LLM-derived but sanitized at the tasteContext boundary
+    // (control chars stripped, length-clamped), so a laundered directive can't
+    // survive into this generation prompt (R7-3 review). The judge — where a
+    // flipped verdict would matter — additionally fences them.
     lines.push('', `Lean toward this reader's interests where it fits naturally (but stay surprising): ${taste.topConcepts.slice(0, 10).join(', ')}.`);
   }
   if (taste.toneDescriptor) {

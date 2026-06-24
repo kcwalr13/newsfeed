@@ -28,6 +28,18 @@ export interface TasteContext {
 export const EMPTY_TASTE_CONTEXT: TasteContext = { topConcepts: [], toneDescriptor: '' };
 
 /**
+ * Sanitizes a concept label before it leaves this boundary. Concept labels are
+ * LLM-derived from arbitrary scraped pages (the page text is fenced at extraction
+ * time, but the resulting label is later promoted into prompts), so a crafted page
+ * could try to launder an instruction into a label. Strip control chars / newlines
+ * and clamp length so a label can't carry a multi-line injection payload or close
+ * a fence — defense-in-depth for the judge + hunt that consume these (R7-3 review).
+ */
+function sanitizeLabel(label: string): string {
+  return label.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
+/**
  * Turns a 1–5 aesthetic centroid into a short tone descriptor. Only clearly-
  * leaning dimensions contribute, so a neutral profile yields ''. Mirrors the
  * curator-note generator's `describeTone` (kept local so discovery stays
@@ -64,7 +76,7 @@ export async function loadTasteContext(): Promise<TasteContext> {
       getTopConceptNodes(userId, deviceId, 14).catch(() => []),
     ]);
     return {
-      topConcepts: conceptNodes.map((c) => c.label),
+      topConcepts: conceptNodes.map((c) => sanitizeLabel(c.label)).filter((l) => l.length > 0),
       toneDescriptor: describeTone(profile?.centroid ?? null),
     };
   } catch (err) {

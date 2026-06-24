@@ -434,10 +434,16 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     } else {
       appendLog(`[discovery] Starting discovery run (budget ${discoveryBudgetMs}ms)...`);
       try {
+        // Internal deadline a touch before the outer race fires, so a slow run
+        // returns the essays scored so far (≥1 for the exactly-1-essay rule)
+        // instead of being hard-cut to [] (R7-3 review). 10s margin covers the
+        // post-eval selection + mapping + return.
+        const discoveryDeadlineMs = Date.now() + Math.max(0, discoveryBudgetMs - 10_000);
         const discoveryPromise = runDiscovery(
           fixedArticleUrls,
           options.userId ?? null,
-          options.deviceId ?? null
+          options.deviceId ?? null,
+          discoveryDeadlineMs
         );
         // Absorb a rejection that lands after the timeout wins the race below,
         // so it can't surface as an unhandled rejection.

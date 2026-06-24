@@ -27,6 +27,7 @@ import {
   INDEX_FUNNEL_CONCURRENCY,
   INDEX_FUNNEL_MAX_JUDGE,
   INDEX_FUNNEL_JUDGE_CONCURRENCY,
+  INDEX_FUNNEL_LIVENESS_BUDGET_FRACTION,
 } from '@/lib/config/feed';
 import { appendLog } from '@/lib/pipeline/storage';
 import { isLlmConfigured } from '@/lib/llm';
@@ -403,7 +404,21 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
   // check+add runs synchronously after each await, so it's race-free under the
   // bounded concurrency.
   const finalDomainSeen = new Set<string>();
+  // Bound the liveness phase: it may use only a fraction of the remaining budget
+  // before stopping new fetches, reserving the rest for the judge — so a slow
+  // network can't consume the whole budget and force the outer race to hard-cut
+  // the run to zero gems (R7-3 review). The funnel then returns its best partial
+  // set. (No deadline → verify the full slice, the pre-review behavior.)
+  const livenessDeadlineMs =
+    opts.deadlineMs != null
+      ? Date.now() + Math.max(0, opts.deadlineMs - Date.now()) * INDEX_FUNNEL_LIVENESS_BUDGET_FRACTION
+      : undefined;
+  let livenessSkipped = 0;
   await forEachWithConcurrency(toVerify, INDEX_FUNNEL_CONCURRENCY, async (c) => {
+    if (livenessDeadlineMs != null && Date.now() >= livenessDeadlineMs) {
+      livenessSkipped++;
+      return; // out of the liveness budget — leave time for the judge
+    }
     const result = await verifyLiveness(c.url);
     if (!result.alive) {
       failTally[result.reason] = (failTally[result.reason] ?? 0) + 1;
@@ -522,7 +537,7 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
   appendLog(
     `[index-funnel] YIELD raw=${raw.length} ` +
       `dropped(dup=${dupCount} mega=${megaCount} commercial=${commercialCount} redirectDup=${redirectDupCount} redirectMega=${redirectMegaCount}) ` +
-      `survivors=${survivors.length} verified=${toVerify.length}→${verified.length} ` +
+      `survivors=${survivors.length} verified=${toVerify.length}→${verified.length} livenessSkipped=${livenessSkipped} ` +
       `${judgeStats} selected=${selected.length}/${limit} :: liveness-fails ${failSummary}`
   );
   return selected;
