@@ -1244,7 +1244,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       feedback so a loved gem (e.g. ciechanowski) is rateable, and builds feedback into the new link-out cards from
       the start so the no-feedback decision never propagates. Also re-include link-out items in the like/dislike
       signal (they stay out of the *read*-count). · **DONE** (commit `df48588`)
-    - [x] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **DONE** (commit `pending-e`)
+    - [x] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **DONE** (commit `541e1fb`)
   - **Notes — (a) durable novelty memory (DONE):** New migration `lib/db/migrations/020_discovery_seen_urls.sql`
     (`discovery_seen_urls`: `url_canonical` PK, `novelty_key` NOT NULL, `first_seen_at`, `discovery_source`; + index on
     `novelty_key`; idempotent `IF NOT EXISTS`). New module `lib/db/discoverySeen.ts` — `loadSeenNoveltyKeys()` /
@@ -2344,7 +2344,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 
 ### Session 2026-06-24 (cont.) — R7-2(e) supply flip ✅ R7-2 COMPLETE
 - **R7-2(d) committed `df48588`** (hash back-filled above).
-- **R7-2(e) DONE** (commit `pending-e`) — **the milestone: the digest is now agent-discovered one-off gems, not feed
+- **R7-2(e) DONE** (commit `541e1fb`) — **the milestone: the digest is now agent-discovered one-off gems, not feed
   articles.** `data/sources.json` is **retired as the digest supply** (kept only as the discovery novelty filter).
   - **`lib/pipeline/run.ts`**: removed the entire fixed-RSS supply path + its dead helpers/imports; supply = index-funnel
     link-out gems (primary, `INDEX_FUNNEL_ITEMS_PER_DAY` 8→16) + Brave essays capped to `MAX_ARTICLES_IN_ISSUE`=3 + the
