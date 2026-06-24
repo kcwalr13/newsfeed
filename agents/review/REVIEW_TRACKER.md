@@ -1426,7 +1426,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   LLM.** Adds true wildcards + the real quality bar. **Must-reject test targets from R7-2's live run (2026-06-24):
   `carbonads.net` (ad network), `bunny.net` (CDN corp site), `krea.ai` (commercial product) — the judge has to drop
   these alive-but-junky pages the rule funnel let through.** · **DONE (a–c)** (commits `a84a6de` · `ce4cabc` ·
-  `ecde07d`; adversarial-review fixes `pending-D`) · **Live LLM validation (the model's verdicts on the 3 junk targets
+  `ecde07d`; adversarial-review fixes `60d7c49`) · **Live LLM validation (the model's verdicts on the 3 junk targets
   + a live gem, and the live end-to-end gem digest) is deferred to the Gemini deploy/cron** — no working LLM locally (Anthropic out of credits,
   no `GEMINI_API_KEY`); the rule backstop drops carbonads/bunny deterministically and the gate/parse logic + a
   krea-class commercial verdict are proven via a mock provider (project's standing pattern). **Scope note:** the judge
@@ -1445,7 +1445,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     - [x] **(c)** **LLM agentic stream 2** (LLM-proposed gems per rotating theme → fetch-and-verify) feeding the funnel
       through the judge. · **DONE** (commit `ecde07d`)
     - [x] **(d)** **Adversarial-review fixes** (7-dimension workflow over the a–c diff, find→verify, 23 agents → 7
-      confirmed findings, all fixed). · **DONE** (commit `pending-D`)
+      confirmed findings, all fixed). · **DONE** (commit `60d7c49`)
   - **Notes — (d) adversarial-review fixes (DONE):** A workflow reviewed the a–c diff across 7 dimensions (essay-rule,
     judge, funnel, injection, budget, types) with adversarial per-finding verification; **7 confirmed, all fixed:**
     1. **(HIGH) "never 2+ essays" wasn't guaranteed on a gem-poor batch.** The old swap-based reorder couldn't push
@@ -2572,7 +2572,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 ### Session 2026-06-24 (cont.) — R7-3(d) adversarial-review fixes ✅ R7-3 hardened
 - **R7-3(c) committed `ecde07d`** (hash back-filled above).
 - Ran a **7-dimension adversarial-review workflow** over the a–c diff (23 agents, find→verify) → **7 confirmed
-  findings, all fixed** in commit `pending-D`:
+  findings, all fixed** in commit `60d7c49`:
   - **(HIGH)** "never 2+ essays" failed on a gem-poor batch (client slices a fixed 7; no gem to swap excess essays
     for) → `ensureExactlyOneArticle` now **drops** excess essays from the display (keeps the best, rebuild =
     non-essays + 1 essay clamped into the window); a gem-poor day yields a shorter issue. **Unconditional now.**
