@@ -1233,7 +1233,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     - [x] **(a)** Durable novelty/dedup memory (migration + backward-compatible module, wired into the discovery
       novelty filter). · **DONE** (commit `6183966`) · **migration 020 BLOCKED-ON-APPLY** (see "Migrations awaiting Kyle").
     - [x] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
-      the digest). · **DONE** (commit `COMMIT_B`)
+      the digest). · **DONE** (commit `a2d8580`)
     - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO ← RESUME HERE**
     - [ ] **(d)** Link-out `website` + `thread` items + their cards. · **TODO**
     - [ ] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **TODO**
@@ -2168,7 +2168,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   BLOCKED on Kyle's seed-vector sign-off (independent).
 
 ### Session 2026-06-23 (cont.) — R7-2(b) index-miner stream
-- **R7-2(b) DONE** (commit `COMMIT_B`) — the item-oriented index miner; harvests outbound destination links.
+- **R7-2(b) DONE** (commit `a2d8580`) — the item-oriented index miner; harvests outbound destination links.
   Not wired into the digest yet (zero pipeline change).
   - **New** `data/discovery_indexes.json` (curated, `kind`-discriminated: hackernews/reddit/arena/html) +
     `lib/discovery/indexMiner.ts` (`IndexCandidate`, per-kind adapters, `extractOutboundLinks()` HTML helper,
