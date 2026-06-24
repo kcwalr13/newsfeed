@@ -125,11 +125,14 @@ npm run dev           # for manual/browser spot-checks
   R7-3** (LLM agentic stream + the type-aware interestingness/taste judge that replaces the essay evaluator + the
   safety/spam/NSFW guards). **✅ R7-2 COMPLETE (a–e):** Tangent is now a **discovery agent, not a feed reader** — the
   digest supply is agent-discovered one-off link-out gems (index-mining funnel: liveness-verify + type-classify +
-  durable dedup) + ≤3 capped essays + the curated place; **`data/sources.json` is retired as supply** (kept only as
-  the discovery novelty filter); every link-out card carries the feedback row (R7-8(a) done); read-count handles
-  all-gem issues. **Live supply check: 16 real one-off gems, gem-dominant, durable dedup proven** — the full prod
-  gem-digest lands on the next Vercel cron (Gemini). **Migration 020 APPLIED 2026-06-23** (durable novelty memory
-  live). **No new migration in c–e.** R4-15 still BLOCKED on Kyle's seed-vector sign-off (independent).
+  durable dedup) + **exactly 1 essay (HARD RULE, Kyle 2026-06-24 — was a ≤3 cap)** + the curated place;
+  **`data/sources.json` is retired as supply** (kept only as the discovery novelty filter); every link-out card
+  carries the feedback row (R7-8(a) done); read-count handles all-gem issues. **✅ LIVE PROD CHECK (2026-06-24):** a
+  manual refresh wrote a gem-dominant **17-item digest — `website` ×15, `thread` ×2, 0 articles** (real one-offs:
+  ciechanowski, pudding.cool, beautifulpublicdata, hankgreen, personal blogs); zero feed articles. **Known gap → R7-3:**
+  a few **alive-but-junky pages slipped the rule funnel** — `carbonads.net` (ad network), `bunny.net` (CDN corp site),
+  `krea.ai` (commercial) — must-reject targets for the R7-3 judge. **0 essays this run → motivated the new
+  exactly-1-essay rule** (R7-5). **Migration 020 APPLIED 2026-06-23.** R4-15 still BLOCKED on Kyle's seed-vector sign-off.
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -1244,7 +1247,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       feedback so a loved gem (e.g. ciechanowski) is rateable, and builds feedback into the new link-out cards from
       the start so the no-feedback decision never propagates. Also re-include link-out items in the like/dislike
       signal (they stay out of the *read*-count). · **DONE** (commit `df48588`)
-    - [x] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **DONE** (commit `541e1fb`)
+    - [x] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **DONE** (commit `541e1fb`) · **✅ LIVE-VERIFIED 2026-06-24** (Kyle `curl -X POST /api/feed/refresh` → `{ok:true,count:17}`; digest = `website` ×15 + `thread` ×2, **0 articles**, gem-dominant: ciechanowski/pudding.cool/beautifulpublicdata/hankgreen/personal blogs). Junk slip-throughs (`carbonads.net`/`bunny.net`/`krea.ai`) + 0-essays are R7-3 / R7-5 follow-ups, not R7-2 defects.
   - **Notes — (a) durable novelty memory (DONE):** New migration `lib/db/migrations/020_discovery_seen_urls.sql`
     (`discovery_seen_urls`: `url_canonical` PK, `novelty_key` NOT NULL, `first_seen_at`, `discovery_source`; + index on
     `novelty_key`; idempotent `IF NOT EXISTS`). New module `lib/db/discoverySeen.ts` — `loadSeenNoveltyKeys()` /
@@ -1415,12 +1418,17 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   verify every URL** is real/live before it advances (it hallucinates + skews popular). Add the **type-aware
   interestingness/taste LLM judge** (1–5 + reason, type-appropriate criteria, fed Kyle's profile) that replaces
   `llmEvaluator`'s 5 essay dims, plus the **safety/spam/NSFW** guards. **`wrapUntrusted` every fetched page sent to an
-  LLM.** Adds true wildcards + the real quality bar. · **TODO**
+  LLM.** Adds true wildcards + the real quality bar. **Must-reject test targets from R7-2's live run (2026-06-24):
+  `carbonads.net` (ad network), `bunny.net` (CDN corp site), `krea.ai` (commercial product) — the judge has to drop
+  these alive-but-junky pages the rule funnel let through.** · **TODO ← RESUME HERE**
 - [ ] **R7-4** · **Multi-type coverage (music + video + finds), discovered not fed.** Type detection + enrichment +
   link-out cards for `music`/`video`/`find`; make the streams surface them (music/video/find indexes + the LLM hunt +
   search). Video thumbnails from page/oEmbed; music cover art where free. **No subscriptions** — all discovered. · **TODO**
-- [ ] **R7-5** · **Hard-rebalance assembler.** `ensureTypeSpread` in `lib/pipeline/displayDiversity.ts` (cap articles
-  `MAX_ARTICLES_IN_ISSUE`=3, guarantee `MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE`=4, a wildcard slot for the agentic gem)
+- [ ] **R7-5** · **Hard-rebalance assembler.** `ensureTypeSpread` in `lib/pipeline/displayDiversity.ts`
+  (**exactly 1 essay per issue — HARD RULE, Kyle 2026-06-24:** `ARTICLES_PER_ISSUE`=1 in `lib/config/feed.ts`
+  replacing the `MAX_ARTICLES_IN_ISSUE`=3 cap — the displayed issue contains **precisely one** `article`, never 0 or
+  2+; the supply must keep ≥1 essay candidate so one can always be placed (the 2026-06-24 live run had 0 essays —
+  this rule fixes that); guarantee `MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE`=4, a wildcard slot for the agentic gem)
   + config in `lib/config/feed.ts`; per-type candidate targets in the engine; compose in `resolveDisplayedFeed`
   (after C2/C3, before the source cap). **Re-prove composition by the R5-D1 simulation harness** (no floor broken,
   graceful degradation when gems are thin — a short digest of real finds beats a padded one). · **TODO**

@@ -4,7 +4,13 @@ after each so we never lose progress if a session ends mid-way.
 
 ## Status note (2026-06-23, rev 2) — ROUND 7 is the active backlog (agentic one-off discovery)
 Rounds 1–6 are complete and live (R6 put prod on the Gemini free tier, `gemini-2.5-flash-lite`; R5-C3 resolved).
-**The active work is ROUND 7 — Tangent becomes a personal DISCOVERY AGENT, not a feed reader.** Start at **R7-1**.
+**The active work is ROUND 7 — Tangent becomes a personal DISCOVERY AGENT, not a feed reader.** **R7-1 + R7-2 are
+DONE and LIVE-VERIFIED (2026-06-24): the prod digest is gem-dominant one-off finds (ciechanowski, pudding.cool,
+beautifulpublicdata, personal blogs); `data/sources.json` is retired as supply; the feedback row is on every
+link-out card. Start at R7-3.** Two asks from the live check to carry: (i) **HARD RULE — exactly 1 essay per issue**
+(`ARTICLES_PER_ISSUE`=1, a precise quota, NOT a ≤N cap; lands in R7-5's assembler — keep ≥1 essay candidate in
+supply); (ii) R7-3's judge **MUST reject** the alive-but-junky pages that slipped R7-2's rule funnel —
+`carbonads.net` (ad network), `bunny.net` (CDN corp site), `krea.ai` (commercial) — test against these.
 **Read the precise plan first:** `agents/architect/design_product_round7_content_types.md` (**rev 2** — it
 SUPERSEDES the rev-1 "tagged RSS palette," which was an aggregator-of-sources). Non-negotiable framing: scope is
 **definitively personal/single-user**; **drop content feeds entirely** (retire `data/sources.json` as the digest

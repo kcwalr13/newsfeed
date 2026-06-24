@@ -11,7 +11,7 @@ be an aggregator of just other sources."**
 **Decisions (Kyle, scoping Q&A 2026-06-23):**
 - **Scope is now definitively PERSONAL, single-user, forever.** No multi-user, no extensibility-for-others.
 - **Types (all four families):** music & audio, websites/web-toys/games, video & clips, threads & finds.
-- **Mix = rebalance hard** — cap articles (≤3/issue), guarantee varied types.
+- **Mix = rebalance hard** — **exactly 1 essay per issue** (hard rule, Kyle 2026-06-24 — a precise quota, not a ≤N cap), guarantee varied types.
 - **Curation = blend** — a curated base + a "what's good right now" wildcard pulse.
 - **Discovery = blend: index-mining + LLM agentic hunt** — mine the human link-collections where gems get shared
   for their **outbound links**, plus an LLM layer that proposes obscure finds and **verifies each is real/live**.
@@ -171,8 +171,11 @@ The 6-dim prose-tone model applies only to `article`s. For everything else:
 
 ## 6. Hard-rebalance mix + cards + curator notes (kept from rev 1)
 
-- **Mix assembler** (`ensureTypeSpread` in `displayDiversity.ts`, composed in `resolveDisplayedFeed`): cap articles
-  (`MAX_ARTICLES_IN_ISSUE`=3), guarantee ≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE`=4 types, and a wildcard slot for the
+- **Mix assembler** (`ensureTypeSpread` in `displayDiversity.ts`, composed in `resolveDisplayedFeed`): **exactly 1
+  essay per issue** (hard rule, Kyle 2026-06-24 — `ARTICLES_PER_ISSUE`=1 in `lib/config/feed.ts`, replacing the
+  `MAX_ARTICLES_IN_ISSUE`=3 cap; the displayed issue contains **precisely one** `article`, never 0 or 2+; the supply
+  must keep ≥1 essay candidate so one can always be placed — the 2026-06-24 live run showed 0 essays, which this rule
+  fixes), guarantee ≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE`=4 types, and a wildcard slot for the
   agentic/LLM-found gem. **Re-prove composition by the R5-D1 simulation harness** (with C2/C3 + the source cap;
   graceful degradation). Don't ship on a green build alone.
 - **Link-out cards** per type in `ArticleCard.tsx` (music: cover + artist + Listen ↗; video: thumb + duration +
