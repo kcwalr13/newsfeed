@@ -32,6 +32,7 @@ import { appendLog } from '@/lib/pipeline/storage';
 import { isLlmConfigured } from '@/lib/llm';
 import { judgeInterestingness, judgePasses } from './interestingnessJudge';
 import { loadTasteContext, type TasteContext } from './tasteContext';
+import { runLlmHunt } from './llmHunt';
 
 /** A verified, type-classified link-out candidate ready to become a digest item. */
 export interface FunnelItem {
@@ -312,14 +313,25 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
   const maxVerify = opts.maxVerify ?? INDEX_FUNNEL_MAX_VERIFY;
   const exclude = opts.excludeCanonical ?? new Set<string>();
 
-  // Candidate pool = index-mined outbound links (stream 1) + any extra candidates
-  // folded in by the caller (the R7-3 LLM agentic stream, stream 2). Cross-source
-  // dedup by canonical URL so a URL surfaced by both streams is verified once.
-  const mined = await runIndexMining();
+  // Kyle's taste — loaded once and shared by the LLM agentic stream (theme anchor)
+  // and the interestingness judge (fit). Graceful empty on cold-start / DB error.
+  const taste: TasteContext = opts.taste ?? (await loadTasteContext());
+
+  // Candidate pool spans the streams: index-mined outbound links (stream 1) + the
+  // LLM agentic stream's proposals (stream 2 — taste-anchored, rotating theme) +
+  // any extra candidates a caller folds in. Streams 1 & 2 run concurrently; both
+  // are best-effort ([] on failure). Stream 2's proposals are NOT trusted — they
+  // join the SAME cheap-filter → liveness-verify → judge gauntlet below (the model
+  // hallucinates URLs and skews popular, so verification + the judge are
+  // load-bearing). Cross-source dedup by canonical URL so a shared URL is run once.
+  const [mined, hunted] = await Promise.all([
+    runIndexMining(),
+    runLlmHunt(taste),
+  ]);
   const extra = opts.extraCandidates ?? [];
   const rawSeen = new Set<string>();
   const raw: IndexCandidate[] = [];
-  for (const c of [...mined, ...extra]) {
+  for (const c of [...mined, ...hunted, ...extra]) {
     if (!c.url) continue;
     const k = canonicalizeUrlForDedup(c.url);
     if (rawSeen.has(k)) continue;
@@ -327,9 +339,10 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
     raw.push(c);
   }
   if (raw.length === 0) {
-    appendLog('[index-funnel] no raw candidates from index mining');
+    appendLog('[index-funnel] no raw candidates (index mining + llm hunt both empty)');
     return [];
   }
+  appendLog(`[index-funnel] candidates: mined=${mined.length} hunted=${hunted.length} extra=${extra.length} → raw=${raw.length}`);
 
   // Durable novelty memory: a find never repeats (canonical URL OR domain key).
   // Empty (no-op) on any DB error or before migration 020 — deploy-safe.
@@ -440,8 +453,8 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
   // GRACEFUL DEGRADATION: when no LLM is configured the judge can't run, so the
   // funnel ships the rule-filtered verified pool (R7-2 behavior) — the cheap
   // commercial/infra + mega + liveness filters still applied, so the worst junk is
-  // already gone. A digest of rule-filtered gems beats no digest.
-  const taste: TasteContext = opts.taste ?? (await loadTasteContext());
+  // already gone. A digest of rule-filtered gems beats no digest. (`taste` is
+  // loaded once at the top of the run — shared with the LLM agentic stream.)
   const toJudge = interleaveBySource(verified).slice(0, INDEX_FUNNEL_MAX_JUDGE);
 
   let kept: FunnelItem[];

@@ -121,10 +121,14 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG: 2/7 DONE (R7-1, R7-2) · R7-3 IN-PROGRESS · 4 TODO (R7-4…R7-7, R7-7 optional).** **Last
-  resume point: R7-3(c)** (the LLM agentic stream; **R7-3(a) exactly-1-essay HARD RULE + R7-3(b) interestingness/safety
-  judge are DONE** — `ARTICLES_PER_ISSUE`=1 + supply-keep + `ensureExactlyOneArticle`; the funnel's universal LLM judge
-  drops carbonads/bunny via a cheap backstop + the must-reject long tail via the LLM gate). **✅ R7-2 COMPLETE (a–e):** Tangent is now a **discovery agent, not a feed reader** — the
+  optional). **▶ ACTIVE BACKLOG: 3/7 DONE (R7-1, R7-2, R7-3) · 4 TODO (R7-4…R7-7, R7-7 optional).** **Last resume point:
+  R7-4** (multi-type coverage). **✅ R7-3 COMPLETE (a–c):** the exactly-1-essay HARD RULE (`ARTICLES_PER_ISSUE`=1 +
+  supply-keep + `ensureExactlyOneArticle`), the type-aware interestingness/safety LLM judge (the funnel's universal
+  gate — drops carbonads/bunny via a cheap commercial/infra backstop + the must-reject long tail incl. krea.ai via the
+  LLM gate; `wrapUntrusted` on every fetched page), and the LLM agentic stream (stream 2 — proposes + fetch-verify-
+  judges lesser-known gems per rotating taste-anchored theme). **No migration.** **Live LLM validation deferred to the
+  Gemini deploy/cron** (no working LLM locally — Anthropic out of credits, no Gemini key; rule backstop + mock-provider
+  gate logic verified deterministically). **✅ R7-2 COMPLETE (a–e):** Tangent is now a **discovery agent, not a feed reader** — the
   digest supply is agent-discovered one-off link-out gems (index-mining funnel: liveness-verify + type-classify +
   durable dedup) + **exactly 1 essay (HARD RULE, Kyle 2026-06-24 — was a ≤3 cap)** + the curated place;
   **`data/sources.json` is retired as supply** (kept only as the discovery novelty filter); every link-out card
@@ -1414,14 +1418,20 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       yet in the digest) → (c) rule-filter funnel (liveness + type classify + dedup against durable memory) → (d)
       link-out website/thread items + cards → (e) supply flip + retire `sources.json` as supply + live product
       verification. Each (a)–(e) is independently gate-green + committable.
-- [ ] **R7-3** · **LLM agentic stream + interestingness judge (replaces the essay gate).** Stream 2: LLM proposes
+- [x] **R7-3** · **LLM agentic stream + interestingness judge (replaces the essay gate).** Stream 2: LLM proposes
   lesser-known **destinations** per rotating theme (from the taste profile + structured randomness) → **fetch-and-
   verify every URL** is real/live before it advances (it hallucinates + skews popular). Add the **type-aware
   interestingness/taste LLM judge** (1–5 + reason, type-appropriate criteria, fed Kyle's profile) that replaces
   `llmEvaluator`'s 5 essay dims, plus the **safety/spam/NSFW** guards. **`wrapUntrusted` every fetched page sent to an
   LLM.** Adds true wildcards + the real quality bar. **Must-reject test targets from R7-2's live run (2026-06-24):
   `carbonads.net` (ad network), `bunny.net` (CDN corp site), `krea.ai` (commercial product) — the judge has to drop
-  these alive-but-junky pages the rule funnel let through.** · **IN-PROGRESS**
+  these alive-but-junky pages the rule funnel let through.** · **DONE (a–c)** (commits `a84a6de` · `ce4cabc` ·
+  `pending-C`) · **Live LLM validation (the model's verdicts on the 3 junk targets + a live gem, and the live
+  end-to-end gem digest) is deferred to the Gemini deploy/cron** — no working LLM locally (Anthropic out of credits,
+  no `GEMINI_API_KEY`); the rule backstop drops carbonads/bunny deterministically and the gate/parse logic + a
+  krea-class commercial verdict are proven via a mock provider (project's standing pattern). **Scope note:** the judge
+  is the universal gate for the **funnel/link-out streams** (where the junk targets live); the single Brave essay keeps
+  its 5-dim `llmEvaluator` (documented in the Decisions Log — not the junk problem).
   - **Sub-steps** (each independently gate-green + committed):
     - [x] **(a)** **Exactly-1-essay HARD RULE** (Kyle 2026-06-24; pulled forward from R7-5 per the session brief — the
       self-contained config + supply-keep + display-enforcement part). `ARTICLES_PER_ISSUE`=1 in `lib/config/feed.ts`
@@ -1431,9 +1441,27 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       + on the unranked fallback. · **DONE** (commit `a84a6de`)
     - [x] **(b)** **Type-aware interestingness/safety judge + `wrapUntrusted`** — the funnel's universal LLM gate that
       drops the must-reject junk targets (carbonads/bunny/krea) + safety/spam/NSFW; cheap commercial/infra denylist
-      backstop. · **DONE** (commit `pending-B`)
-    - [ ] **(c)** **LLM agentic stream 2** (LLM-proposed gems per rotating theme → fetch-and-verify) feeding the funnel
-      through the judge. · **TODO ← RESUME HERE**
+      backstop. · **DONE** (commit `ce4cabc`)
+    - [x] **(c)** **LLM agentic stream 2** (LLM-proposed gems per rotating theme → fetch-and-verify) feeding the funnel
+      through the judge. · **DONE** (commit `pending-C`)
+  - **Notes — (c) LLM agentic stream (DONE):** New `lib/discovery/llmHunt.ts` — `runLlmHunt(taste)` asks the LLM to
+    **propose** lesser-known one-off destinations for a rotating, taste-anchored theme (`pickHuntAngle(dayOfMonth)`
+    rotates 7 angles spanning the type families — sites/web-toys/blogs/curiosities/music/video/threads — stable within
+    a UTC day for re-run safety; woven with Kyle's top concepts + tone). Structured output `{destinations:[{url,title}]}`
+    → URL-validated (absolute http(s)), deduped, capped at `LLM_HUNT_PROPOSALS`(10), stamped
+    `discoverySource:'llm-hunt'`. **Verification is load-bearing** (the model hallucinates URLs + skews popular): the
+    proposals are NOT surfaced directly — they're folded into the funnel's raw candidate pool (`indexFunnel.ts` now
+    runs `runIndexMining()` + `runLlmHunt(taste)` concurrently, cross-dedups, and runs the **same** cheap-filter →
+    liveness-verify → interestingness-judge gauntlet over them). `runLlmHuntWithClient` is provider-injectable
+    (testable). **Injection note:** the proposal call sends NO fetched page — only Kyle's trusted taste + our theme
+    (like the offline query-bank script, site 7) — so it needs no `wrapUntrusted`; the untrusted surface (the fetched
+    destination pages) is fenced by the judge. **Graceful:** `[]` on no-LLM / call failure (the funnel just runs
+    without stream-2 candidates). Bounded cost: 1 proposal call/run; its survivors share the judge's `MAX_JUDGE` cap.
+    **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing) · `build` EXIT=0; **targeted check (throwaway, removed)
+    — 10/10 PASS:** angle rotation (stable-in-day, rotates, wraps); proposal parse drops invalid/non-http(s)/dup/
+    missing-url URLs, caps at count, stamps `llm-hunt`, preserves titles; missing-array → `[]`; provider error → `[]`
+    (never throws); the proposal prompt asserts it carries **no** `<untrusted_content>` fence (trusted input). **Live
+    proposal call deferred to the Gemini deploy** (no LLM locally — same constraint as (b)).
   - **Notes — (b) interestingness/safety judge (DONE):** New `lib/discovery/interestingnessJudge.ts` — a single
     type-aware LLM call per verified funnel survivor → `{interestingness 1–5, reason, is_safe, is_commercial_or_spam}`,
     fed Kyle's taste (top concepts + tone). `judgePasses()` ships a candidate only if **safe AND not commercial/spam
@@ -1519,6 +1547,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
 
+| 2026-06-24 | R7-3(c) | Stream 2 lives **inside the funnel** (runIndexFunnel calls runIndexMining + runLlmHunt concurrently and folds both into one raw pool), NOT as a separate pipeline step; theme rotates by **UTC day-of-month** (not Math.random / a DB cursor); the proposal call is **not** wrapUntrusted-fenced | The funnel already owns stream 1 (it calls runIndexMining internally) and already loads taste (for the judge), so folding stream 2 in beside it reuses the taste load + the entire cheap-filter→verify→judge gauntlet for free and needs zero pipeline change — the proposals get verified+judged exactly like mined candidates (the design's "every proposed URL is fetched and verified before it can advance"). Day-of-month rotation is stable within a UTC day (re-run-safe, like the R5-D3 place cadence's date-keying) while still rotating across days, without adding a DB cursor table (no migration) — variety accrues over days. The proposal call carries no fetched web page (only Kyle's trusted concepts + our angle, exactly like the query-bank script site 7 R6-2 exempted), so wrapUntrusted is not required there; the untrusted surface is the fetched destination pages, which the judge fences. (A test asserts the proposal prompt contains no `<untrusted_content>` fence, locking this in.) |
 | 2026-06-24 | R7-3(b) | The judge gates the **funnel/link-out streams** (where the junk targets live — R7-2 was rule-only there); the **Brave essay stream keeps its 5-dim `llmEvaluator`** for now (NOT replaced this commit). Added a cheap `COMMERCIAL_INFRA_DENYLIST` rule backstop AND made the judge the LLM gate; flags are **fail-closed** | The session's must-reject targets (carbonads/bunny/krea) are all link-out funnel items, and R7-2's funnel had **no** LLM gate at all — so adding the judge there is the high-value, junk-fixing change. The Brave essay path already has a strong, well-tuned 5-dim LLM gate (essays aren't the junk problem); swapping its threshold/floor/below-floor selection logic onto the new 1–5 interestingness scale is a behavior-changing refactor with real regression risk and **zero** junk-rejection benefit, so it's deferred (CLAUDE.md ground rule: "when in doubt about scope, do less and document"). The "universal gate" intent is met where it matters — the dominant gem supply (now exactly-1-essay) is judge-gated. The cheap denylist is **defense-in-depth** (design §4 "domain reputation lists"): it drops obvious ad/CDN/infra junk with zero LLM (and keeps the digest junk-free even if the LLM is down), while the LLM judge handles the arbitrary long tail (product pages like krea.ai, SEO slop). Fail-closed flags (missing → unsafe+commercial) follow the design's "when unsure, drop" — a personal digest should never surface something jarring or commercial. |
 | 2026-06-24 | R7-3(b) | **Live LLM-judge validation deferred to the Gemini deploy**; locally verified the rule backstop (deterministic) + the gate/parse logic (mock provider) + that the request format is valid (reaches Anthropic, rejected only for billing) | No working LLM is available locally — the committed provider is Anthropic (out of credits → `400 "credit balance is too low"`) and there is no `GEMINI_API_KEY` in `.env.local`. This is the project's standing constraint (R5-C3/R6/R7-2e all deferred representative LLM validation to the Vercel/Gemini deploy). carbonads + bunny are dropped deterministically by the rule backstop (no LLM needed), and the gate logic that drops a krea-class commercial verdict is proven with a mock provider; the only thing that can't run locally is the *real model's* verdict on krea.ai + a live gem, which the next cron/refresh on Gemini exercises. I did NOT hardcode krea.ai onto the rule denylist to force a deterministic local drop — that would be test-gaming (krea.ai is a product page, the LLM judge's job), not a principled infra entry. |
 
@@ -2463,7 +2492,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 
 ### Session 2026-06-24 (cont.) — R7-3(b) interestingness/safety judge
 - **R7-3(a) committed `a84a6de`** (hash back-filled above).
-- **R7-3(b) DONE** (commit `pending-B`) — the funnel now has a **type-aware interestingness/safety LLM judge**, the
+- **R7-3(b) DONE** (commit `ce4cabc`) — the funnel now has a **type-aware interestingness/safety LLM judge**, the
   universal gate that kills alive-but-junky link-out finds (R7-2's funnel was rule-only).
   - New `lib/discovery/interestingnessJudge.ts` (1–5 + reason + is_safe + is_commercial_or_spam, type-aware, taste-fed,
     `wrapUntrusted`-fenced, fail-closed flags) + `judgePasses` gate. New `lib/discovery/tasteContext.ts`
@@ -2482,3 +2511,23 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - RESUME AT: **R7-3(c)** — the LLM agentic stream (stream 2): LLM proposes lesser-known destinations per rotating,
   taste-anchored theme → fed into the funnel as `extraCandidates` (fetch-verify-judge each). R4-15 still BLOCKED on
   Kyle's seed-vector sign-off.
+
+### Session 2026-06-24 (cont.) — R7-3(c) LLM agentic stream ✅ R7-3 COMPLETE
+- **R7-3(b) committed `ce4cabc`** (hash back-filled above).
+- **R7-3(c) DONE** (commit `pending-C`) — **R7-3 complete (a–c).** New `lib/discovery/llmHunt.ts`: `runLlmHunt(taste)`
+  proposes lesser-known one-off destinations for a rotating, taste-anchored theme (`pickHuntAngle` — 7 angles across
+  the type families, UTC-day rotation, re-run-stable within a day). Proposals are URL-validated/deduped/capped and
+  folded into the funnel's raw pool (`indexFunnel.ts` runs mining + hunt concurrently), so every proposed URL runs the
+  SAME fetch-verify-judge gauntlet (verification load-bearing — the model hallucinates + skews popular). Graceful `[]`
+  on no-LLM / failure; proposal call is unfenced (trusted taste/theme; the judge fences the fetched pages).
+  - **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing) · `build` EXIT=0; **10/10 targeted checks PASS**
+    (angle rotation; URL validation/dedup/cap/stamp; graceful empty + error; proposal carries no untrusted fence).
+    Live proposal call deferred to the Gemini deploy (no LLM locally).
+- **R7-3 summary (a–c):** exactly-1-essay HARD RULE + the type-aware interestingness/safety judge (funnel's universal
+  gate, drops carbonads/bunny via cheap backstop + the long tail via the LLM) + the LLM agentic stream (stream 2,
+  verified by the same funnel). **No migration.** Live LLM-dependent validation (real judge verdicts on the 3 junk
+  targets + a live gem, the live gem digest) runs on the next Gemini cron/refresh (Anthropic out of credits + no
+  Gemini key locally — the project's standing pattern). R4-15 still BLOCKED on Kyle's seed-vector sign-off.
+- RESUME AT: **R7-4** — multi-type coverage (music + video + finds), discovered not fed: type detection + enrichment +
+  link-out cards for `music`/`video`/`find`; make the streams surface them. (Also pending: **live Gemini-deploy
+  validation of R7-3** — confirm the judge drops carbonads/bunny/krea + a gem passes + exactly 1 essay shows.)
