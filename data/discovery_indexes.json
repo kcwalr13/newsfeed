@@ -1,0 +1,91 @@
+[
+  {
+    "name": "Hacker News (front page)",
+    "kind": "hackernews",
+    "endpoint": "front_page",
+    "enabled": true,
+    "maxLinks": 30,
+    "note": "Mined via the HN Algolia API for each story's OUTBOUND url (Ask/text posts skipped). The HN discussion is never the item."
+  },
+  {
+    "name": "Hacker News (Show HN)",
+    "kind": "hackernews",
+    "endpoint": "show_hn",
+    "enabled": true,
+    "maxLinks": 30,
+    "note": "Show HN skews toward web toys / tools / standalone sites — strong one-off-gem source."
+  },
+  {
+    "name": "r/InternetIsBeautiful",
+    "kind": "reddit",
+    "subreddit": "InternetIsBeautiful",
+    "period": "week",
+    "enabled": true,
+    "maxLinks": 25,
+    "note": "Mined via reddit's .json for each post's OUTBOUND url (self-posts skipped). May 403 from datacenter IPs — isolated, non-fatal."
+  },
+  {
+    "name": "r/ObscureMedia",
+    "kind": "reddit",
+    "subreddit": "ObscureMedia",
+    "period": "week",
+    "enabled": true,
+    "maxLinks": 20
+  },
+  {
+    "name": "r/ArtefactPorn",
+    "kind": "reddit",
+    "subreddit": "ArtefactPorn",
+    "period": "week",
+    "enabled": true,
+    "maxLinks": 20
+  },
+  {
+    "name": "r/listentothis",
+    "kind": "reddit",
+    "subreddit": "listentothis",
+    "period": "week",
+    "enabled": true,
+    "maxLinks": 20,
+    "note": "Music finds (outbound to Bandcamp/YouTube/etc). Type classification + the music card arrive in R7-4."
+  },
+  {
+    "name": "Kottke",
+    "kind": "html",
+    "url": "https://kottke.org/",
+    "enabled": true,
+    "maxLinks": 40,
+    "note": "Long-running link blog — the outbound links in its posts ARE the gems. Self-domain + non-http links are dropped; mega-sites/liveness/type are the R7-2(c) funnel's job."
+  },
+  {
+    "name": "Waxy.org (links)",
+    "kind": "html",
+    "url": "https://waxy.org/category/links/",
+    "enabled": true,
+    "maxLinks": 40
+  },
+  {
+    "name": "Web Curios",
+    "kind": "html",
+    "url": "https://www.webcurios.co.uk/",
+    "enabled": true,
+    "maxLinks": 60,
+    "note": "Dense weekly roundup of strange/beautiful sites — exactly what linked to moltbook."
+  },
+  {
+    "name": "ooh.directory",
+    "kind": "html",
+    "url": "https://ooh.directory/",
+    "enabled": true,
+    "maxLinks": 40,
+    "note": "A hand-kept directory of personal blogs — its outbound site links are candidate gems."
+  },
+  {
+    "name": "Are.na — (add channel slug)",
+    "kind": "arena",
+    "channel": "",
+    "enabled": false,
+    "maxLinks": 30,
+    "note": "Mined via api.are.na for each block's source.url. Disabled until Kyle adds a real public channel slug (an empty/unknown slug 404s)."
+  }
+]

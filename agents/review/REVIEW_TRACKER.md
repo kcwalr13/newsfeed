@@ -121,10 +121,11 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-step a done; b–e TODO) · 5 TODO
-  (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(b)** (index-miner stream + `data/discovery_indexes.json`).
-  **Migration 020 PENDING** (R7-2(a); BLOCKED-ON-APPLY — see "Migrations awaiting Kyle"). R4-15 still BLOCKED on
-  Kyle's seed-vector sign-off (independent).
+  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-steps a+b done; c–e TODO) · 5 TODO
+  (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(c)** (rule-filter funnel: liveness/realness verify + type
+  classify + dedup against the durable memory; wire `runIndexMining()` into the digest). **Migration 020 PENDING**
+  (R7-2(a); BLOCKED-ON-APPLY — see "Migrations awaiting Kyle"). R4-15 still BLOCKED on Kyle's seed-vector sign-off
+  (independent).
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -1231,9 +1232,9 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   - **Sub-steps** (each independently gate-green + committed; see the recon note for the rationale of this order):
     - [x] **(a)** Durable novelty/dedup memory (migration + backward-compatible module, wired into the discovery
       novelty filter). · **DONE** (commit `6183966`) · **migration 020 BLOCKED-ON-APPLY** (see "Migrations awaiting Kyle").
-    - [ ] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
-      the digest). · **TODO ← RESUME HERE**
-    - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO**
+    - [x] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
+      the digest). · **DONE** (commit `COMMIT_B`)
+    - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO ← RESUME HERE**
     - [ ] **(d)** Link-out `website` + `thread` items + their cards. · **TODO**
     - [ ] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **TODO**
   - **Notes — (a) durable novelty memory (DONE):** New migration `lib/db/migrations/020_discovery_seen_urls.sql`
@@ -1252,6 +1253,25 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     empty Set / 0, no throw) AND the dedup/key logic is correct (tracking-param + trailing-slash canonicalization,
     shared-host authors distinguished, regular domains collapse). **Behavior today = unchanged** (durable store empty
     until Kyle applies 020); after apply, novelty becomes permanent + monotonic (a shown find never resurfaces).
+  - **Notes — (b) index-miner stream (DONE):** New `data/discovery_indexes.json` (curated, Kyle-editable; each entry
+    is discriminated by `kind`: `hackernews` [front_page/show_hn via HN Algolia], `reddit` [`/r/<sub>/top.json`],
+    `arena` [api.are.na channel — seeded disabled until Kyle adds a real slug], `html` [link-blog homepages: Kottke,
+    Waxy links, Web Curios, ooh.directory]). New `lib/discovery/indexMiner.ts` — the genuinely **item-oriented** miner
+    (NOT the feed-source `smallWeb/crawler.ts`): per-kind adapters harvest each index's **outbound destination links**
+    (the gem), an `extractOutboundLinks()` HTML helper (absolute http(s), drops the index's own registrable domain +
+    `mailto:`/`#`/`javascript:`, decodes entities, dedups), a centralized **outbound-only self-domain filter** across
+    ALL kinds, and `runIndexMining()` (per-index `allSettled` isolation + cross-index canonical dedup + a structured
+    `[index-miner] YIELD …` log). Returns `IndexCandidate[]` (`url`, `title?`, `discoverySource`, `score?`).
+    **Not wired into the digest yet** (R7-2c integrates it into the funnel), so zero change to the live pipeline.
+    **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build` EXIT=0; **live targeted check**
+    (throwaway, removed) ran `runIndexMining()` against the real indexes → **175 unique outbound gems** from 5 indexes
+    (HN front 30, HN Show 27, Kottke 40, Waxy 40, ooh.directory 38) — real one-off finds (`blog.paintedpixels.xyz`,
+    `byran.ee`, `tikz.dev/editor`), not feed articles. The check **caught a real bug** (HN Show hits leaked an internal
+    `news.ycombinator.com/vote` URL because the API adapters didn't drop self-domain like the HTML path did) → fixed
+    with the centralized self-domain filter; re-verified clean. **Known/expected:** reddit `.json` 403s from datacenter
+    IPs (isolated, non-fatal — needs OAuth or a non-blocked egress in prod); Web Curios homepage links only to its own
+    latest edition (self-filtered → 0); ad/auth/social noise (carbonads, memberful, bsky) is left for the R7-2c funnel
+    (mega-site denylist + liveness + type) to filter — (b) emits the RAW outbound pool by design.
   - **Recon note (from the R7-1 session, 2026-06-23 — read before implementing):** Code map of what to reuse vs.
     build new, so the next session moves fast.
     - **The existing Small-Web crawler is the wrong shape — do NOT just extend it.** `lib/discovery/smallWeb/crawler.ts`
@@ -1376,6 +1396,7 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-15 | R6-2 | Kept `@/` imports in `lib/llm/` (codebase standard) and refactored site 7 (`scripts/refresh-query-banks.ts`) to the interface anyway, despite discovering the script is already non-runnable under `ts-node` | Probe confirmed `npm run refresh-query-banks` already fails before R6-2: Node runs the script under its ESM loader, which rejects the script's extensionless relative imports (`ERR_MODULE_NOT_FOUND`) — a pre-existing, unrelated breakage. Fixing it (tsconfig-paths/`-r` register or an ESM-aware runner) is out of scope for this finding ("touch only what the finding needs"). So the import style of `lib/llm/` is moot for the script's runtime; `@/` keeps the abstraction consistent with the rest of the codebase. The refactor is logic-behavior-preserving (verified by the adversarial review + the `kind`-aware skip/abort fix); the ESM breakage is flagged for a future cleanup, not silently inherited. |
 | 2026-06-15 | R5-D1 | `format` resolved **on read** (like category, P3-B2) not persisted at assembly; `ensureFormatSpread` composes with C2/C3 via a **precise per-swap floor check**, not a blanket `protect` | Persisting `format` at assembly would need a pipeline re-run to backfill existing batches and wouldn't cover discovered/historical pieces; resolving on read from readTime + source (the `categoryForArticle` precedent) is migration-free and uniform. `place` is the one exception (no derivable signal — explicit at assembly, D3). The design hinted at modelling `ensureFormatSpread` on `ensureCategorySpread`'s blanket-`protect` (never demote an unfamiliar / sole-category piece). The composition simulation proved that's actively wrong: when the displayed top is all-unfamiliar or all-distinct-category (cold-start / discovery-heavy — exactly the common case), *every* piece is protected, so the guarantee silently no-ops — the headline feature would do nothing. Replaced it with a per-swap check: demote a longread iff the resulting top still holds the C2/C3 floors, or (when a floor was already unmet on a thin pool) doesn't worsen it. This delivers the mix (efficacy 50000/50000) while never dropping a C2/C3 floor (400k runs, 0 violations). The cap's floor-guard was extended to the three format floors; faithful simulation (category⇒source, per-source cap 4) shows the fallback never needs to fire — the format floors, like the category/unfamiliar ones (R4-14), are unbreakable by the cap under realistic per-source-capped data. |
 | 2026-06-23 | R7-1 | Introduced `contentType` as a **new, parallel** taxonomy that **coexists** with the existing R5-D `ContentFormat` (incl. `'place'`) rather than replacing it; the place item carries **both** `format:'place'` and `contentType:'website'`. Stripped `discoverySource` at **both** public Article serializers (`toPublicArticle` + the inline denylist in `GET /api/articles/[id]`). Framed the sources.json/RSS/essay-evaluator retirement in `CLAUDE.md` as the R7-2/R7-3 **plan**, not as already-done. | R7-1 is mandated **behavior-preserving (no supply change yet)**. Ripping out `ContentFormat.'place'` and re-routing display-diversity/cards/read-count onto `contentType` now would be a large, behavior-changing refactor that belongs to R7-5 (the hard-rebalance assembler). Carrying both fields keeps every existing `format`-keyed path (display mix, card variant, read-count exclusion) byte-identical while the new item-type dimension is available for R7-2+ to populate and R7-5 to key the mix on — the lowest-risk migration. `discoverySource` is defined `@internal` ("never sent to the client"); the invariant is on the **field**, not one function name, and there are two client-facing Article endpoints, so locking it at both now (while no writer sets the field) is behavior-preserving today and prevents a silent provenance leak the moment R7-2 sets it (the reader route would otherwise never be revisited by R7-2's index-mining work). The retirement tense fix keeps `CLAUDE.md` factually true to the live code (the RSS pipeline + sources.json + essay evaluator are all still active as of R7-1) — the doc must not overclaim later-step work as done. |
+| 2026-06-23 | R7-2(b) | The index miner is a **new module** (`indexMiner.ts`), not an extension of `smallWeb/crawler.ts`; it emits the **raw outbound pool** (only outbound-only + dedup hygiene applied) and leaves mega-site/liveness/type/spam filtering to the R7-2c funnel; it is **standalone (not wired into the digest)** in (b); reddit entries ship **enabled despite 403ing from this sandbox**, and are.na ships **disabled** (no real slug). | The crawler is structurally a feed-source aggregator (the anti-pattern R7's scope rejects), so reuse there would fight the design; a fresh item-oriented miner is cleaner than retrofitting. Keeping (b) to raw harvest + a not-yet-wired `runIndexMining()` makes it a true behavior-preserving, gate-green sub-step (zero pipeline change) and keeps each funnel concern in its own sub-step (c) where it's testable in isolation — over-filtering in (b) would duplicate (c)'s rules and hide candidates from the funnel's own tests. reddit stays enabled because the 403 is **this datacenter IP's** egress, not a code defect (per-index `allSettled` makes a 403 a logged no-op, never thinning the pool); the real fix (OAuth / non-blocked egress) belongs to a later pass, not a reason to ship the adapter disabled. are.na ships disabled because an empty/unknown channel slug 404s — better a ready-but-off adapter than a broken entry. The live check **caught and fixed** the one real correctness bug (API adapters must drop the index's own domain, like the HTML path) — verifying the product outcome, not just the gate. |
 | 2026-06-23 | R7-2(a) | Durable novelty memory is **domain-level** (`noveltyKey` unioned into the existing `seenDomains` set) for the read filter, with a **URL-canonical** column for stronger future dedup; only the **surfaced `top`** URLs are recorded (not all evaluated candidates); the union is wired at the **call site** (`discovery/run.ts`), not inside `novelty.ts`; and the whole module is **error-swallowing / deploy-safe before apply** (BLOCKED-ON-APPLY, not held). | Domain-level keying reuses the existing novelty filter unchanged (a one-line union into `seenDomains`), so the durable store simply makes the already-correct filter **permanent** instead of a 14-issue window — minimal, consistent, monotonic. A `url_canonical` PK additionally gives exact-URL dedup for the index-miner funnel (sub-step c) where many candidates can share a still-novel domain. Recording only **surfaced** finds (not all evaluated) is correct: an evaluated-but-not-shipped candidate should be allowed to return and rank higher next run; only what Kyle has actually *seen* is permanently retired. Wiring the union in `run.ts` avoids a `novelty ↔ discoverySeen` import cycle (`discoverySeen` already imports `noveltyKey` from `novelty`). Per the migration guardrail the code is backward-compatible (every `sql` call wrapped, returns the safe default on missing-table) so it ships green before apply — verified live against Neon (the relation genuinely doesn't exist yet → all three calls swallowed cleanly). |
 
 ---
@@ -2145,3 +2166,20 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   logged, not yet in the digest). Then (c) rule-filter funnel → (d) link-out cards → (e) supply flip + live
   product verification. **Apply migration 020 to Neon** when convenient (deploy is safe without it). R4-15 still
   BLOCKED on Kyle's seed-vector sign-off (independent).
+
+### Session 2026-06-23 (cont.) — R7-2(b) index-miner stream
+- **R7-2(b) DONE** (commit `COMMIT_B`) — the item-oriented index miner; harvests outbound destination links.
+  Not wired into the digest yet (zero pipeline change).
+  - **New** `data/discovery_indexes.json` (curated, `kind`-discriminated: hackernews/reddit/arena/html) +
+    `lib/discovery/indexMiner.ts` (`IndexCandidate`, per-kind adapters, `extractOutboundLinks()` HTML helper,
+    centralized outbound-only self-domain filter, `runIndexMining()` with `allSettled` isolation + canonical dedup +
+    `[index-miner] YIELD …` log).
+  - **Live check** (throwaway, removed): `runIndexMining()` → **175 unique outbound gems** from 5 indexes (HN front
+    30, HN Show 27, Kottke 40, Waxy 40, ooh.directory 38) — real one-off finds (`blog.paintedpixels.xyz`,
+    `byran.ee`, `tikz.dev/editor`), not feed articles. **Caught + fixed** a real bug (API adapters leaked the
+    index's own `news.ycombinator.com/vote` links → added the centralized self-domain filter). reddit 403s from
+    this sandbox IP (isolated, expected — OAuth/egress fix later); ad/auth/social noise left for the (c) funnel.
+  - **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build` EXIT=0.
+- RESUME AT: **R7-2(c)** — rule-filter funnel (liveness/realness verify + type classify + dedup against the durable
+  memory) and wire `runIndexMining()` into the digest. Then (d) link-out cards → (e) supply flip + live product
+  verification. **Apply migration 020 to Neon** when convenient (deploy safe without it). R4-15 still BLOCKED.
