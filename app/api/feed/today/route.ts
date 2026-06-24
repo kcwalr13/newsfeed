@@ -4,8 +4,9 @@ import { generateMissingCuratorNotes } from '@/lib/pipeline/curatorNoteGenerator
 import { computeDiscoveryYield } from '@/lib/pipeline/discoveryMeta';
 import { resolveDisplayedFeed } from '@/lib/pipeline/displayedFeed';
 import { formatForArticle } from '@/lib/pipeline/contentFormat';
+import { recordSeenUrls } from '@/lib/db/discoverySeen';
 import { ISSUE_DISPLAY_SIZE } from '@/lib/config/feed';
-import type { Article } from '@/lib/types/article';
+import { isLinkOutItem, type Article } from '@/lib/types/article';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,20 @@ export async function GET(req: NextRequest) {
   // The displayed issue is the first ISSUE_DISPLAY_SIZE pieces; bound the
   // per-issue curator-note work to those.
   const shown = displayArticles.slice(0, ISSUE_DISPLAY_SIZE);
+
+  // R7-2: permanently retire link-out gems (the index-funnel finds + curated
+  // places) from the durable novelty memory the moment they're actually DISPLAYED
+  // — so a shown find never resurfaces, while an undisplayed candidate stays
+  // eligible to appear another day. Best-effort, post-response, idempotent
+  // (ON CONFLICT DO NOTHING); a no-op before migration 020 is applied.
+  const shownLinkOut = shown.filter(isLinkOutItem);
+  if (shownLinkOut.length > 0) {
+    after(() =>
+      recordSeenUrls(
+        shownLinkOut.map((a) => ({ url: a.articleUrl, discoverySource: a.discoverySource ?? null }))
+      ).catch((err: unknown) => console.error('[feed/today] durable novelty record failed:', err))
+    );
+  }
 
   // Resolve each displayed piece's content-format (R5-D) for the client's card
   // variant (D2). Set BEFORE toPublicArticle strips bodyText (the `short`

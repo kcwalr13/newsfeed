@@ -121,11 +121,13 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-steps a+b done; c–e TODO) · 5 TODO
-  (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(c)** (rule-filter funnel: liveness/realness verify + type
-  classify + dedup against the durable memory; wire `runIndexMining()` into the digest). **Migration 020 APPLIED 2026-06-23**
-  (R7-2(a); durable novelty memory now live). R4-15 still BLOCKED on Kyle's seed-vector sign-off
-  (independent).
+  optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-steps a+b+c done; d–e TODO) · 5 TODO
+  (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(d)** (link-out cards: add the standard feedback row —
+  dislike/like/save — to every link-out card, incl. the R5 place card; re-include link-out items in the
+  like/dislike signal). **R7-2(c) DONE:** index-funnel (liveness/realness verify + type classify + durable dedup)
+  wired into the digest as link-out items; the link-out card now links straight out for every `contentType` (not
+  just `place`). **Migration 020 APPLIED 2026-06-23** (R7-2(a); durable novelty memory now live). R4-15 still
+  BLOCKED on Kyle's seed-vector sign-off (independent).
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
 - Current branch: `main` · **Last resume point: — (Round 2 backlog cleared; S-01 awaits Kyle's secret rotation)**
@@ -1234,7 +1236,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
       novelty filter). · **DONE** (commit `6183966`) · **migration 020 APPLIED 2026-06-23** (durable novelty memory live).
     - [x] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
       the digest). · **DONE** (commit `a2d8580`)
-    - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO ← RESUME HERE**
+    - [x] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **DONE** (commit `pending-c`)
     - [ ] **(d)** Link-out `website` + `thread` items + their cards — **each card MUST include the standard feedback
       row (dislike/like/save) alongside the Explore/Read CTA** (design §10a). Fixes the R5 place card's missing
       feedback so a loved gem (e.g. ciechanowski) is rateable, and builds feedback into the new link-out cards from
@@ -1276,6 +1278,40 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     IPs (isolated, non-fatal — needs OAuth or a non-blocked egress in prod); Web Curios homepage links only to its own
     latest edition (self-filtered → 0); ad/auth/social noise (carbonads, memberful, bsky) is left for the R7-2c funnel
     (mega-site denylist + liveness + type) to filter — (b) emits the RAW outbound pool by design.
+  - **Notes — (c) rule-filter funnel (DONE):** New `lib/discovery/indexFunnel.ts` — the cheap, no-LLM gauntlet:
+    `runIndexFunnel()` = `runIndexMining()` → **cheap filters** (durable dedup on canonical URL OR novelty key via
+    `loadSeenCanonicalUrls`/`loadSeenNoveltyKeys`; `isMegaSite` drop; one-item-per-domain per run) → **liveness/realness
+    verify** (`verifyLiveness()` fetches each survivor, dropping 404 / parked-domain / login-wall + bot/JS-challenge /
+    empty; extracts og:title/description/image/site_name) → **type classify** (`classifyContentType()` website/thread/
+    music/video by URL host — R7-2 mints LINK-OUT items only, never readable `article`s) → source-interleave + cap.
+    Bounded concurrency (`INDEX_FUNNEL_CONCURRENCY`=6), per-day cap (`INDEX_FUNNEL_ITEMS_PER_DAY`=8), verify cap
+    (`INDEX_FUNNEL_MAX_VERIFY`=40), wall-clock budget (`INDEX_FUNNEL_BUDGET_MS`=45s). **Wired into `lib/pipeline/run.ts`
+    ADDITIVELY** (alongside the fixed/Brave supply — the supply flip is (e)): the funnel runs after the discovery
+    merge (so it has budget, behind a remaining-wall-clock guard + a `Promise.race` cut-short), and link-out
+    `Article`s (`toLinkOutArticle`) are appended AFTER the per-article LLM loops + place injection so they bypass
+    body-fetch / aesthetic scoring / concept extraction (no body, link straight out). `lib/types/article.ts` gains
+    `LINK_OUT_CONTENT_TYPES` + `isLinkOutItem()`. **`ArticleCard.tsx`** generalizes the R5 `place` branch to ANY
+    link-out item (per-type kicker + CTA; links straight out — so funnel items never hit the in-app reader / a dead
+    "full text unavailable" stub). **`app/page.tsx`** read-count now excludes all link-out items (`!isLinkOutItem`),
+    not just `place`. **Durable recording = record-on-DISPLAY:** `app/api/feed/today` records the displayed link-out
+    items into `discovery_seen_urls` via `after()` (idempotent), so a *shown* gem never resurfaces while an
+    undisplayed candidate stays eligible another day (decision below). **Injection invariant intact:** the funnel is
+    rule-based (no LLM); discovered title/description reach an LLM only later via the curator-note generator, which
+    already fences input with `wrapUntrusted` + `UNTRUSTED_CONTENT_NOTICE`; no new code sends discovered text to an
+    LLM unfenced. **Adversarial review** (workflow: 4 dimensions × find→verify, 10 agents) confirmed behavior + caught
+    **5 real findings**, all fixed in this commit: (1 HIGH) post-redirect re-dedup omitted the mega-site check — a
+    novel raw URL that 30x-redirects onto youtube/x/etc. leaked → added `isMegaSite(finalUrl)` to the post-redirect
+    drop; (2 HIGH) link-out items rendered the in-app reader (broken stub) → generalized the straight-out card to
+    `isLinkOutItem` in `ArticleCard`; (3 HIGH) `media.platform` leaked the index provenance (`discoverySource`) to the
+    client (`media` isn't stripped) → dropped `platform` from `toLinkOutArticle`; (4 MED) funnel ran with no
+    remaining-budget guard → added the wall-clock guard + race; (5 MED) read-count still keyed on `format!=='place'`
+    → switched to `!isLinkOutItem`. **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build`
+    EXIT=0; **live targeted check** (throwaway, removed): `runIndexFunnel()` → **14 verified link-out gems** across HN
+    front/Show + Kottke + Waxy + ooh.directory (`blog.paintedpixels.xyz`, `byran.ee`, `jerrysmap.com`, `eieio.games`,
+    a mastodon thread) — real one-off finds, not feed articles; **0 mega-site leaks**; **dedup proven** (recorded
+    run-1's finds → re-ran → **0 resurfaced**, incl. a caught redirect-dup). reddit `.json` still 403s from this
+    sandbox IP (isolated/non-fatal). Known: ad pages (carbonads) that are alive + non-mega still pass the rule
+    filters — left for R7-3's interestingness/SEO-slop LLM judge, per design §4.
   - **Recon note (from the R7-1 session, 2026-06-23 — read before implementing):** Code map of what to reuse vs.
     build new, so the next session moves fast.
     - **The existing Small-Web crawler is the wrong shape — do NOT just extend it.** `lib/discovery/smallWeb/crawler.ts`
@@ -1406,6 +1442,9 @@ _Append one entry per judgment call (autonomy = "use report default + document")
 | 2026-06-15 | R6-5 | Closed the budget overrun by adding a **wall-clock deadline to the post-discovery scoring phase** (via `tryConsumeLlm`) rather than reducing per-article aesthetic/concept volume for Gemini; lowered `DISCOVERY_MAX_EVAL_CANDIDATES` to 15 (not lower) and concurrency to 2; **did not change the code default of `LLM_PROVIDER`** | Reducing per-article scoring volume would degrade the taste model/blind-spot on every Gemini run; the deadline guard instead lets a nominal day score everything (sim: 55 calls write at ~260s) and only sheds enrichment on heavy days — and crucially guarantees the batch writes (the batch is persisted *after* scoring, so an unbounded phase under a slow provider risked losing it). The guard rides on the existing `tryConsumeLlm` call both loops already make, so it's one change covering both with zero new branching. 15 eval candidates + 40 post = 55 calls fit 270s with margin; going lower would thin discovery more than necessary. Concurrency 2 is a gentle in-flight cap (the limiter sets the real rate). Leaving `LLM_PROVIDER` defaulting to `anthropic` keeps the deploy a no-op until Kyle's deliberate Vercel flip (per the kickoff), so R6-5 ships safely without auto-switching a provider whose live behavior I can't verify from here. |
 | 2026-06-15 | R6-4 | Static-imported `GeminiProvider` in `getLlm()` (vs. lazy/dynamic import) and did **not** run `npm audit fix` despite 9 reported vulns; used `responseSchema` (Type-enum mapping) rather than the newer `responseJsonSchema:unknown` | `getLlm()` is synchronous and all 7 sites call it synchronously; a dynamic `import('./gemini')` would force `getLlm()` async and ripple `await` through every site — large, risky, for a server-only module where bundle size is immaterial (not shipped to the browser) and cold-start cost is a few ms. The Gemini class is defined-but-never-instantiated while `LLM_PROVIDER=anthropic`, so it's behavior-neutral. The audit vulns are predominantly pre-existing project deps (`next`, `@anthropic-ai/sdk`, `fast-xml-parser`, `nodemailer`); `audit fix --force` pulls breaking major bumps and is out of scope for this finding. `responseSchema` + the explicit `Type`-enum mapping is the documented, stable path (design §3) and is fully type-checked by the SDK's `Schema` type (which caught the `minItems`/`maxItems`-are-strings quirk), whereas `responseJsonSchema` is typed `unknown` (no compile-time safety). |
 | 2026-06-15 | R6-3 | Implemented the limiter as a **fixed-interval (leaky-bucket) scheduler**, not the literal "token bucket" the design named; wired it via a **factory decorator** (`withRateLimit` in `getLlm()`) rather than calling it inside each adapter | A capacity-`rpm` token bucket allows a full burst (rpm calls) plus a window's worth of refill inside a single rolling 60s window → up to ~2×rpm, which trips Gemini free-tier's rolling-window RPM limit. The stated R6-5 acceptance is "no 429 storms," and even spacing (`60000/rpm` ms apart) guarantees ≤ rpm in *every* rolling window — strictly safer. Synchronous slot reservation (`_nextFreeMs`) is also race-free without a promise-chain mutex. The decorator at `getLlm()` covers BOTH adapters and every call site (incl. the curator fan-out) with one wrapper, and gives the R6-4 Gemini adapter rate-limiting for free, vs. repeating `acquireLlmSlot()` in each adapter method. Anthropic's `rpm=Infinity` makes both the limiter and decorator a true no-op, preserving behavior until R6-5. |
+| 2026-06-24 | R7-2(c) | Index-mined finds become **LINK-OUT items only** in R7-2 (`classifyContentType` returns website/thread/music/video/find — never `article`); the in-app-readable `article` type stays sourced from the existing Brave discovery stream | The design's "long prose → article" type wants the funnel to mint readable articles, but a readable article needs aesthetic scoring + the **R7-3 interestingness/taste LLM judge** to vet it for the per-item LLM spend — neither exists in R7-2 (rule-only). Classifying a discovered prose page as `website` (link straight out to the source — an honest "go read this") keeps every funnel item free (zero LLM), bypasses body-fetch/scoring/concepts, and avoids re-introducing the essay-evaluator path the round is retiring. R7-3/R7-4 add the judge + can then promote vetted prose finds to scored `article` items. Reversible (one classifier function). |
+| 2026-06-24 | R7-2(c) | Durable novelty for funnel items = **record-on-DISPLAY** (the feed route's `after()` records the shown link-out items), NOT record-on-write like the Brave discovery path | The funnel appends more link-out candidates to a batch than will ever display (the displayed 7 are personalized + diversity-reordered per request). Recording at *write* time (Brave's pattern) would permanently retire genuinely great gems that simply ranked below today's fold — wasting them against the round's whole "find a few great one-offs" mission. Recording only the **displayed** items retires exactly what Kyle saw and leaves the rest eligible to resurface another day (re-mined, still novel until shown). The asymmetry with the Brave path is justified: Brave writes only its small `DISCOVERY_ARTICLES_PER_DAY` quota (mostly displayed), so write-time recording wastes little there. Idempotent (`ON CONFLICT DO NOTHING`); no-op before migration 020. |
+| 2026-06-24 | R7-2(c) | Pulled the link-out **straight-out routing + read-count exclusion forward from (d) into (c)**, and folded all 5 adversarial-review findings into the (c) commit; only the feedback ROW stays deferred to (d) | (c) wires funnel link-out items into the *displayed* batch, and each push deploys live — so shipping (c) without the card linking straight out would put **broken in-app-reader stubs** ("full text unavailable") on the live digest (review finding #2) and mis-count them in the seven-dot ritual (#5). The straight-out routing is therefore a correctness property of (c)'s own append, not polish for (d). Generalizing `ArticleCard`'s `place` branch to `isLinkOutItem` fixes it everywhere the card renders (feed + archive) regardless of the `href` passed. The feedback row (the R7-8(a) deliverable) is genuinely separable and stays (d). The other review fixes — post-redirect `isMegaSite` re-check (#1), dropping `discoverySource` from client-visible `media.platform` (#3), and the funnel wall-clock guard (#4) — are funnel-internal and belong in (c). |
 | 2026-06-15 | R6-2 | Kept `@/` imports in `lib/llm/` (codebase standard) and refactored site 7 (`scripts/refresh-query-banks.ts`) to the interface anyway, despite discovering the script is already non-runnable under `ts-node` | Probe confirmed `npm run refresh-query-banks` already fails before R6-2: Node runs the script under its ESM loader, which rejects the script's extensionless relative imports (`ERR_MODULE_NOT_FOUND`) — a pre-existing, unrelated breakage. Fixing it (tsconfig-paths/`-r` register or an ESM-aware runner) is out of scope for this finding ("touch only what the finding needs"). So the import style of `lib/llm/` is moot for the script's runtime; `@/` keeps the abstraction consistent with the rest of the codebase. The refactor is logic-behavior-preserving (verified by the adversarial review + the `kind`-aware skip/abort fix); the ESM breakage is flagged for a future cleanup, not silently inherited. |
 | 2026-06-15 | R5-D1 | `format` resolved **on read** (like category, P3-B2) not persisted at assembly; `ensureFormatSpread` composes with C2/C3 via a **precise per-swap floor check**, not a blanket `protect` | Persisting `format` at assembly would need a pipeline re-run to backfill existing batches and wouldn't cover discovered/historical pieces; resolving on read from readTime + source (the `categoryForArticle` precedent) is migration-free and uniform. `place` is the one exception (no derivable signal — explicit at assembly, D3). The design hinted at modelling `ensureFormatSpread` on `ensureCategorySpread`'s blanket-`protect` (never demote an unfamiliar / sole-category piece). The composition simulation proved that's actively wrong: when the displayed top is all-unfamiliar or all-distinct-category (cold-start / discovery-heavy — exactly the common case), *every* piece is protected, so the guarantee silently no-ops — the headline feature would do nothing. Replaced it with a per-swap check: demote a longread iff the resulting top still holds the C2/C3 floors, or (when a floor was already unmet on a thin pool) doesn't worsen it. This delivers the mix (efficacy 50000/50000) while never dropping a C2/C3 floor (400k runs, 0 violations). The cap's floor-guard was extended to the three format floors; faithful simulation (category⇒source, per-source cap 4) shows the fallback never needs to fire — the format floors, like the category/unfamiliar ones (R4-14), are unbreakable by the cap under realistic per-source-capped data. |
 | 2026-06-23 | R7-1 | Introduced `contentType` as a **new, parallel** taxonomy that **coexists** with the existing R5-D `ContentFormat` (incl. `'place'`) rather than replacing it; the place item carries **both** `format:'place'` and `contentType:'website'`. Stripped `discoverySource` at **both** public Article serializers (`toPublicArticle` + the inline denylist in `GET /api/articles/[id]`). Framed the sources.json/RSS/essay-evaluator retirement in `CLAUDE.md` as the R7-2/R7-3 **plan**, not as already-done. | R7-1 is mandated **behavior-preserving (no supply change yet)**. Ripping out `ContentFormat.'place'` and re-routing display-diversity/cards/read-count onto `contentType` now would be a large, behavior-changing refactor that belongs to R7-5 (the hard-rebalance assembler). Carrying both fields keeps every existing `format`-keyed path (display mix, card variant, read-count exclusion) byte-identical while the new item-type dimension is available for R7-2+ to populate and R7-5 to key the mix on — the lowest-risk migration. `discoverySource` is defined `@internal` ("never sent to the client"); the invariant is on the **field**, not one function name, and there are two client-facing Article endpoints, so locking it at both now (while no writer sets the field) is behavior-preserving today and prevents a silent provenance leak the moment R7-2 sets it (the reader route would otherwise never be revisited by R7-2's index-mining work). The retirement tense fix keeps `CLAUDE.md` factually true to the live code (the RSS pipeline + sources.json + essay evaluator are all still active as of R7-1) — the doc must not overclaim later-step work as done. |
@@ -2199,3 +2238,29 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
 - RESUME AT: **R7-2(c)** — rule-filter funnel (liveness/realness verify + type classify + dedup against the durable
   memory) and wire `runIndexMining()` into the digest. Then (d) link-out cards → (e) supply flip + live product
   verification. **Apply migration 020 to Neon** when convenient (deploy safe without it). R4-15 still BLOCKED.
+
+### Session 2026-06-24 — R7-2(c) rule-filter funnel + wire into the digest
+- **R7-2(c) DONE** (commit `pending-c`) — the cheap, no-LLM gauntlet that turns raw index-mined outbound links into
+  verified link-out digest items, wired **additively** alongside the fixed/Brave supply (the supply flip is (e)).
+  - **New** `lib/discovery/indexFunnel.ts`: `runIndexFunnel()` = mine → cheap filters (durable canonical/novelty-key
+    dedup · `isMegaSite` drop · one-per-domain) → `verifyLiveness()` (drop 404/parked/login-wall/bot-challenge/empty;
+    extract og:title/description/image) → `classifyContentType()` (website/thread/music/video — link-out only) →
+    source-interleave + cap. Bounded by `INDEX_FUNNEL_{ITEMS_PER_DAY=8,MAX_VERIFY=40,CONCURRENCY=6,BUDGET_MS=45s}`.
+  - **`lib/pipeline/run.ts`**: funnel runs after the discovery merge (budget-guarded + `Promise.race` cut-short),
+    link-out `Article`s appended AFTER the per-article LLM loops + place (bypass body-fetch/scoring/concepts).
+  - **`lib/types/article.ts`** `LINK_OUT_CONTENT_TYPES` + `isLinkOutItem()`; **`ArticleCard.tsx`** generalizes the
+    `place` branch to ANY link-out item (per-type kicker+CTA, straight-out — never the broken reader); **`app/page.tsx`**
+    read-count excludes all link-out items; **`app/api/feed/today`** records DISPLAYED link-out gems into durable
+    novelty memory via `after()` (retire-on-display).
+  - **Adversarial review workflow** (4 dims × find→verify, 10 agents) → **5 real findings, all fixed in this commit**:
+    post-redirect mega-site re-check; link-out items rendered the broken in-app reader; `media.platform` leaked
+    `discoverySource` to the client; no funnel wall-clock guard; read-count keyed on `format!=='place'`.
+  - **Verified:** `tsc` clean · `lint` 0 errors (3 pre-existing warnings) · `build` EXIT=0; **live targeted check**
+    (throwaway, removed): **14 verified link-out gems** (paintedpixels, byran.ee, jerrysmap, eieio.games, a mastodon
+    thread), **0 mega-site leaks**, **dedup proven** (record run-1's finds → 0 resurfaced; a redirect-dup was caught).
+    reddit `.json` 403s from this sandbox IP (isolated/non-fatal); alive non-mega ad pages (carbonads) left for R7-3's
+    LLM judge.
+- RESUME AT: **R7-2(d)** — link-out cards: add the standard feedback row (dislike/like/save) to every link-out card
+  (incl. the R5 place card — the R7-8(a) fix so a loved gem like ciechanowski is rateable); re-include link-out items
+  in the like/dislike signal (they stay out of the read-count). Then (e) supply flip + live product verification.
+  R4-15 still BLOCKED on Kyle's seed-vector sign-off.

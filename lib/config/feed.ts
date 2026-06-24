@@ -138,6 +138,41 @@ export const LLM_EVAL_BODY_CHAR_LIMIT = 3000;
 export const SMALL_WEB_MAX_NEW_SOURCES_PER_RUN = 20;
 
 /**
+ * Index-mining funnel (R7-2): how many verified link-out items the funnel
+ * contributes to a daily batch. Kept modest while the index-miner runs ALONGSIDE
+ * the fixed/Brave supply (R7-2c, additive); R7-2e raises it as agent-discovered
+ * one-offs become the primary supply. These items are link-out (no body / no
+ * in-app reader) and rule-filtered only — the interestingness LLM judge is R7-3.
+ */
+export const INDEX_FUNNEL_ITEMS_PER_DAY = 8;
+
+/**
+ * Max index candidates the funnel fetch-verifies per run (wall-clock budget).
+ * Each survivor costs one HTTP fetch (≤8s); at INDEX_FUNNEL_CONCURRENCY in
+ * flight this bounds the funnel's added latency. The verify pool is interleaved
+ * by index first, so the cap stays source-diverse.
+ */
+export const INDEX_FUNNEL_MAX_VERIFY = 40;
+
+/**
+ * Max concurrent liveness fetches in the funnel. HTTP-only (no LLM), so this is
+ * provider-agnostic — bounded modestly to avoid a burst of outbound requests.
+ */
+export const INDEX_FUNNEL_CONCURRENCY = 6;
+
+/**
+ * Wall-clock budget (ms) for the index-mining funnel. The funnel runs HTTP-only
+ * liveness fetches (≈ ceil(INDEX_FUNNEL_MAX_VERIFY / INDEX_FUNNEL_CONCURRENCY)
+ * rounds × the 8s per-fetch timeout in the worst case), and it runs BEFORE the
+ * per-article LLM loops — so it must leave the post-discovery reserve intact for
+ * body-fetch + scoring + concept extraction + the batch write. The pipeline
+ * skips the funnel when less than this remains, and cuts it short via a race so
+ * the batch always writes (graceful degradation — a shorter digest of real gems
+ * beats a missed write).
+ */
+export const INDEX_FUNNEL_BUDGET_MS = 45_000;
+
+/**
  * Wall-clock budget for a full pipeline run (ms). Kept below the route
  * maxDuration (300s) so the assembled batch is always written before the
  * platform kills the function.

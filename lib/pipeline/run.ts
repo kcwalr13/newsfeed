@@ -13,9 +13,11 @@ import {
   PIPELINE_POST_DISCOVERY_RESERVE_MS,
   PIPELINE_LLM_CONCURRENCY,
   MAX_LLM_EVALS_PER_RUN,
+  INDEX_FUNNEL_BUDGET_MS,
 } from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
-import { canonicalizeUrlForDedup } from '@/lib/utils/url';
+import { runIndexFunnel, type FunnelItem } from '@/lib/discovery/indexFunnel';
+import { canonicalizeUrlForDedup, registrableDomain } from '@/lib/utils/url';
 import { forEachWithConcurrency } from '@/lib/utils/concurrency';
 import { writeBatch, readBatch, readLatestBatchBefore, appendLog } from './storage';
 import {
@@ -146,6 +148,53 @@ function makeId(sourceName: string, articleUrl: string): string {
   const sourceSlug = slugify(sourceName);
   const hash = crypto.createHash('sha256').update(articleUrl).digest('hex').slice(0, 8);
   return `${sourceSlug}-${hash}`;
+}
+
+/** Homepage origin of a destination URL (the "source" for novelty/shown-domain
+ *  tracking), falling back to the URL itself when unparseable. */
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Maps a verified funnel candidate (R7-2) into a link-out Article: no bodyText /
+ * readTime / in-app reader — the card links straight out (the `place` pattern,
+ * generalized to the discovered `contentType`). `discoverySource` carries the
+ * index provenance (@internal telemetry, stripped at the client layer); the
+ * destination's own domain/site name is the displayed label. The card blurb is
+ * the page description until the request-time curator-note generator (which
+ * fences the text with wrapUntrusted) replaces it.
+ */
+function toLinkOutArticle(item: FunnelItem, batchDate: string, nowIso: string): Article {
+  const sourceName = item.siteName?.trim() || registrableDomain(item.url);
+  return {
+    id: makeId(sourceName, item.url),
+    title: item.title,
+    description: item.description,
+    sourceName,
+    sourceUrl: originOf(item.url),
+    articleUrl: item.url,
+    publishedAt: nowIso,
+    fetchedAt: nowIso,
+    batchDate,
+    feedbackSlot: null,
+    contentType: item.contentType,
+    // NOTE: never put `discoverySource` (the INDEX that surfaced this, e.g.
+    // "Hacker News") into `media` — `media` is sent to the client, and the index
+    // provenance must stay @internal (the unit is the find, not the source).
+    // `media.platform` (the DESTINATION's platform: youtube/bandcamp/…) is set by
+    // R7-4's per-type enrichment; R7-2 only carries thumbnail + popularity score.
+    media:
+      item.thumbnailUrl || item.score != null
+        ? { thumbnailUrl: item.thumbnailUrl, score: item.score }
+        : undefined,
+    discoverySource: item.discoverySource,
+    extractedConcepts: [], // link-out items skip concept extraction (no body)
+  };
 }
 
 async function fetchFromSource(source: Source) {
@@ -573,6 +622,55 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       `[pipeline] Batch: ${finalFixedCandidates.length} fixed-source, ${discoveryCount} discovery`
     );
 
+    // R7-2c: index-mining funnel — the agent-discovered one-off stream. Crawls
+    // curated gem-indexes for their OUTBOUND links and rule-filters them (durable
+    // novelty dedup · liveness/realness verify · type classify) into verified
+    // link-out candidates. Computed HERE (before the per-article LLM loops) so it
+    // has wall-clock budget, but the resulting items are link-out (no body / no
+    // reader / no LLM enrichment), so they're appended AFTER those loops below —
+    // bypassing body-fetch, aesthetic scoring, and concept extraction (like the
+    // `place` item). ADDITIVE in R7-2c (runs alongside the fixed/Brave supply);
+    // R7-2e flips the supply so these become the digest's primary content.
+    // Best-effort: a funnel failure never blocks the batch write. Bounded by the
+    // remaining wall-clock (it runs HTTP fetches before the per-article loops, so
+    // it must leave the post-discovery reserve intact) and cut short by a race so
+    // the batch always writes — a shorter digest of real gems beats a missed run.
+    let funnelItems: FunnelItem[] = [];
+    const funnelElapsedMs = Date.now() - runStartMs;
+    const funnelBudgetMs = Math.min(
+      INDEX_FUNNEL_BUDGET_MS,
+      PIPELINE_WALL_CLOCK_BUDGET_MS - PIPELINE_POST_DISCOVERY_RESERVE_MS - funnelElapsedMs
+    );
+    if (funnelBudgetMs <= 0) {
+      appendLog(
+        `[pipeline] Index funnel skipped: wall-clock budget exhausted (${funnelElapsedMs}ms elapsed).`
+      );
+    } else {
+      try {
+        const existingCanonical = new Set(articles.map((a) => canonicalizeUrlForDedup(a.articleUrl)));
+        const funnelPromise = runIndexFunnel({ excludeCanonical: existingCanonical });
+        funnelPromise.catch(() => {}); // absorb a late rejection if the race times out first
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const raced = await Promise.race([
+          funnelPromise,
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), funnelBudgetMs);
+          }),
+        ]);
+        if (timer) clearTimeout(timer);
+        if (raced === null) {
+          appendLog(`[pipeline] Index funnel cut short after ${funnelBudgetMs}ms budget.`);
+        } else {
+          funnelItems = raced;
+          appendLog(`[pipeline] Index funnel yielded ${funnelItems.length} link-out candidate(s)`);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendLog(`[pipeline] Index funnel failed (non-blocking): ${msg}`);
+        funnelItems = [];
+      }
+    }
+
     // Fetch full body text for articles that only have a short excerpt (or none).
     // Must run before aesthetic scoring so the scorer gets the full text.
     // Returns ids whose full page is paywalled/teaser-only (R5-B1).
@@ -674,6 +772,31 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
         extractedConcepts: [],
       });
       appendLog(`[pipeline] PLACE injected: ${place.name} (${place.url})`);
+    }
+
+    // R7-2c: append the verified index-funnel link-out items. Like `place`, they
+    // land AFTER the per-article LLM/fetch loops so they bypass body-fetch,
+    // aesthetic scoring, and concept extraction (they have no body and link
+    // straight out). The card variant + feedback row come in R7-2d; the durable
+    // novelty memory records each only once it is actually DISPLAYED (the feed
+    // route), so an undisplayed gem can resurface another day.
+    if (funnelItems.length > 0) {
+      const nowIso = new Date().toISOString();
+      // Guard against an id/URL collision with anything already assembled.
+      const existingIds = new Set(articles.map((a) => a.id));
+      const existingCanonical = new Set(articles.map((a) => canonicalizeUrlForDedup(a.articleUrl)));
+      let added = 0;
+      for (const item of funnelItems) {
+        const linkOut = toLinkOutArticle(item, today, nowIso);
+        if (existingIds.has(linkOut.id) || existingCanonical.has(canonicalizeUrlForDedup(linkOut.articleUrl))) {
+          continue;
+        }
+        existingIds.add(linkOut.id);
+        existingCanonical.add(canonicalizeUrlForDedup(linkOut.articleUrl));
+        articles.push(linkOut);
+        added++;
+      }
+      appendLog(`[pipeline] Index funnel appended ${added} link-out item(s) to the batch`);
     }
 
     const batch: ArticleBatch = {

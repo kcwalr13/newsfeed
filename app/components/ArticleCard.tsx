@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import type { Article } from '@/lib/types/article';
-import { SLOT_LABELS } from '@/lib/types/article';
+import type { Article, ContentType } from '@/lib/types/article';
+import { SLOT_LABELS, isLinkOutItem } from '@/lib/types/article';
 import { getFeedback, setFeedback, clearFeedback } from '@/lib/feedback/store';
 
 interface Props {
@@ -37,6 +37,18 @@ const VERB_META = {
   like:    { verb: 'Underline',  desc: 'This resonated',  confirm: 'Noted. More in this voice.' },
   save:    { verb: 'Read later', desc: 'Send to my shelf', confirm: 'Sent to your shelf.' },
 } as const;
+
+// Per-type kicker + call-to-action for link-out items (R7-2). Each links
+// STRAIGHT OUT (never the in-app reader). `website` covers the R5 curated
+// `place` (its "A place to get lost in" copy is preserved). Richer per-type
+// media (cover art, duration) arrives in R7-4.
+const LINK_OUT_META: Record<Exclude<ContentType, 'article'>, { kicker: string; cta: string }> = {
+  website: { kicker: 'A place to get lost in',  cta: 'Explore ↗' },
+  thread:  { kicker: 'A thread worth following', cta: 'Read the thread ↗' },
+  music:   { kicker: 'Something to hear',        cta: 'Listen ↗' },
+  video:   { kicker: 'Something to watch',       cta: 'Watch ↗' },
+  find:    { kicker: 'A curious find',           cta: 'Check it out ↗' },
+};
 
 function folioStr(n: number): string {
   return `№\u00A0${String(n).padStart(2, '0')}`;
@@ -77,7 +89,11 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
   // card in D3). A small format tag in the meta row signals the variety.
   const isVisual = article.format === 'visual';
   const isCompact = article.format === 'short' || article.format === 'potpourri';
-  const isPlace = article.format === 'place';
+  // A link-out item — any non-`article` contentType, or the R5 curated `place`.
+  // It links STRAIGHT OUT (no in-app reader); the type picks the kicker + CTA.
+  const isLinkOut = isLinkOutItem(article);
+  const linkOutType: Exclude<ContentType, 'article'> =
+    article.contentType && article.contentType !== 'article' ? article.contentType : 'website';
   const formatTag =
     article.format === 'visual' ? 'Visual'
     : article.format === 'short' ? 'Short'
@@ -85,11 +101,13 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
     : null;
   const heroMaxHeight = isVisual ? 320 : 220;
 
-  // "A place to explore" (R5-D3): a whole site to wander, not an article. It has
-  // no body, so it links STRAIGHT OUT (new tab) rather than opening the in-app
-  // reader, and shows an Explore CTA instead of the Pass/Underline/Read-later
-  // controls. Distinct, invitation-forward treatment so it stays special.
-  if (isPlace) {
+  // Link-out item (R7-2): a one-off find — a whole site to wander, a thread, a
+  // track. It has no body, so it links STRAIGHT OUT (new tab) rather than opening
+  // the in-app reader, with a per-type kicker + CTA. The standard feedback row
+  // (dislike/like/save) is added in R7-2d so these gems are rateable.
+  if (isLinkOut) {
+    const meta = LINK_OUT_META[linkOutType];
+    const blurb = article.curatorNote ?? cleanDesc(article.description ?? '');
     return (
       <article className="relative" data-article-id={article.id}>
         <hr className="ql-rule mb-0" />
@@ -100,7 +118,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
               className="ql-mono"
               style={{ fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.18em', textTransform: 'uppercase' }}
             >
-              A place to get lost in
+              {meta.kicker}
             </span>
           </div>
           <a
@@ -109,7 +127,7 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
             rel="noopener noreferrer"
             className="block w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) rounded-sm"
             style={{ textDecoration: 'none' }}
-            aria-label={`Explore ${article.title} (opens in a new tab)`}
+            aria-label={`${article.title} (opens in a new tab)`}
           >
             <div
               className="rounded-sm"
@@ -121,19 +139,19 @@ export default function ArticleCard({ article, folio, href, onFeedbackChange, on
               >
                 {article.title}
               </h2>
-              {article.curatorNote && (
+              {blurb && (
                 <p
                   className="ql-serif"
                   style={{ fontSize: '16px', fontStyle: 'italic', color: 'var(--muted)', lineHeight: 1.55, marginBottom: '14px' }}
                 >
-                  {article.curatorNote}
+                  {blurb}
                 </p>
               )}
               <span
                 className="ql-mono"
                 style={{ fontSize: '10px', color: 'var(--accent)', letterSpacing: '0.16em', textTransform: 'uppercase' }}
               >
-                Explore ↗
+                {meta.cta}
               </span>
             </div>
           </a>

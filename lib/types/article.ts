@@ -132,6 +132,23 @@ export type ContentFormat = 'longread' | 'short' | 'visual' | 'potpourri' | 'pla
  */
 export type ContentType = 'article' | 'music' | 'video' | 'website' | 'thread' | 'find';
 
+/** The non-article content types — every one is a link-out item (R7-2). */
+export const LINK_OUT_CONTENT_TYPES: ReadonlySet<ContentType> = new Set([
+  'music', 'video', 'website', 'thread', 'find',
+]);
+
+/**
+ * True when an article is a link-out item — a one-off find the card links
+ * STRAIGHT OUT to (no in-app reader, no body): any non-`article` `contentType`,
+ * or the R5 curated `place` (kept for back-compat). Link-out items carry the
+ * feedback row (R7-2d) but stay out of the seven-dot read-count (rateable, not
+ * "read").
+ */
+export function isLinkOutItem(a: Pick<Article, 'contentType' | 'format'>): boolean {
+  if (a.contentType && a.contentType !== 'article') return true;
+  return a.format === 'place';
+}
+
 /**
  * Media metadata attached to a non-article (link-out) item. Every field is
  * optional — a given type populates only what's relevant (a video has a
