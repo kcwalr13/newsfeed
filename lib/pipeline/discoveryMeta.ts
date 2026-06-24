@@ -38,7 +38,11 @@ export function computeDiscoveryYield(articles: ArticleBatch['articles']): Disco
   const nameByDomain = new Map<string, string>();
   let discoveryCount = 0;
   for (const a of articles) {
-    if (a.discoveryTopic) {
+    // Discovered = the Brave essay stream (discoveryTopic) OR the index-funnel
+    // link-out gems (discoverySource) — the latter are the PRIMARY supply since
+    // the R7-2e flip, so counting only discoveryTopic would mislabel the bulk of
+    // the issue as "fixed" (there is no fixed palette anymore).
+    if (a.discoveryTopic || a.discoverySource) {
       discoveryCount++;
       if (a.sourceUrl) {
         const domain = registrableDomain(a.sourceUrl);

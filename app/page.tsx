@@ -327,12 +327,15 @@ export default function FeedPage() {
   const ISSUE_SIZE = ISSUE_DISPLAY_SIZE;
   const displayArticles = data ? data.articles.slice(0, ISSUE_SIZE) : [];
   // Link-out items (R7-2: the curated place + discovered website/thread/… gems)
-  // are a side-invitation, not a piece to read or action — exclude them from the
-  // seven-dot reading-ritual count so "All pieces read" stays reachable. They are
-  // still rateable (the feedback row, R7-2d) — out of the read-count, not the
-  // like/dislike signal.
+  // are a side-invitation to wander, not a piece to read or action — they're kept
+  // out of the seven-dot reading-ritual count so "All pieces read" stays reachable.
+  // They are still rateable (the feedback row, R7-2d) — out of the read-count, not
+  // the like/dislike signal. Since the R7-2e supply flip an issue can be ALL
+  // link-out gems, so `total` is the readable count (no ISSUE_SIZE fallback that
+  // would show a phantom "0/7"); the ritual strip + copy hide when total is 0.
   const readableArticles = displayArticles.filter(a => !isLinkOutItem(a));
-  const total = readableArticles.length || ISSUE_SIZE;
+  const total = readableArticles.length;
+  const hasReadingRitual = total > 0;
   // "Read" = actioned: the reader has dealt with the piece — liked it, saved it,
   // or passed on it (dislike). Counting only like/save left disliked pieces
   // permanently "unread", so "All N pieces read" was unreachable once any piece
@@ -388,10 +391,10 @@ export default function FeedPage() {
               </span>
             </div>
 
-            {/* Seven-dot strip — hidden on an empty feed (a 7-dot "0/7" would
-                imply unread articles that don't exist). Gated on data (not
-                status) so it stays put during a background re-fetch (R5-A1). */}
-            {data && displayArticles.length > 0 && (
+            {/* Seven-dot strip — hidden on an empty feed, AND on an all-link-out
+                issue (no readable pieces → no reading ritual; R7-2e). Gated on
+                data (not status) so it stays put during a background re-fetch. */}
+            {data && hasReadingRitual && (
               <div className="flex items-center gap-3">
                 <SevenDotStrip total={total} read={read} />
                 <span
@@ -446,6 +449,8 @@ export default function FeedPage() {
                 >
                   {data.articles.length === 0
                     ? 'No pieces yet today.'
+                    : !hasReadingRitual
+                    ? 'A handful of things to wander into today.'
                     : remaining > 0
                     ? `${remaining} more to go.`
                     : `All ${total} pieces read. Well done.`}
@@ -490,7 +495,7 @@ export default function FeedPage() {
                       className="ql-serif"
                       style={{ fontSize: '18px', fontStyle: 'italic', color: 'var(--muted)' }}
                     >
-                      {remaining > 0
+                      {hasReadingRitual && remaining > 0
                         ? `${remaining} piece${remaining !== 1 ? 's' : ''} to go.`
                         : "You\u2019ve reached the end of today\u2019s issue."}
                     </p>

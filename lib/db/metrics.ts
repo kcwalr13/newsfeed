@@ -46,6 +46,7 @@ interface ArticleProjection {
   source_url: string | null;
   source_name: string | null;
   discovery_topic: string | null;
+  discovery_source: string | null;
   exploration_slot_type: string | null;
 }
 
@@ -56,8 +57,11 @@ function daysAgoUTC(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Discovered = the Brave essay stream (discoveryTopic) OR the index-funnel
+// link-out gems (discoverySource), the primary supply since the R7-2e flip.
 const isDiscovery = (r: ArticleProjection): boolean =>
-  !!(r.discovery_topic && r.discovery_topic !== '');
+  !!(r.discovery_topic && r.discovery_topic !== '') ||
+  !!(r.discovery_source && r.discovery_source !== '');
 
 function share(rows: ArticleProjection[]): DiscoveryShare {
   const total = rows.length;
@@ -84,6 +88,7 @@ export async function computeMetrics(
            elem->>'sourceUrl' AS source_url,
            elem->>'sourceName' AS source_name,
            elem->>'discoveryTopic' AS discovery_topic,
+           elem->>'discoverySource' AS discovery_source,
            elem->>'explorationSlotType' AS exploration_slot_type
     FROM article_batches ab
     CROSS JOIN LATERAL jsonb_array_elements(ab.articles) AS elem

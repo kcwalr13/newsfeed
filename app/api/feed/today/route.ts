@@ -45,16 +45,24 @@ export async function GET(req: NextRequest) {
   // per-issue curator-note work to those.
   const shown = displayArticles.slice(0, ISSUE_DISPLAY_SIZE);
 
-  // R7-2: permanently retire link-out gems (the index-funnel finds + curated
-  // places) from the durable novelty memory the moment they're actually DISPLAYED
-  // — so a shown find never resurfaces, while an undisplayed candidate stays
-  // eligible to appear another day. Best-effort, post-response, idempotent
+  // R7-2: permanently retire every DISPLAYED agent-discovered item — the
+  // index-funnel link-out gems + curated places (discoverySource) AND the Brave
+  // discovery essays (discoveryTopic) — from the durable novelty memory the moment
+  // they're actually shown, so a shown find never resurfaces while an undisplayed
+  // candidate stays eligible another day (retire-on-display; R7-2e moved the essay
+  // write here from generation time so the MAX_ARTICLES_IN_ISSUE-capped + below-fold
+  // essays aren't burned unseen). Best-effort, post-response, idempotent
   // (ON CONFLICT DO NOTHING); a no-op before migration 020 is applied.
-  const shownLinkOut = shown.filter(isLinkOutItem);
-  if (shownLinkOut.length > 0) {
+  const shownDiscovered = shown.filter(
+    (a) => isLinkOutItem(a) || a.discoveryTopic
+  );
+  if (shownDiscovered.length > 0) {
     after(() =>
       recordSeenUrls(
-        shownLinkOut.map((a) => ({ url: a.articleUrl, discoverySource: a.discoverySource ?? null }))
+        shownDiscovered.map((a) => ({
+          url: a.articleUrl,
+          discoverySource: a.discoverySource ?? a.discoveryTopic ?? null,
+        }))
       ).catch((err: unknown) => console.error('[feed/today] durable novelty record failed:', err))
     );
   }

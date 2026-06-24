@@ -2,7 +2,10 @@
 
 import { LLM_PROVIDER } from '@/lib/config/llm';
 
-/** Total articles in every daily batch. */
+/** Size of the ranking/candidate pool a daily batch holds (the displayed issue
+ *  is the top ISSUE_DISPLAY_SIZE). Since the R7-2e supply flip this is filled by
+ *  the index-funnel link-out gems + ≤MAX_ARTICLES_IN_ISSUE essays + the curated
+ *  place — no longer a "fixed RSS + discovery" split. */
 export const ARTICLES_PER_DAY = 20;
 
 /** Number of pieces shown in a daily issue (the "displayed 7"). The feed page
@@ -34,21 +37,23 @@ export const MIN_VISUAL_OR_POTPOURRI_IN_ISSUE = 1;
  *  two non-longread floors above, so the guarantees are jointly satisfiable. */
 export const MAX_LONGREADS_IN_ISSUE = 5;
 
-/** Fixed-source pipeline (RSS + NewsAPI) nominal contribution per day. */
-export const PIPELINE_ARTICLES_PER_DAY = 14;
+/**
+ * Maximum `article`-type (essay) pieces in a daily issue (R7-2e / design §6).
+ * Kyle's core complaint was "still just long articles in a similar pattern" — so
+ * the discovery agent caps the essay stream hard and lets one-off link-out gems
+ * (websites, web-toys, threads, …) dominate. R7-2e applies this as a SUPPLY cap
+ * on the Brave essay stream; R7-5 moves it into the display assembler
+ * (`ensureTypeSpread`) with type floors + the R5-D1 simulation re-proof. */
+export const MAX_ARTICLES_IN_ISSUE = 3;
 
-/** Discovery layer nominal contribution per day. */
+/**
+ * How many essays the Brave discovery stream may surface per run (its internal
+ * quota). Since the R7-2e supply flip the digest caps the ARTICLE-type pieces at
+ * MAX_ARTICLES_IN_ISSUE before assembly, so this is just the candidate budget the
+ * essay stream draws from — not a "fixed + discovery = 20" split (the
+ * fixed-RSS half, formerly PIPELINE_ARTICLES_PER_DAY=14, is retired).
+ */
 export const DISCOVERY_ARTICLES_PER_DAY = 6;
-
-// Invariant: PIPELINE_ARTICLES_PER_DAY + DISCOVERY_ARTICLES_PER_DAY must equal ARTICLES_PER_DAY.
-// This assertion fails at module load time if the constants drift.
-if (PIPELINE_ARTICLES_PER_DAY + DISCOVERY_ARTICLES_PER_DAY !== ARTICLES_PER_DAY) {
-  throw new Error(
-    `[config/feed] Quota mismatch: PIPELINE_ARTICLES_PER_DAY (${PIPELINE_ARTICLES_PER_DAY}) ` +
-      `+ DISCOVERY_ARTICLES_PER_DAY (${DISCOVERY_ARTICLES_PER_DAY}) ` +
-      `must equal ARTICLES_PER_DAY (${ARTICLES_PER_DAY})`
-  );
-}
 
 /** Maximum age in hours for a discovery candidate article. Default: 72 (3 days). */
 export const DISCOVERY_MAX_AGE_HOURS = 72;
@@ -139,12 +144,14 @@ export const SMALL_WEB_MAX_NEW_SOURCES_PER_RUN = 20;
 
 /**
  * Index-mining funnel (R7-2): how many verified link-out items the funnel
- * contributes to a daily batch. Kept modest while the index-miner runs ALONGSIDE
- * the fixed/Brave supply (R7-2c, additive); R7-2e raises it as agent-discovered
- * one-offs become the primary supply. These items are link-out (no body / no
- * in-app reader) and rule-filtered only — the interestingness LLM judge is R7-3.
- */
-export const INDEX_FUNNEL_ITEMS_PER_DAY = 8;
+ * contributes to a daily batch. As of R7-2e the funnel is the digest's PRIMARY
+ * supply (data/sources.json is retired), so this fills most of the
+ * ARTICLES_PER_DAY batch alongside ≤MAX_ARTICLES_IN_ISSUE essays + the curated
+ * place. Only the ~7 that actually DISPLAY are recorded into durable novelty
+ * memory (retire-on-display), so a generous batch buffer wastes no gems. These
+ * items are link-out (no body / no in-app reader) and rule-filtered only — the
+ * interestingness LLM judge is R7-3. */
+export const INDEX_FUNNEL_ITEMS_PER_DAY = 16;
 
 /**
  * Max index candidates the funnel fetch-verifies per run (wall-clock budget).

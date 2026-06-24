@@ -45,7 +45,16 @@ export const MIN_SOURCES_PER_BATCH: number = parseIntEnv(process.env.MIN_SOURCES
 /** Cooldown between manual refresh requests per authenticated user, in minutes. */
 export const REFRESH_COOLDOWN_MINUTES: number = parseIntEnv(process.env.REFRESH_COOLDOWN_MINUTES, 15);
 
-/** Reads data/sources.json and returns only sources where active === true. */
+/**
+ * Reads data/sources.json and returns only sources where active === true.
+ *
+ * NOTE (R7-2e): no longer feeds the digest — the fixed-RSS supply is retired and
+ * `runPipeline` does not call this. `data/sources.json` survives only as the
+ * discovery novelty filter's "sources Kyle already knows" set, which
+ * `lib/discovery/novelty.ts` reads from `SOURCES_PATH` directly (not via this
+ * helper). Retained for that file + potential reuse; not dead-removed so the
+ * curated list and its loader stay together.
+ */
 export function loadSources(): Source[] {
   const raw = fs.readFileSync(SOURCES_PATH, 'utf-8');
   const all: Source[] = JSON.parse(raw);

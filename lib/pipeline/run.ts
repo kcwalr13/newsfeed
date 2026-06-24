@@ -1,18 +1,11 @@
 import crypto from 'crypto';
-import {
-  MAX_ARTICLES_PER_SOURCE,
-  MAX_ARTICLES_PER_CATEGORY,
-  MIN_SOURCES_PER_BATCH,
-  loadSources,
-} from './config';
-import { categoryForArticle } from './sourceCategory';
 import { selectPlaceForBatch } from './places';
 import {
-  ARTICLES_PER_DAY,
   PIPELINE_WALL_CLOCK_BUDGET_MS,
   PIPELINE_POST_DISCOVERY_RESERVE_MS,
   PIPELINE_LLM_CONCURRENCY,
   MAX_LLM_EVALS_PER_RUN,
+  MAX_ARTICLES_IN_ISSUE,
   INDEX_FUNNEL_BUDGET_MS,
 } from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
@@ -38,16 +31,12 @@ import {
   normalizeQualityWeight,
   computeSerendipityScore,
 } from './serendipityScorer';
-import { fetchRssArticles } from './adapters/rssAdapter';
-import { fetchNewsApiArticles } from './adapters/newsApiAdapter';
-import { validateAndTrim } from './validator';
-import { classifyLowValuePost } from '@/lib/discovery/qualityGate';
 import { scoreAesthetic, AestheticScoringError } from '@/lib/discovery/aestheticScorer';
 import { upsertArticleAestheticScore, getArticleAestheticScores } from '@/lib/db/aesthetics';
 import { AESTHETIC_BODY_MIN_CHARS, AESTHETIC_BODY_MAX_CHARS } from '@/lib/config/aesthetic';
 import { extractConcepts } from '@/lib/discovery/conceptExtractor';
 import { extractBodyText } from '@/lib/discovery/bodyExtractor';
-import type { Article, ArticleBatch, Source } from '../types/article';
+import type { Article, ArticleBatch } from '../types/article';
 
 export interface RunOptions {
   /** When true, overwrites an existing same-day batch. Default: false. */
@@ -195,75 +184,6 @@ function toLinkOutArticle(item: FunnelItem, batchDate: string, nowIso: string): 
     discoverySource: item.discoverySource,
     extractedConcepts: [], // link-out items skip concept extraction (no body)
   };
-}
-
-async function fetchFromSource(source: Source) {
-  if (source.type === 'rss') return fetchRssArticles(source);
-  if (source.type === 'newsapi') return fetchNewsApiArticles(source);
-  return [];
-}
-
-type PartialArticle = Omit<Article, 'id' | 'batchDate' | 'feedbackSlot'>;
-
-function applySourceCap(articles: PartialArticle[], cap: number): PartialArticle[] {
-  const countBySource = new Map<string, number>();
-  return articles.filter((a) => {
-    const count = countBySource.get(a.sourceName) ?? 0;
-    if (count >= cap) return false;
-    countBySource.set(a.sourceName, count + 1);
-    return true;
-  });
-}
-
-/**
- * Reorders capped candidates so the front of the list — which becomes the fixed
- * portion of the batch after the trim — spans many sources and categories
- * rather than being dominated by the first few prolific feeds (P3-B3).
- *
- * Source-grouped input (`results.flat()`) meant `slice(0, fixedTarget)` took
- * ~MAX_ARTICLES_PER_SOURCE from each of only the first few sources. This instead
- * round-robins one article per source per pass (front-loading source variety,
- * keeping each source's newest-first order), and softly defers a category once
- * it reaches `perCategoryCap` in the diverse core, pushing the overflow to the
- * tail. Nothing is dropped — purely a reordering — so the downstream trim always
- * has the same candidates available even when few sources or categories yield.
- */
-function diversifyForSelection(
-  articles: PartialArticle[],
-  perCategoryCap: number
-): PartialArticle[] {
-  // Group by source, preserving each source's newest-first order.
-  const bySource = new Map<string, PartialArticle[]>();
-  for (const a of articles) {
-    const queue = bySource.get(a.sourceName);
-    if (queue) queue.push(a);
-    else bySource.set(a.sourceName, [a]);
-  }
-  const queues = [...bySource.values()];
-
-  const core: PartialArticle[] = [];
-  const deferred: PartialArticle[] = [];
-  const categoryCount = new Map<string, number>();
-
-  // Round-robin passes: one article per source per pass.
-  let advanced = true;
-  while (advanced) {
-    advanced = false;
-    for (const queue of queues) {
-      const a = queue.shift();
-      if (!a) continue;
-      advanced = true;
-      const cat = categoryForArticle(a) ?? 'uncategorized';
-      const count = categoryCount.get(cat) ?? 0;
-      if (count >= perCategoryCap) {
-        deferred.push(a); // soft cap: overflow to the tail, only fills if needed
-      } else {
-        core.push(a);
-        categoryCount.set(cat, count + 1);
-      }
-    }
-  }
-  return [...core, ...deferred];
 }
 
 /**
@@ -463,8 +383,14 @@ async function runBlindSpotProbe(
 }
 
 /**
- * Runs the full content pipeline: fetches from all active sources, validates,
- * deduplicates, applies per-source cap, checks diversity, and writes the batch.
+ * Runs the full discovery pipeline (R7-2e): the digest supply is agent-discovered
+ * ONE-OFF finds — the index-mining funnel's link-out gems (primary) + the Brave
+ * discovery essay stream (capped to MAX_ARTICLES_IN_ISSUE) + the curated place —
+ * NOT an RSS feed aggregation (data/sources.json is retired as supply). Enriches
+ * the article-type pieces (body fetch / aesthetic scoring / concept extraction /
+ * blind-spot probe), assembles, and writes the batch. Always writes a non-empty
+ * batch; degrades to a shorter digest (or skips the write to keep the prior issue)
+ * rather than failing.
  *
  * @param options.forceOverwrite - If true, overwrites an existing same-day batch.
  *   Use for manual refresh. Default: false (scheduled pipeline behavior).
@@ -479,79 +405,22 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       return { batchDate: today, count: 0, alreadyExists: true };
     }
 
-    const sources = loadSources();
+    // R7-2e SUPPLY FLIP: data/sources.json is RETIRED as the digest supply. The
+    // digest is no longer an aggregator of RSS feeds-of-items — it is built from
+    // agent-discovered ONE-OFF finds: the index-mining funnel's link-out gems
+    // (the primary supply, appended after the per-article loops below) + the
+    // Brave discovery ESSAY stream (the article-type content, capped so gems
+    // dominate). `sources.json` + its loader survive only as the discovery
+    // novelty filter's "sources Kyle already knows" set (lib/discovery/novelty.ts),
+    // never as content. Tangent is now a discovery agent, not a feed reader.
+    //
+    // Discovery dedups against an empty fixed-URL set (there is no fixed supply);
+    // the funnel dedups against the assembled essays at its own call site below.
+    const fixedArticleUrls = new Set<string>();
 
-    // Fetch from all sources with per-source failure isolation
-    const settled = await Promise.allSettled(sources.map(fetchFromSource));
-    const results: PartialArticle[][] = settled.map((outcome, i) => {
-      if (outcome.status === 'rejected') {
-        const reason =
-          outcome.reason instanceof Error
-            ? outcome.reason.message
-            : String(outcome.reason);
-        appendLog(`[pipeline] Source "${sources[i].slug}" failed: ${reason}`);
-        return [];
-      }
-      return outcome.value;
-    });
-
-    const candidates = results.flat();
-
-    // Cross-source URL deduplication (first occurrence wins), canonicalized
-    // so tracking params / trailing slashes can't smuggle in duplicates.
-    const seenUrls = new Set<string>();
-    const deduped = candidates.filter((a) => {
-      if (!a.articleUrl) return false;
-      const canonical = canonicalizeUrlForDedup(a.articleUrl);
-      if (seenUrls.has(canonical)) return false;
-      seenUrls.add(canonical);
-      return true;
-    });
-
-    // Screen out housekeeping/announcement posts and pure-video items.
-    // Fixed sources bypass the LLM eval, so this is their only content gate.
-    const editorial = deduped.filter((a) => {
-      const lowValue = classifyLowValuePost(a.title, a.articleUrl);
-      if (lowValue) {
-        appendLog(`[pipeline] FILTERED ${lowValue}: "${a.title.slice(0, 70)}" (${a.sourceName})`);
-      }
-      return !lowValue;
-    });
-
-    // Per-source article cap (applied after dedup, per PM requirement)
-    const capped = applySourceCap(editorial, MAX_ARTICLES_PER_SOURCE);
-
-    // Reorder so the fixed portion spans many sources/categories rather than
-    // the first few prolific feeds (P3-B3). Round-robin by source + soft
-    // per-category cap; purely a reordering (nothing dropped).
-    const diversified = diversifyForSelection(capped, MAX_ARTICLES_PER_CATEGORY);
-
-    // Diversity check — log warning if below minimum (do not abort)
-    const contributingSourceNames = new Set(capped.map((a) => a.sourceName));
-    const contributingCount = contributingSourceNames.size;
-    if (contributingCount < MIN_SOURCES_PER_BATCH) {
-      const failedSources = sources
-        .filter((s) => !contributingSourceNames.has(s.name))
-        .map((s) => s.slug);
-      appendLog(
-        `[pipeline] DIVERSITY WARNING: Only ${contributingCount}/${MIN_SOURCES_PER_BATCH} ` +
-          `required sources contributed. ` +
-          `Contributing: [${[...contributingSourceNames].join(', ')}]. ` +
-          `Failed/empty: [${failedSources.join(', ')}].`
-      );
-    }
-
-    // Validate (titles/URLs) and trim to target batch size.
-    // We keep up to ARTICLES_PER_DAY so that if discovery yields 0, fixed sources can fill all 20 slots.
-    // Fed the diversified order so the kept front spans many sources/categories.
-    const validated = validateAndTrim(diversified, ARTICLES_PER_DAY);
-
-    // Build URL set for discovery-vs-fixed deduplication (shared canonicalizer).
-    const fixedArticleUrls = new Set(validated.map((a) => canonicalizeUrlForDedup(a.articleUrl)));
-
-    // Wall-clock budget: discovery only gets what's left after reserving time
-    // for body fetch, scoring, concept extraction, and the batch write. A slow
-    // or hung discovery must never prevent the batch from being written.
+    // Wall-clock budget: the Brave essay stream only gets what's left after
+    // reserving time for body fetch, scoring, concept extraction, the index
+    // funnel, and the batch write. A slow/hung run must never prevent the write.
     let discoveryArticles: Article[] = [];
     const elapsedMs = Date.now() - runStartMs;
     const discoveryBudgetMs =
@@ -560,7 +429,7 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     if (discoveryBudgetMs <= 0) {
       appendLog(
         `[discovery] Skipped: wall-clock budget exhausted (${elapsedMs}ms elapsed). ` +
-          `Continuing with fixed-only batch.`
+          `Continuing without the essay stream (funnel gems only).`
       );
     } else {
       appendLog(`[discovery] Starting discovery run (budget ${discoveryBudgetMs}ms)...`);
@@ -586,40 +455,37 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
         if (raced === null) {
           appendLog(
             `[discovery] Cut short after ${discoveryBudgetMs}ms budget. ` +
-              `Continuing with fixed-only batch.`
+              `Continuing without the essay stream (funnel gems only).`
           );
         } else {
           discoveryArticles = raced;
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        appendLog(`[discovery] Discovery run failed entirely: ${msg}. Falling back to fixed-only batch.`);
+        appendLog(`[discovery] Discovery run failed entirely: ${msg}. Continuing with funnel gems only.`);
         discoveryArticles = [];
       }
     }
 
+    // R7-2e: the Brave stream supplies the ARTICLE-type content. Cap it so the
+    // digest is dominated by one-off gems rather than a wall of long reads
+    // (Kyle's core complaint). This previews R7-5's MAX_ARTICLES_IN_ISSUE as a
+    // SUPPLY cap; R7-5 moves the cap into the display assembler (ensureTypeSpread)
+    // with floors + the R5-D1 simulation re-proof. runDiscovery already returns
+    // its essays sorted by composite score, so the slice keeps the best.
     const discoveryCount = discoveryArticles.length;
-    const fixedTarget = ARTICLES_PER_DAY - discoveryCount;
-    const finalFixedCandidates = validated.slice(0, fixedTarget);
+    const cappedEssays = discoveryArticles.slice(0, MAX_ARTICLES_IN_ISSUE);
 
-    let articles: Article[] = [
-      ...finalFixedCandidates.map((a) => ({
-        ...a,
-        id: makeId(a.sourceName, a.articleUrl),
-        batchDate: today,
-        feedbackSlot: null as null,
-        readTime: estimateReadTime(a.bodyText),
-      })),
-      ...discoveryArticles.map((a) => ({
-        ...a,
-        batchDate: today,
-        // Only set readTime if not already set by the discovery pipeline
-        readTime: a.readTime ?? estimateReadTime(a.bodyText),
-      })),
-    ];
+    let articles: Article[] = cappedEssays.map((a) => ({
+      ...a,
+      batchDate: today,
+      // Only set readTime if not already set by the discovery pipeline
+      readTime: a.readTime ?? estimateReadTime(a.bodyText),
+    }));
 
     appendLog(
-      `[pipeline] Batch: ${finalFixedCandidates.length} fixed-source, ${discoveryCount} discovery`
+      `[pipeline] Supply (R7-2e flip): ${cappedEssays.length} discovered essay(s) ` +
+        `(capped at ${MAX_ARTICLES_IN_ISSUE} of ${discoveryCount}); funnel gems appended below`
     );
 
     // R7-2c: index-mining funnel — the agent-discovered one-off stream. Crawls
@@ -677,9 +543,11 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     const paywalledIds = await fetchMissingBodyText(articles);
 
     // Exclude items whose full text isn't actually available — a paywalled
-    // Substack/member post would otherwise render as a misleading stub. The
-    // batch holds ARTICLES_PER_DAY (20) but only ISSUE_DISPLAY_SIZE (7) show,
-    // so dropping a few confirmed-paywalled items never starves the issue.
+    // Substack/member post would otherwise render as a misleading stub. At this
+    // point `articles` is only the ≤MAX_ARTICLES_IN_ISSUE capped essays (the
+    // funnel gems + place are appended below and never hit this path), and the
+    // displayed issue is backfilled by those link-out gems, so dropping a
+    // paywalled essay still never starves the issue.
     if (paywalledIds.size > 0) {
       const before = articles.length;
       articles = articles.filter((a) => !paywalledIds.has(a.id));
@@ -797,6 +665,22 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
         added++;
       }
       appendLog(`[pipeline] Index funnel appended ${added} link-out item(s) to the batch`);
+    }
+
+    // R7-2e: never write an EMPTY batch. With the fixed-RSS floor retired, a
+    // thin day (discovery cut short + funnel empty + no place this issue) can now
+    // genuinely produce zero items. Writing an empty batch would SHADOW the prior
+    // issue — the feed's `readBatch(today) ?? readLatestBatch()` only falls back
+    // when today's batch is *absent*, so an empty-but-present one renders the
+    // "Nothing yet" empty state instead of yesterday's still-good gems. Skip the
+    // write so the reader keeps the last real issue (graceful degradation: a stale
+    // good issue beats an empty one). The next run/cron retries.
+    if (articles.length === 0) {
+      appendLog(
+        `[pipeline] Empty supply for ${today} (no gems, essays, or place) — skipping the write so ` +
+          `the prior issue stays visible. Next run will retry.`
+      );
+      return { batchDate: today, count: 0, alreadyExists: false };
     }
 
     const batch: ArticleBatch = {

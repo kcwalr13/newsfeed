@@ -18,7 +18,7 @@ import { runSmallWebCrawl } from './smallWeb/crawler';
 import { appendLog, readLatestBatch } from '@/lib/pipeline/storage';
 import { canonicalizeUrlForDedup, registrableDomain } from '@/lib/utils/url';
 import { loadSeenSourceDomains, isMegaSite, noveltyKey } from './novelty';
-import { loadSeenNoveltyKeys, recordSeenUrls } from '@/lib/db/discoverySeen';
+import { loadSeenNoveltyKeys } from '@/lib/db/discoverySeen';
 import {
   getTopicWeightsForUser,
   getAllTopicWeightsAveraged,
@@ -466,15 +466,13 @@ export async function runDiscovery(
   // Save updated rotation state
   await saveRotationState(updatedRotationState);
 
-  // R7-2: permanently record every surfaced one-off so it can never resurface
-  // (URL + novelty key), beyond the batch-window lookback. Best-effort and a
-  // no-op until migration 020 is applied (recordSeenUrls swallows its errors).
-  const recorded = await recordSeenUrls(
-    top.map(({ result, topic }) => ({ url: result.url, discoverySource: topic.id }))
-  );
-  if (recorded > 0) {
-    appendLog(`[discovery] durable novelty: recorded ${recorded} surfaced URL(s)`);
-  }
+  // NOTE (R7-2e): durable novelty recording is **retire-on-DISPLAY**, done in the
+  // feed route for every discovered item actually shown (essays AND link-out
+  // gems) — NOT here at generation time. Recording at generation burned the
+  // essays that the R7-2e MAX_ARTICLES_IN_ISSUE cap slices off (and the below-fold
+  // ones) without ever showing them, permanently filtering their domains. The
+  // union-on-read (loadSeenNoveltyKeys → seenDomains, above) still applies the
+  // memory; only the write moved to display so an unshown essay can resurface.
 
   // Map to Article objects
   const now = new Date().toISOString();
