@@ -96,6 +96,11 @@ A **candidate-generation → funnel → assembly** pipeline. Replaces feed inges
    Marginalia, "awesome-X" GitHub lists, IndieWeb blogrolls/webrings. These pages are read **as crawl seeds** (HTML
    or their API) purely to extract outbound URLs — they are *not* feeds-of-items. Naturally yields multi-type
    candidates (a subreddit points at music/sites/threads; HN at sites/tools; are.na at anything).
+   **Curate BROADLY and eclectically — the named platforms (Reddit, YouTube, etc.) are illustrative, not a required
+   set (Kyle, 2026-06-23).** Reddit specifically is optional and not important (and 403s from datacenter IPs, §9);
+   the engine should range across all sorts of gem-indexes (newsletters' link sections, "X of the day" sites,
+   webrings, curated GitHub awesome-lists, museum/archive collections, niche directories, personal blogrolls, etc.)
+   rather than over-fit to any one platform. Breadth of *kinds of places* is a feature; keep adding new index kinds.
 2. **LLM-proposed gems (the agentic wildcard layer).** Per rotating theme/interest (drawn from Kyle's taste
    profile + structured randomness), prompt the LLM to propose lesser-known, genuinely interesting **destinations**
    across the type families. **Every proposed URL is fetched and verified** (§4) before it can advance — the model

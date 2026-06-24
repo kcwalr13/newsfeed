@@ -123,8 +123,8 @@ npm run dev           # for manual/browser spot-checks
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
   optional). **▶ ACTIVE BACKLOG: 1/7 DONE (R7-1) · R7-2 IN-PROGRESS (sub-steps a+b done; c–e TODO) · 5 TODO
   (R7-3…R7-7, R7-7 optional).** **Last resume point: R7-2(c)** (rule-filter funnel: liveness/realness verify + type
-  classify + dedup against the durable memory; wire `runIndexMining()` into the digest). **Migration 020 PENDING**
-  (R7-2(a); BLOCKED-ON-APPLY — see "Migrations awaiting Kyle"). R4-15 still BLOCKED on Kyle's seed-vector sign-off
+  classify + dedup against the durable memory; wire `runIndexMining()` into the digest). **Migration 020 APPLIED 2026-06-23**
+  (R7-2(a); durable novelty memory now live). R4-15 still BLOCKED on Kyle's seed-vector sign-off
   (independent).
   Progress: **34 DONE (R2-01–R2-28, D-01–D-06) · 1 SKIPPED (S-01 owner action) · 0 TODO. ✅ ROUND 2 COMPLETE.**
 - Migrations: ✅ all 19 applied to Neon via `npm run db:migrate` (2026-06-12), verified live
@@ -1231,7 +1231,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   milestone where the digest becomes one-off gems (moltbook-class), not feed articles.** · **IN-PROGRESS**
   - **Sub-steps** (each independently gate-green + committed; see the recon note for the rationale of this order):
     - [x] **(a)** Durable novelty/dedup memory (migration + backward-compatible module, wired into the discovery
-      novelty filter). · **DONE** (commit `6183966`) · **migration 020 BLOCKED-ON-APPLY** (see "Migrations awaiting Kyle").
+      novelty filter). · **DONE** (commit `6183966`) · **migration 020 APPLIED 2026-06-23** (durable novelty memory live).
     - [x] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
       the digest). · **DONE** (commit `a2d8580`)
     - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO ← RESUME HERE**
@@ -1407,14 +1407,17 @@ _List each new migration file + the exact apply step. Code must NOT apply these 
 > ✅ **001–019 applied to Neon on 2026-06-12** via `npm run db:migrate` (19 migrations); verified live by
 > the reviewer (save 200, discovery running, limiter active, NULLS-NOT-DISTINCT live). Rows kept for history.
 >
-> ⏳ **020 is NEW and PENDING (R7-2(a), 2026-06-23).** Apply with `npm run db:migrate` (preview:
-> `npm run db:migrate:status`). The app is deploy-safe before it's applied (durable novelty memory degrades to
-> a no-op — verified live: the calls swallow `relation … does not exist`). After applying, the discovery
-> novelty filter becomes permanent (a surfaced find never resurfaces). No data migration / backfill needed.
+> ✅ **020 APPLIED to Neon on 2026-06-23 (R7-2(a))** via `npm run db:migrate`; confirmed by `db:migrate:status`
+> (001–020 all `[applied]`). Durable discovery novelty memory is now live — surfaced finds are recorded permanently
+> and never resurface. No backfill needed.
+>
+> Note: the **015 / 016 rows below are historical** — `db:migrate:status` (2026-06-23) shows them `[applied]` (part of
+> the 001–019 batch); their "until applied" wording is stale. (Separate tracker-hygiene loose end if DAT-C1 / DAT-C2
+> were never flipped to DONE — for a future pass, not Round 7.)
 
 | Migration file | For finding | Apply note |
 |----------------|-------------|------------|
-| `lib/db/migrations/020_discovery_seen_urls.sql` | **R7-2(a)** ⏳ **PENDING** | Creates `discovery_seen_urls` (durable, permanent novelty/dedup memory for discovery). Idempotent (`CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`). Apply via `npm run db:migrate`. **Exact SQL:** `CREATE TABLE IF NOT EXISTS discovery_seen_urls (url_canonical TEXT PRIMARY KEY, novelty_key TEXT NOT NULL, first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), discovery_source TEXT); CREATE INDEX IF NOT EXISTS idx_discovery_seen_urls_novelty_key ON discovery_seen_urls (novelty_key);` Until applied, `loadSeenNoveltyKeys()`/`recordSeenUrls()` are graceful no-ops (no behavior change). After applying, verify: run discovery once, then `SELECT COUNT(*) FROM discovery_seen_urls` > 0 and `[discovery] durable novelty: recorded N surfaced URL(s)` appears in the log. |
+| `lib/db/migrations/020_discovery_seen_urls.sql` | **R7-2(a)** ✅ **APPLIED 2026-06-23** | Creates `discovery_seen_urls` (durable, permanent novelty/dedup memory for discovery). Idempotent (`CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`). Apply via `npm run db:migrate`. **Exact SQL:** `CREATE TABLE IF NOT EXISTS discovery_seen_urls (url_canonical TEXT PRIMARY KEY, novelty_key TEXT NOT NULL, first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), discovery_source TEXT); CREATE INDEX IF NOT EXISTS idx_discovery_seen_urls_novelty_key ON discovery_seen_urls (novelty_key);` Until applied, `loadSeenNoveltyKeys()`/`recordSeenUrls()` are graceful no-ops (no behavior change). After applying, verify: run discovery once, then `SELECT COUNT(*) FROM discovery_seen_urls` > 0 and `[discovery] durable novelty: recorded N surfaced URL(s)` appears in the log. |
 | `lib/db/migrations/015_query_rotation_state.sql` | DAT-C1 | Run the file's SQL against Neon (psql or console). Idempotent (`CREATE TABLE IF NOT EXISTS`). Until applied, discovery works but the query-rotation cursor resets each run (logged as a warning, non-fatal). After applying, flip DAT-C1 to DONE. |
 | `lib/db/migrations/016_nulls_not_distinct_unique.sql` | DAT-C2 | Requires PG ≥ 15 (`SHOW server_version` to confirm; Neon qualifies). Runs in one transaction: de-dups the five identity tables, then swaps the unique constraints to `UNIQUE NULLS NOT DISTINCT`. Idempotent — safe to re-run. Until applied, anonymous upserts keep duplicating (current prod behavior, no worse). After applying, verify: repeat a like → `SELECT COUNT(*) FROM user_aesthetic_profiles WHERE user_id IS NULL` stays constant and `feedback_count` increments; then flip DAT-C2 to DONE. |
 | `lib/db/migrations/017_article_batches_gin.sql` | DAT-H3 (perf only) | Optional/low-urgency: GIN index for the cross-batch article lookup. The feature works without it; apply whenever convenient. Idempotent. |
