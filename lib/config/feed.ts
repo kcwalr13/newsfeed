@@ -4,8 +4,9 @@ import { LLM_PROVIDER } from '@/lib/config/llm';
 
 /** Size of the ranking/candidate pool a daily batch holds (the displayed issue
  *  is the top ISSUE_DISPLAY_SIZE). Since the R7-2e supply flip this is filled by
- *  the index-funnel link-out gems + ≤MAX_ARTICLES_IN_ISSUE essays + the curated
- *  place — no longer a "fixed RSS + discovery" split. */
+ *  the index-funnel link-out gems + the discovered essay supply (display shows
+ *  exactly ARTICLES_PER_ISSUE) + the curated place — no longer a "fixed RSS +
+ *  discovery" split. */
 export const ARTICLES_PER_DAY = 20;
 
 /** Number of pieces shown in a daily issue (the "displayed 7"). The feed page
@@ -38,22 +39,30 @@ export const MIN_VISUAL_OR_POTPOURRI_IN_ISSUE = 1;
 export const MAX_LONGREADS_IN_ISSUE = 5;
 
 /**
- * Maximum `article`-type (essay) pieces in a daily issue (R7-2e / design §6).
- * Kyle's core complaint was "still just long articles in a similar pattern" — so
- * the discovery agent caps the essay stream hard and lets one-off link-out gems
- * (websites, web-toys, threads, …) dominate. R7-2e applies this as a SUPPLY cap
- * on the Brave essay stream; R7-5 moves it into the display assembler
- * (`ensureTypeSpread`) with type floors + the R5-D1 simulation re-proof. */
-export const MAX_ARTICLES_IN_ISSUE = 3;
+ * EXACTLY how many `article`-type (essay) pieces a displayed issue contains —
+ * the HARD RULE (Kyle, 2026-06-24): precisely ONE, never 0, never 2+. A precise
+ * quota, not a `≤N` cap (it replaced the R7-2e `MAX_ARTICLES_IN_ISSUE`=3 cap).
+ * Tangent is a discovery agent: one-off link-out gems (websites/web-toys/threads/
+ * …) dominate the issue and exactly one readable essay anchors it.
+ *
+ * Enforced at the DISPLAY layer by `ensureExactlyOneArticle` (composed in
+ * `resolveDisplayedFeed`), NOT as a supply cap — the pipeline keeps ALL scored
+ * essays in the batch so ≥1 always survives to be placed (the 2026-06-24 live run
+ * showed 0 essays, which this rule fixes). R7-5 folds this into the full
+ * `ensureTypeSpread` (≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE` types + a wildcard
+ * slot) and re-proves composition with the R5-D1 simulation harness. */
+export const ARTICLES_PER_ISSUE = 1;
 
 /**
  * How many essays the Brave discovery stream may surface per run (its internal
- * quota). Since the R7-2e supply flip the digest caps the ARTICLE-type pieces at
- * MAX_ARTICLES_IN_ISSUE before assembly, so this is just the candidate budget the
- * essay stream draws from — not a "fixed + discovery = 20" split (the
- * fixed-RSS half, formerly PIPELINE_ARTICLES_PER_DAY=14, is retired).
+ * quota) = the essay SUPPLY the pipeline keeps. The display shows exactly
+ * ARTICLES_PER_ISSUE (1) of these, so the quota is a small candidate buffer:
+ * enough that ≥1 good essay survives paywall/dedup and the display has a choice
+ * to anchor the issue with. Tuned down 6→4 (R7-3) — only one essay displays, and
+ * a smaller buffer leaves more of the per-run LLM budget for the index-funnel
+ * interestingness judge (R7-3) without starving the essay slot.
  */
-export const DISCOVERY_ARTICLES_PER_DAY = 6;
+export const DISCOVERY_ARTICLES_PER_DAY = 4;
 
 /** Maximum age in hours for a discovery candidate article. Default: 72 (3 days). */
 export const DISCOVERY_MAX_AGE_HOURS = 72;
@@ -146,8 +155,9 @@ export const SMALL_WEB_MAX_NEW_SOURCES_PER_RUN = 20;
  * Index-mining funnel (R7-2): how many verified link-out items the funnel
  * contributes to a daily batch. As of R7-2e the funnel is the digest's PRIMARY
  * supply (data/sources.json is retired), so this fills most of the
- * ARTICLES_PER_DAY batch alongside ≤MAX_ARTICLES_IN_ISSUE essays + the curated
- * place. Only the ~7 that actually DISPLAY are recorded into durable novelty
+ * ARTICLES_PER_DAY batch alongside the discovered essay supply (display shows
+ * exactly ARTICLES_PER_ISSUE) + the curated place. Only the ~7 that actually
+ * DISPLAY are recorded into durable novelty
  * memory (retire-on-display), so a generous batch buffer wastes no gems. These
  * items are link-out (no body / no in-app reader) and rule-filtered only — the
  * interestingness LLM judge is R7-3. */

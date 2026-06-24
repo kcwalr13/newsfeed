@@ -121,9 +121,9 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG: 2/7 DONE (R7-1, R7-2) · 5 TODO (R7-3…R7-7, R7-7 optional).** **Last resume point:
-  R7-3** (LLM agentic stream + the type-aware interestingness/taste judge that replaces the essay evaluator + the
-  safety/spam/NSFW guards). **✅ R7-2 COMPLETE (a–e):** Tangent is now a **discovery agent, not a feed reader** — the
+  optional). **▶ ACTIVE BACKLOG: 2/7 DONE (R7-1, R7-2) · R7-3 IN-PROGRESS · 4 TODO (R7-4…R7-7, R7-7 optional).** **Last
+  resume point: R7-3(b)** (the type-aware interestingness/safety judge — funnel's universal gate; **R7-3(a)
+  exactly-1-essay HARD RULE is DONE**: `ARTICLES_PER_ISSUE`=1 + supply-keep + `ensureExactlyOneArticle`). **✅ R7-2 COMPLETE (a–e):** Tangent is now a **discovery agent, not a feed reader** — the
   digest supply is agent-discovered one-off link-out gems (index-mining funnel: liveness-verify + type-classify +
   durable dedup) + **exactly 1 essay (HARD RULE, Kyle 2026-06-24 — was a ≤3 cap)** + the curated place;
   **`data/sources.json` is retired as supply** (kept only as the discovery novelty filter); every link-out card
@@ -1420,7 +1420,34 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   `llmEvaluator`'s 5 essay dims, plus the **safety/spam/NSFW** guards. **`wrapUntrusted` every fetched page sent to an
   LLM.** Adds true wildcards + the real quality bar. **Must-reject test targets from R7-2's live run (2026-06-24):
   `carbonads.net` (ad network), `bunny.net` (CDN corp site), `krea.ai` (commercial product) — the judge has to drop
-  these alive-but-junky pages the rule funnel let through.** · **TODO ← RESUME HERE**
+  these alive-but-junky pages the rule funnel let through.** · **IN-PROGRESS**
+  - **Sub-steps** (each independently gate-green + committed):
+    - [x] **(a)** **Exactly-1-essay HARD RULE** (Kyle 2026-06-24; pulled forward from R7-5 per the session brief — the
+      self-contained config + supply-keep + display-enforcement part). `ARTICLES_PER_ISSUE`=1 in `lib/config/feed.ts`
+      (replaces the `MAX_ARTICLES_IN_ISSUE`=3 supply cap); the pipeline keeps ALL scored essays in the batch (supply
+      keeps ≥1 so one can always be placed); new `ensureExactlyOneArticle` (`displayDiversity.ts`) places **precisely
+      one** essay in the displayed issue (demote excess / promote one if zero), composed LAST in `resolveDisplayedFeed`
+      + on the unranked fallback. · **DONE** (commit `pending-A`)
+    - [ ] **(b)** **Type-aware interestingness/safety judge + `wrapUntrusted`** — the funnel's universal LLM gate that
+      drops the must-reject junk targets (carbonads/bunny/krea) + safety/spam/NSFW; cheap commercial/infra denylist
+      backstop. · **TODO ← RESUME HERE**
+    - [ ] **(c)** **LLM agentic stream 2** (LLM-proposed gems per rotating theme → fetch-and-verify) feeding the funnel
+      through the judge. · **TODO**
+  - **Notes — (a) exactly-1-essay (DONE):** `lib/config/feed.ts`: `MAX_ARTICLES_IN_ISSUE`=3 → `ARTICLES_PER_ISSUE`=1
+    (a precise DISPLAY quota, not a supply cap), `DISCOVERY_ARTICLES_PER_DAY` 6→4 (only 1 essay displays; a smaller
+    essay buffer frees per-run LLM budget for the R7-3 judge while still keeping a paywall-resilient choice).
+    `lib/pipeline/run.ts`: removed the `slice(0, MAX_ARTICLES_IN_ISSUE)` supply cap — the pipeline keeps every scored
+    essay (so ≥1 survives paywall/dedup and the display has a good one to anchor with; the cap can no longer cause an
+    essay-wall now the display enforces exactly 1). `lib/pipeline/displayDiversity.ts`: new pure-reorder
+    `ensureExactlyOneArticle(ranked, displaySize)` — essay = `!isLinkOutItem`; >1 → keep the highest-ranked, demote the
+    rest into below-fold gems; 0 → promote the best below-fold essay over the lowest top gem; graceful no-op when the
+    pool can't satisfy (0 essays anywhere / too few gems). `lib/pipeline/displayedFeed.ts`: composed LAST (after the
+    consecutive-source cap — an essay is its own unique source so the cap never has to move it) AND on the unranked
+    fallback (pure reorder, no DB). `ISSUE_META_VERSION` 2→3 so cached colophons regenerate against the new order.
+    **Verified:** `tsc` clean · `lint` 0 errors (4 pre-existing warnings) · `build` EXIT=0; **targeted behavior check**
+    (throwaway ts-node, removed) — 6/6 cases PASS: 0-in-top→1, 2-in-top→1, 7-in-top (essay-wall)→1, exactly-1 no-op
+    (order unchanged), 0-essays-anywhere→graceful 0, gem-dominant-essay-below-fold→1; issue size preserved in all.
+    Full type-spread (≥4 types + wildcard + R5-D1 simulation re-proof) remains **R7-5**.
 - [ ] **R7-4** · **Multi-type coverage (music + video + finds), discovered not fed.** Type detection + enrichment +
   link-out cards for `music`/`video`/`find`; make the streams surface them (music/video/find indexes + the LLM hunt +
   search). Video thumbnails from page/oEmbed; music cover art where free. **No subscriptions** — all discovered. · **TODO**
@@ -1431,7 +1458,13 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   this rule fixes that); guarantee `MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE`=4, a wildcard slot for the agentic gem)
   + config in `lib/config/feed.ts`; per-type candidate targets in the engine; compose in `resolveDisplayedFeed`
   (after C2/C3, before the source cap). **Re-prove composition by the R5-D1 simulation harness** (no floor broken,
-  graceful degradation when gems are thin — a short digest of real finds beats a padded one). · **TODO**
+  graceful degradation when gems are thin — a short digest of real finds beats a padded one). · **TODO** ·
+  **NOTE (2026-06-24):** the **exactly-1-essay HARD RULE** part landed early in **R7-3(a)** per the session brief
+  (`ARTICLES_PER_ISSUE`=1 + supply-keep + a self-contained `ensureExactlyOneArticle` reorder composed last in
+  `resolveDisplayedFeed`). R7-5 still owns the **rest**: fold it into the full `ensureTypeSpread` (≥4 distinct content
+  types + a wildcard slot for the agentic gem), compose with C2/C3 + the cap, and **re-prove the whole composition via
+  the R5-D1 simulation harness** (the minimal R7-3(a) version nails only the essay quota; it has NOT been simulation-
+  proved against the cap/floor interactions).
 - [ ] **R7-6** · **Cross-type taste v1 + creative search + graph-follow + polish.** Track like/skip/save/dwell **per
   `contentType`** + per domain (single global profile, personal-use); a modest per-type affinity multiplier in
   ranking + as judge context (engaged types/domains surface more; ignored fade, never to zero); cheap tags
@@ -1456,6 +1489,8 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
 
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
+
+| 2026-06-24 | R7-3(a) | Enforce the exactly-1-essay rule at the **DISPLAY layer** (`ensureExactlyOneArticle` in `resolveDisplayedFeed`) while the SUPPLY keeps **all** scored essays — instead of a supply-level "keep exactly 1" cap; placed the reorder **LAST** (after the consecutive-source cap) and **also on the unranked fallback** | The rule is about the **displayed** issue ("precisely one essay, never 0 or 2+"), and the displayed issue is the rank+diversity-reordered top-7 — so the count must be enforced where the 7 are chosen (the display layer), not at supply. Keeping the full essay supply (vs capping it) is what guarantees "≥1 can always be placed": a supply cap of 1 would mean a single paywalled/deduped essay → 0 (the 2026-06-24 bug), whereas keeping ~4 leaves a fallback essay AND a choice for the display to anchor with. The exactly-1 reorder runs LAST because it's a HARD rule (must win over the best-effort cap) and an essay is its own unique source, so the cap never needs to move it — making the ordering safe in practice (R7-5 formally re-proves it via simulation). Applying it on the unranked fallback too holds the rule even when identity/feedback reads fail (it's a pure reorder, no DB). Lowered `DISCOVERY_ARTICLES_PER_DAY` 6→4 since only one essay displays — a smaller buffer frees per-run LLM budget for the R7-3 judge without risking the essay slot. Full `ensureTypeSpread` + simulation re-proof stays R7-5 (the session brief's "do the config + supply-keep part and note the rest for R7-5"). |
 
 | Date | Finding | Decision | Rationale |
 |------|---------|----------|-----------|
@@ -2374,3 +2409,22 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   essay dims + the safety/spam/NSFW guards. **`wrapUntrusted` every fetched page sent to the judge** (the injection
   surface is now broad). This is also where alive-but-junky pages (carbonads-style ad pages, SEO slop) get filtered —
   R7-2's rule funnel deliberately leaves that to the judge. R4-15 still BLOCKED on Kyle's seed-vector sign-off.
+
+### Session 2026-06-24 (cont.) — R7-3(a) exactly-1-essay HARD RULE
+- **R7-3(a) DONE** (commit `pending-A`) — the displayed issue now contains **precisely one** `article`-type essay
+  (never 0 — the 2026-06-24 live run — never 2+). Pulled forward from R7-5 per the session brief (the self-contained
+  config + supply-keep + display-enforcement part; the full type-spread composition + simulation re-proof stays R7-5).
+  - **`lib/config/feed.ts`:** `MAX_ARTICLES_IN_ISSUE`=3 → **`ARTICLES_PER_ISSUE`=1** (precise DISPLAY quota, not a
+    supply cap); `DISCOVERY_ARTICLES_PER_DAY` 6→4 (only 1 essay displays — smaller buffer frees LLM budget for the
+    R7-3 judge while keeping a paywall-resilient choice).
+  - **`lib/pipeline/run.ts`:** removed the `slice(0, MAX_ARTICLES_IN_ISSUE)` supply cap — keep ALL scored essays so
+    ≥1 always survives to be placed; the display layer caps the count, so no essay-wall.
+  - **`lib/pipeline/displayDiversity.ts`:** new pure-reorder `ensureExactlyOneArticle` (essay = `!isLinkOutItem`;
+    demote excess / promote one if zero; graceful when the pool can't satisfy).
+  - **`lib/pipeline/displayedFeed.ts`:** composed LAST (after the source cap) in the ranked path AND on the unranked
+    fallback. `themeGenerator.ts`: `ISSUE_META_VERSION` 2→3 so colophons regenerate against the new order.
+  - **Verified:** `tsc` clean · `lint` 0 errors (4 pre-existing warnings) · `build` EXIT=0; **6/6 targeted behavior
+    cases PASS** (0→1, 2→1, 7→1, exactly-1 no-op, 0-anywhere graceful, gem-dominant-below-fold→1; issue size preserved).
+- RESUME AT: **R7-3(b)** — type-aware interestingness/safety LLM judge (the funnel's universal gate that drops
+  carbonads/bunny/krea + safety/spam/NSFW) + `wrapUntrusted` on every fetched page sent to it. Then (c) the LLM
+  agentic stream. R4-15 still BLOCKED on Kyle's seed-vector sign-off.

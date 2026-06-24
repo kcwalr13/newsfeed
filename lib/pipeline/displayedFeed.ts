@@ -35,7 +35,7 @@ import {
   MIN_VISUAL_OR_POTPOURRI_IN_ISSUE,
   MAX_LONGREADS_IN_ISSUE,
 } from '@/lib/config/feed';
-import { promoteUnfamiliarSources, ensureCategorySpread, ensureFormatSpread, isNeverShown } from '@/lib/pipeline/displayDiversity';
+import { promoteUnfamiliarSources, ensureCategorySpread, ensureFormatSpread, ensureExactlyOneArticle, isNeverShown } from '@/lib/pipeline/displayDiversity';
 import { categoryForArticle } from '@/lib/pipeline/sourceCategory';
 import { formatForArticle } from '@/lib/pipeline/contentFormat';
 import type { Article, ArticleBatch } from '@/lib/types/article';
@@ -178,7 +178,15 @@ export async function resolveDisplayedFeed(
     allConceptEdgesResult   = conceptEdges;
   } catch (err) {
     console.error('[displayedFeed] identity/feedback/aesthetic fetch failed, returning raw order:', err);
-    return { articles: batch.articles, setCookieHeader, ranked: false, taste: EMPTY_TASTE };
+    // Even on the unranked fallback, hold the exactly-1-essay hard rule (Kyle
+    // 2026-06-24) — it's a pure reorder needing no DB, so a degraded read still
+    // shows precisely one essay rather than an essay-walled raw batch order.
+    return {
+      articles: ensureExactlyOneArticle(batch.articles, ISSUE_DISPLAY_SIZE),
+      setCookieHeader,
+      ranked: false,
+      taste: EMPTY_TASTE,
+    };
   }
 
   const topConceptLabels = topConceptNodes.map(n => n.label);
@@ -319,6 +327,15 @@ export async function resolveDisplayedFeed(
   } catch (err) {
     console.error('[displayedFeed] display-diversity reorder skipped:', err);
   }
+
+  // EXACTLY-ONE-ESSAY hard rule (Kyle 2026-06-24) — applied LAST so it has the
+  // final say on the displayed `article` count: precisely one essay anchors the
+  // gem-dominant issue, never 0 (the 2026-06-24 live run) or 2+. A pure reorder;
+  // it runs after the consecutive-source cap because the essay quota is a hard
+  // rule and an essay is its own unique source (so the cap never has to move it
+  // anyway). R7-5 folds this into ensureTypeSpread + re-proves the full
+  // composition (cap interaction included) via the R5-D1 simulation harness.
+  displayArticles = ensureExactlyOneArticle(displayArticles, ISSUE_DISPLAY_SIZE);
 
   return { articles: displayArticles, setCookieHeader, ranked: true, taste };
 }

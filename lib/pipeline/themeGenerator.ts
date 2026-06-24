@@ -14,11 +14,12 @@ import { getLlm, isLlmConfigured } from '@/lib/llm';
 
 /**
  * Current derivation version for issue metadata. Bump when the displayed-seven
- * resolution changes so cached batches regenerate on next access. v2 = built
+ * resolution changes so cached batches regenerate on next access. v3 = adds the
+ * exactly-one-essay reorder (R7-3) to the displayed-seven resolution; v2 = built
  * from the rank + display-diversity reordered seven (R4-01); v1 (or unset) was
  * built from the raw stored batch order.
  */
-export const ISSUE_META_VERSION = 2;
+export const ISSUE_META_VERSION = 3;
 
 interface ThemeResult {
   theme: string;       // two or three lowercase words, e.g. "quiet systems"

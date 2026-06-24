@@ -5,7 +5,6 @@ import {
   PIPELINE_POST_DISCOVERY_RESERVE_MS,
   PIPELINE_LLM_CONCURRENCY,
   MAX_LLM_EVALS_PER_RUN,
-  MAX_ARTICLES_IN_ISSUE,
   INDEX_FUNNEL_BUDGET_MS,
 } from '@/lib/config/feed';
 import { runDiscovery } from '@/lib/discovery/run';
@@ -383,10 +382,11 @@ async function runBlindSpotProbe(
 }
 
 /**
- * Runs the full discovery pipeline (R7-2e): the digest supply is agent-discovered
- * ONE-OFF finds — the index-mining funnel's link-out gems (primary) + the Brave
- * discovery essay stream (capped to MAX_ARTICLES_IN_ISSUE) + the curated place —
- * NOT an RSS feed aggregation (data/sources.json is retired as supply). Enriches
+ * Runs the full discovery pipeline (R7-2e/R7-3): the digest supply is
+ * agent-discovered ONE-OFF finds — the index-mining funnel's link-out gems
+ * (primary) + the Brave discovery essay supply (display shows exactly
+ * ARTICLES_PER_ISSUE) + the curated place — NOT an RSS feed aggregation
+ * (data/sources.json is retired as supply). Enriches
  * the article-type pieces (body fetch / aesthetic scoring / concept extraction /
  * blind-spot probe), assembles, and writes the batch. Always writes a non-empty
  * batch; degrades to a shorter digest (or skips the write to keep the prior issue)
@@ -467,16 +467,18 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
       }
     }
 
-    // R7-2e: the Brave stream supplies the ARTICLE-type content. Cap it so the
-    // digest is dominated by one-off gems rather than a wall of long reads
-    // (Kyle's core complaint). This previews R7-5's MAX_ARTICLES_IN_ISSUE as a
-    // SUPPLY cap; R7-5 moves the cap into the display assembler (ensureTypeSpread)
-    // with floors + the R5-D1 simulation re-proof. runDiscovery already returns
-    // its essays sorted by composite score, so the slice keeps the best.
-    const discoveryCount = discoveryArticles.length;
-    const cappedEssays = discoveryArticles.slice(0, MAX_ARTICLES_IN_ISSUE);
-
-    let articles: Article[] = cappedEssays.map((a) => ({
+    // R7-3 SUPPLY-KEEP: the Brave stream supplies the ARTICLE-type essays. Keep
+    // ALL of them in the batch (no ≤N supply cap — the former R7-2e
+    // MAX_ARTICLES_IN_ISSUE=3 cap is removed). The EXACTLY-ONE-ESSAY hard rule
+    // (Kyle 2026-06-24) is enforced at the DISPLAY layer (ensureExactlyOneArticle
+    // in resolveDisplayedFeed), which shows precisely one essay no matter how many
+    // are in the batch — so capping the supply can no longer cause an essay-wall,
+    // and only risked dropping the last good essay. Keeping every scored essay
+    // here maximizes the chance ≥1 survives paywall/dedup ("the supply keeps ≥1
+    // essay candidate so one can always be placed" — the 2026-06-24 live run
+    // showed 0 essays) and gives the display a good one to anchor the issue with.
+    // The candidate count is naturally bounded by DISCOVERY_ARTICLES_PER_DAY.
+    let articles: Article[] = discoveryArticles.map((a) => ({
       ...a,
       batchDate: today,
       // Only set readTime if not already set by the discovery pipeline
@@ -484,8 +486,8 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
     }));
 
     appendLog(
-      `[pipeline] Supply (R7-2e flip): ${cappedEssays.length} discovered essay(s) ` +
-        `(capped at ${MAX_ARTICLES_IN_ISSUE} of ${discoveryCount}); funnel gems appended below`
+      `[pipeline] Supply (R7-3): kept ${articles.length} discovered essay(s) ` +
+        `(display shows exactly 1 via ensureExactlyOneArticle); funnel gems appended below`
     );
 
     // R7-2c: index-mining funnel — the agent-discovered one-off stream. Crawls
@@ -544,10 +546,11 @@ export async function runPipeline(options: RunOptions = {}): Promise<RunResult> 
 
     // Exclude items whose full text isn't actually available — a paywalled
     // Substack/member post would otherwise render as a misleading stub. At this
-    // point `articles` is only the ≤MAX_ARTICLES_IN_ISSUE capped essays (the
-    // funnel gems + place are appended below and never hit this path), and the
-    // displayed issue is backfilled by those link-out gems, so dropping a
-    // paywalled essay still never starves the issue.
+    // point `articles` is only the kept discovered essays (the funnel gems +
+    // place are appended below and never hit this path); the displayed issue is
+    // backfilled by those link-out gems, so dropping a paywalled essay still never
+    // starves the issue (and keeping the full essay supply leaves others when one
+    // is dropped — the exactly-1-essay rule still finds an essay to place).
     if (paywalledIds.size > 0) {
       const before = articles.length;
       articles = articles.filter((a) => !paywalledIds.has(a.id));

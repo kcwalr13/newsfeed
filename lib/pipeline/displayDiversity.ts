@@ -6,6 +6,7 @@
 // data they need (shown-source history) stays in the route's DB layer.
 
 import type { Article, ContentFormat, SourceCategory } from '@/lib/types/article';
+import { isLinkOutItem } from '@/lib/types/article';
 import { registrableDomain } from '@/lib/utils/url';
 
 function domainOf(a: Article): string {
@@ -123,6 +124,68 @@ export function ensureCategorySpread(
     topSet.delete(demote);
     topSet.add(cand);
     counts = categoryCounts();
+  }
+
+  const topArr = ranked.filter((a) => topSet.has(a));
+  const restArr = ranked.filter((a) => !topSet.has(a));
+  return [...topArr, ...restArr];
+}
+
+/**
+ * Enforces the EXACTLY-ONE-ESSAY hard rule (Kyle, 2026-06-24): the displayed
+ * issue (top `displaySize`) contains precisely ONE `article`-type essay — never
+ * 0, never 2+. Tangent is a discovery agent whose dominant supply is one-off
+ * link-out gems; exactly one readable essay anchors each issue. An "essay" is any
+ * piece that is NOT a link-out item (`!isLinkOutItem` — Brave-discovered articles
+ * with a body / the in-app reader; link-out gems + the curated place are not).
+ *
+ * A pure reorder across the fold (never drops, never shrinks the issue):
+ *  - exactly 1 essay in the top → no-op.
+ *  - >1 essay → keep the highest-ranked essay; demote each excess essay
+ *    (lowest-ranked first), promoting the highest-ranked below-fold link-out gem
+ *    into its slot.
+ *  - 0 essays → promote the highest-ranked below-fold essay, demoting the
+ *    lowest-ranked top link-out gem (skipping exploration slots where possible).
+ * Degrades to a no-op when the pool can't satisfy the count (0 essays anywhere,
+ * or too few gems to swap excess essays for) rather than under-filling the issue
+ * — a gem-dominant supply makes both shortfalls rare.
+ *
+ * Self-contained (R7-3, pulled forward from R7-5). R7-5 folds this into the full
+ * `ensureTypeSpread` (≥`MIN_DISTINCT_CONTENT_TYPES_IN_ISSUE` types + a wildcard
+ * slot) and re-proves the composition (incl. the consecutive-source cap) via the
+ * R5-D1 simulation harness — this minimal version just nails the essay quota.
+ */
+export function ensureExactlyOneArticle(ranked: Article[], displaySize: number): Article[] {
+  const isEssay = (a: Article) => !isLinkOutItem(a);
+  const top = ranked.slice(0, displaySize);
+  const below = ranked.slice(displaySize);
+  const essaysInTop = top.filter(isEssay);
+  if (essaysInTop.length === 1) return ranked;
+
+  const topSet = new Set(top);
+
+  if (essaysInTop.length === 0) {
+    const essayBelow = below.find(isEssay);
+    if (!essayBelow) return ranked; // no essay anywhere → can't place one (graceful)
+    // Demote the lowest-ranked top link-out gem; avoid exploration slots first.
+    const reversedTop = [...top].reverse();
+    const demote =
+      reversedTop.find((a) => isLinkOutItem(a) && a.explorationSlotType == null) ??
+      reversedTop.find((a) => isLinkOutItem(a));
+    if (!demote) return ranked;
+    topSet.delete(demote);
+    topSet.add(essayBelow);
+  } else {
+    // >1 essay: keep the highest-ranked (essaysInTop is in rank order), demote the
+    // rest, each replaced by the highest-ranked below-fold link-out gem.
+    const excess = essaysInTop.slice(1);
+    const gemsBelow = below.filter(isLinkOutItem);
+    let gi = 0;
+    for (const essay of excess) {
+      if (gi >= gemsBelow.length) break; // no gem to swap → leave it (don't shrink)
+      topSet.delete(essay);
+      topSet.add(gemsBelow[gi++]);
+    }
   }
 
   const topArr = ranked.filter((a) => topSet.has(a));
