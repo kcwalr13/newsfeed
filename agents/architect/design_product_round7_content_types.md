@@ -177,7 +177,9 @@ The 6-dim prose-tone model applies only to `article`s. For everything else:
   graceful degradation). Don't ship on a green build alone.
 - **Link-out cards** per type in `ArticleCard.tsx` (music: cover + artist + Listen ↗; video: thumb + duration +
   Watch ↗; website: the existing "place to get lost in" card; thread: platform + score + Read the thread ↗; find:
-  image + Check it out ↗). All link straight out; none open the in-app reader (only `article` does).
+  image + Check it out ↗). All link straight out; none open the in-app reader (only `article` does). **Every link-out
+  card MUST carry the standard feedback row (dislike/like/save) alongside its CTA — never a feedback-less card again
+  (§10a); the R5 `place` card omitted it and that's reversed.**
 - **Curator note** (R5-C) extends to every type with a type-aware register; folds into the existing generator.
 
 ---
@@ -236,6 +238,39 @@ Ordered so the digest **becomes one-off gems fast**, then gains wildcards, types
   priority, easy to cut.
 - **Latency/budget** — heavier per item; bounded by cheap-filters-first + top-K LLM + the R6 limiter/deadline + one
   run/day.
+
+---
+
+## 10. Feedback → taste loop (the unit you *teach*, not just the unit you read)
+
+Two gaps surfaced in use (Kyle, 2026-06-23, after a seeded `place` gem — ciechanowski — landed and delighted him):
+
+**(a) Link-out items have no feedback controls — near-term fix, fold into R7-2(d).** The R5 `place` card renders only
+"Explore ↗"; there is no dislike/like/save row, so a genuinely loved gem can't be rated. That was a defensible R5
+call (a place was a rare side-curiosity) but it's now actively harmful: these gems are the **main event**, and the
+taste model can only learn "find more of *that shape*" if the shape can be rated. **Fix:** every link-out card carries
+the standard feedback row alongside its CTA (the existing `lib/feedback/store` + `/api/feedback` path already update
+centroid/concepts/Wilson). Re-include link-out items in the like/dislike signal (they stay out of the *read*-count —
+not "read," but rateable). **Build it into the new link-out cards from the start so the no-feedback decision never
+propagates,** and sequence it **before R7-5** (taste learning) so there is signal to learn from. Without this, the
+items Kyle cares most about are exactly the ones the model is blind to.
+
+**(b) Rich feedback → taste (R7-8) — decided shape (Kyle, 2026-06-23): "quick by default, optional depth,"** capturing
+**shape/format · style/voice/craft · topic · a free-text "why."** Today's like/dislike/save is too coarse to tell
+"I love this *because* it's interactive/explorable" from "I love the topic." For an app of one, richer feedback is
+*signal we want*, not friction to minimize.
+- **UI:** one-tap dislike/like/save stays the zero-friction default; a subtle "why?" / expand affordance reveals an
+  optional panel — quick **chips** for shape/style/topic (a fixed palette + per-item LLM-suggested chips) and a
+  **free-text "why"** box. Never required; depth is opt-in, per item.
+- **Data:** extend the feedback record (new migration) with optional, nullable `aspects` (shape/style/topic tags,
+  JSONB) + `note` (free text). The `like|dislike|save` verb is unchanged → backward-compatible.
+- **Taste integration (the powerful part):** the free-text "why" is **LLM-distilled** (`wrapUntrusted`) into
+  concept-graph tags + aesthetic-dimension nudges — Kyle literally says *why* and the model updates. Structured chips
+  feed a new **shape/style affinity** axis so the model learns "loves interactive, hand-built, explorable sites" as a
+  *shape-level* preference independent of topic — exactly the ciechanowski/moltbook generalization. Extends Pillar 2
+  (latent aesthetic space → +shape/style axes) and Pillar 3 (graph memory → an LLM-in-the-loop "why" distiller).
+  Personal-use makes the heavier UI + a per-detailed-feedback LLM call a feature, not a cost.
+- **Sequence:** land R7-8 with/just before **R7-5** so cross-type taste consumes the richer signal from day one.
 
 **Out of scope:** in-app media playback beyond simple embeds; a CMS for index curation (seeds stay in
 `data/discovery_indexes.json` + `data/places.json`); multi-user anything (now permanently out of scope).

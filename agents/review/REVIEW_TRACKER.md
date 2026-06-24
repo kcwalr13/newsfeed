@@ -1235,7 +1235,11 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     - [x] **(b)** Index-miner stream + `data/discovery_indexes.json` (emit raw outbound candidates, logged, not yet in
       the digest). · **DONE** (commit `a2d8580`)
     - [ ] **(c)** Rule-filter funnel (liveness/realness verify + type classify + dedup against the durable memory). · **TODO ← RESUME HERE**
-    - [ ] **(d)** Link-out `website` + `thread` items + their cards. · **TODO**
+    - [ ] **(d)** Link-out `website` + `thread` items + their cards — **each card MUST include the standard feedback
+      row (dislike/like/save) alongside the Explore/Read CTA** (design §10a). Fixes the R5 place card's missing
+      feedback so a loved gem (e.g. ciechanowski) is rateable, and builds feedback into the new link-out cards from
+      the start so the no-feedback decision never propagates. Also re-include link-out items in the like/dislike
+      signal (they stay out of the *read*-count). · **TODO**
     - [ ] **(e)** Supply flip + retire `data/sources.json` as the digest supply + **live product verification**. · **TODO**
   - **Notes — (a) durable novelty memory (DONE):** New migration `lib/db/migrations/020_discovery_seen_urls.sql`
     (`discovery_seen_urls`: `url_canonical` PK, `novelty_key` NOT NULL, `first_seen_at`, `discovery_source`; + index on
@@ -1340,6 +1344,15 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
 - [ ] **R7-7** · (Optional, phase 2) Richer media/embeds (Bandcamp/YouTube players), deeper agentic crawling, true
   platform-trending via APIs, within-type taste (genre/creator affinity). **Defer** — the round delivers full value
   without it. · **TODO (optional)**
+- [ ] **R7-8** · **Rich feedback → taste loop** (design §10; Kyle 2026-06-23). **(a) near-term:** feedback row on all
+  link-out cards (folded into R7-2(d)). **(b):** "quick by default, optional depth" feedback — one-tap dislike/like/save
+  stays default; an optional expand captures **shape/format · style/craft · topic chips + a free-text "why"**. New
+  migration adds nullable `aspects` (JSONB) + `note` to the feedback record (verb unchanged → backward-compatible →
+  **BLOCKED-ON-APPLY**). The free-text "why" is **LLM-distilled (`wrapUntrusted`)** into concept tags + aesthetic
+  nudges; chips feed a new **shape/style affinity** axis so the model learns "loves interactive/explorable sites" as a
+  shape-level preference independent of topic (the ciechanowski/moltbook generalization). **Sequence with/just before
+  R7-5** so cross-type taste consumes the richer signal. · **TODO** · *(a) is the priority — it unblocks teaching the
+  model on the items Kyle cares most about.* 
 
 ---
 
