@@ -82,6 +82,33 @@ export function isCommercialInfra(url: string): boolean {
 }
 
 /**
+ * Unambiguously adult / NSFW domains that must never reach a quiet personal
+ * digest (R7-3-FIX), keyed by registrable domain. A cheap, deterministic SAFETY
+ * FLOOR layered alongside the LLM judge's `is_safe` check: it is applied as a
+ * rule-filter BEFORE the judge so the worst offenders cost zero LLM — and,
+ * crucially, so the judge's fail-OPEN path (R7-3-FIX: ship rule-filtered gems
+ * unjudged when the judge can't RUN under the Gemini rate limit / deadline) still
+ * has a safety floor. The LLM judge remains the primary gate for the arbitrary
+ * long tail; this list is deliberately CONSERVATIVE (a false positive drops a
+ * real gem) — only well-known, unambiguously adult sites belong here.
+ */
+export const NSFW_DOMAIN_DENYLIST = new Set<string>([
+  'pornhub.com', 'xvideos.com', 'xnxx.com', 'xhamster.com', 'redtube.com',
+  'youporn.com', 'tube8.com', 'spankbang.com', 'eporner.com', 'porntrex.com',
+  'onlyfans.com', 'fansly.com', 'chaturbate.com', 'cam4.com', 'myfreecams.com',
+  'livejasmin.com', 'stripchat.com', 'bongacams.com', 'brazzers.com',
+  'nhentai.net', 'rule34.xxx', 'e621.net', 'motherless.com', 'literotica.com',
+  'fetlife.com', 'adultfriendfinder.com',
+]);
+
+/** True when a candidate's domain is a known adult/NSFW site (R7-3-FIX) — a cheap
+ *  deterministic safety floor dropped by the funnel BEFORE the LLM judge, so the
+ *  judge's fail-open path keeps a safety floor when it can't run. */
+export function isUnsafeDomain(url: string): boolean {
+  return NSFW_DOMAIN_DENYLIST.has(registrableDomain(url));
+}
+
+/**
  * Shared blogging / newsletter hosts where every author lives on the SAME
  * registrable domain (a subdomain or path) — substack.com, medium.com,
  * github.io, wordpress.com, etc. For these, novelty must key on the full host

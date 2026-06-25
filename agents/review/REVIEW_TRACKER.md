@@ -121,9 +121,12 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG. ⚠️ R7-3 LIVE-FAILED (2026-06-25): the first Gemini cron produced a 2-item issue
-  (1 thread + 1 essay) — the judge is fail-closed on Gemini rate-limit/deadline and starved the gems. FIX
-  `R7-3-FIX` BEFORE R7-4.** **Last resume point: R7-3-FIX.** R7-3 built (a–c): the exactly-1-essay HARD RULE (`ARTICLES_PER_ISSUE`=1 +
+  optional). **▶ ACTIVE BACKLOG. ✅ R7-3-FIX DONE (2026-06-25):** the funnel judge was fail-CLOSED on Gemini
+  rate-limit/deadline (drop on api/parse error + deadline-skip) → it starved the gems → a live 2-item issue
+  (1 thread + 1 essay). Fixed by failing the judge **OPEN on unavailability** (keep rule-filtered gems unjudged when
+  the judge can't RUN; fail-closed only on a returned unsafe/commercial/below-threshold verdict) + a cheap NSFW-domain
+  safety floor. Gate green + mock-provider checks + adversarial review; live proof = the next Gemini cron fills ~7,
+  exactly 1 essay, no carbonads/bunny. **Last resume point: R7-4.** R7-3 built (a–c): the exactly-1-essay HARD RULE (`ARTICLES_PER_ISSUE`=1 +
   supply-keep + `ensureExactlyOneArticle`), the type-aware interestingness/safety LLM judge (the funnel's universal
   gate — drops carbonads/bunny via a cheap commercial/infra backstop + the must-reject long tail incl. krea.ai via the
   LLM gate; `wrapUntrusted` on every fetched page), and the LLM agentic stream (stream 2 — proposes + fetch-verify-
@@ -1541,7 +1544,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     (throwaway ts-node, removed) — 6/6 cases PASS: 0-in-top→1, 2-in-top→1, 7-in-top (essay-wall)→1, exactly-1 no-op
     (order unchanged), 0-essays-anywhere→graceful 0, gem-dominant-essay-below-fold→1; issue size preserved in all.
     Full type-spread (≥4 types + wildcard + R5-D1 simulation re-proof) remains **R7-5**.
-- [ ] **R7-3-FIX** · 🔴 **HIGH — the judge starves the digest (LIVE FAIL, 2026-06-25). Fix BEFORE R7-4.** The first
+- [x] **R7-3-FIX** · **DONE** (commit `pending`) · 🔴 **HIGH — the judge starves the digest (LIVE FAIL, 2026-06-25). Fix BEFORE R7-4.** The first
   Gemini cron on R7-3 code produced a **2-item issue** — `curl /api/feed/today` → `total 2`: one `thread`
   (`mastodon.social/@kottke`) + one `article` essay (`dornsife.usc.edu`). The exactly-1-essay rule worked (1 article);
   the **judged gem supply collapsed** (1 of ~16 survived). **Root cause (confirmed in `lib/discovery/indexFunnel.ts`):
@@ -1558,7 +1561,34 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
   unjudged rather than deadline-dropping them; size `INDEX_FUNNEL_MAX_JUDGE`/concurrency/deadline so a run reliably fills
   `ISSUE_DISPLAY_SIZE` (~7). Optional: a cheap rule-based NSFW-domain backstop so fail-open keeps a safety floor. (Also
   worth a glance: whether Gemini's daily RPD is simply exhausted — if chronic, reduce per-run LLM volume / batch, R6-7.)
-  **Verify live (next cron or one refresh): the digest fills ~7, still no carbonads/bunny, exactly 1 essay.** · **TODO ← RESUME HERE**
+  **Verify live (next cron or one refresh): the digest fills ~7, still no carbonads/bunny, exactly 1 essay.**
+  - **DONE (2026-06-25).** Failed the judge OPEN on unavailability. Extracted the judge stage into a pure,
+    injectable `selectJudgedFunnelItems(toJudge, taste, opts)` in `lib/discovery/indexFunnel.ts` (so the fail-open
+    behavior is unit-checkable with a mock provider, no network/LLM). New behavior:
+    **api_error / parse_error → KEEP the candidate unjudged** (`keptUnjudged`, logged `JUDGE_UNAVAILABLE … (kept; fail-open)`);
+    **deadline reached → KEEP the remaining candidates unjudged** (no longer `return`-drops); **no LLM configured →
+    keep the whole pool** (was already graceful). Fail-CLOSED is preserved **only** for verdicts the judge actually
+    RETURNED — `!safe` / `commercialOrSpam` / `interestingness < threshold(3)` still DROP (`JUDGE_DROP`). The caller's
+    existing sort `(b.judgeScore ?? 0) − (a.judgeScore ?? 0) || (b.score ?? 0) − …` ranks judged-pass gems
+    (judgeScore ≥ 3) **above** the unjudged fail-open fallback (judgeScore undefined → 0), so a healthy provider still
+    prunes junk to a clean digest while a rate-limited run ships a FULL digest of rule-filtered gems. **No config change
+    needed** — the existing `INDEX_FUNNEL_MAX_JUDGE`=12 (Gemini) all ship under fail-open (12 ≫ the ~5 funnel slots a
+    7-item display needs after 1 essay + place), so the digest reliably fills `ISSUE_DISPLAY_SIZE`. **Safety floor**
+    (the optional backstop): new `NSFW_DOMAIN_DENYLIST` + `isUnsafeDomain()` in `lib/discovery/novelty.ts` (conservative,
+    ~26 unambiguous adult domains, keyed by registrable domain), wired into the funnel's **cheap pre-fetch filter AND the
+    post-redirect re-check** (alongside mega/commercial) — so a known adult domain is dropped deterministically even
+    when the judge can't run (strictly safer than R7-2, which had no NSFW filter at all). YIELD log gains
+    `unsafe=<n>` + `failOpen(unavailable=… deadline=…)` telemetry.
+  - **Verified:** `npx tsc --noEmit` (0 errors) · `npm run lint` (0 errors) · `npm run build` (exit 0) all green;
+    plus a throwaway mock-provider check (`scripts/_check_r7_3_fix.ts`, deleted) proving the three required cases —
+    **(a)** judge `api_error`/`parse_error` → candidate KEPT (unjudged); **(b)** returned `unsafe`/`commercial`/`lowScore`
+    verdict → candidate DROPPED (and a passing verdict KEPT with its judgeScore); **(c)** a run where the judge clears
+    only 2 of 12 still returns all 12 (no starvation) — plus deadline-skip → KEEP-all and no-LLM → KEEP-all. An
+    independent adversarial review of the diff found **no must-fix issues** (fail-open reliable on all 3 unavailability
+    paths, healthy-path behavior identical modulo telemetry, NSFW floor on both raw + post-redirect URLs).
+  - **Real proof is the next Gemini cron/refresh (Kyle validates live):** the digest fills ~7 with exactly 1 essay and
+    no carbonads/bunny. (The RPD-exhaustion question stays a watch-item: if chronic, reduce per-run LLM volume / batch
+    via R6-7 — out of scope here.)
 - [ ] **R7-4** · **Multi-type coverage (music + video + finds), discovered not fed.** Type detection + enrichment +
   link-out cards for `music`/`video`/`find`; make the streams surface them (music/video/find indexes + the LLM hunt +
   search). Video thumbnails from page/oEmbed; music cover art where free. **No subscriptions** — all discovered. · **TODO**
@@ -1601,6 +1631,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
 ## Decisions Log
 _Append one entry per judgment call (autonomy = "use report default + document")._
 
+| 2026-06-25 | R7-3-FIX | Failed the judge OPEN by **extracting the stage into a pure, injectable `selectJudgedFunnelItems`** (vs. patching the inline loop), and made **NO change to `INDEX_FUNNEL_MAX_JUDGE`/concurrency/deadline**; added the optional NSFW backstop as a **cheap up-front rule-filter** (applied to all candidates, not only the fail-open branch) | The brief asked for a mock-provider unit check of three behaviors (keep-on-error / drop-on-verdict / full-digest-when-few-cleared), but `runIndexFunnel` does real index-mining + liveness fetches + active-provider judging internally — untestable without network/LLM. Extracting the judge stage into a pure function with injectable `judge`/`llmConfigured`/`deadlineMs` seams makes exactly the changed logic deterministically checkable (5 cases proven with a mock `LlmProvider`), is behavior-identical on the healthy path (verified by adversarial review), and is the project's standing "no local LLM → mock provider" pattern. **No knob change** because fail-open is itself the structural fix: with `MAX_JUDGE`=12 (Gemini) every candidate now ships whether judged or not, and 12 ≫ the ~5 funnel slots a 7-item display needs after the 1 essay + place — so the digest reliably fills `ISSUE_DISPLAY_SIZE` without enlarging the per-run LLM budget (which would worsen the very RPM pressure that caused the starvation). Bumping MAX_JUDGE would add LLM calls for zero benefit under fail-open. The NSFW floor is applied as a **general cheap filter** (pre-fetch + post-redirect, beside mega/commercial) rather than only on fail-open items because that also protects the no-LLM graceful path and the healthy path, saves a judge call, and mirrors the existing `COMMERCIAL_INFRA_DENYLIST` defense-in-depth pattern exactly; it is deliberately conservative (a false positive drops a real gem) and is strictly safer than R7-2, which had no NSFW filter at all. Residual (accepted, documented): on a fully rate-limited run the long-tail LLM `is_safe`/`commercialOrSpam` gate is bypassed for unjudged items — exactly the "R7-2 quality beats 2-item starvation" tradeoff the design (§4 graceful degradation) endorses. |
 | 2026-06-24 | R7-3(d) | The exactly-1-essay rule **DROPS** excess essays from the displayed list (not a pure reorder) to make "never 2+" unconditional; a gem-poor day yields a SHORTER issue rather than an essay-wall | The adversarial review proved the original swap-reorder couldn't honor "never 2+" because the client slices a FIXED `ISSUE_DISPLAY_SIZE` and a gem-poor batch has no below-fold gem to swap excess essays for — so 2–4 essays showed. Kyle's rule is HARD ("never 2+"); the only way to guarantee it when the non-essay pool can't fill the window is to drop the excess essays from the *display* (they stay in the batch JSON, durable memory records only displayed items, so they can resurface). A short gem+essay issue beats an essay-wall — the design (§4) explicitly endorses "a short digest of real gems beats a padded one." Dropping is order-preserving for the upstream cap/C2/C3 because every link-out item is a distinct source (funnel one-per-domain + unique place), so removing an essay between two gems can't create a same-source run. The residual R5-D format-floor interaction (a dropped essay was the only `short`) is explicitly R7-5's `ensureTypeSpread` + simulation re-proof, per the session brief's "do the self-contained part, note the rest for R7-5." |
 | 2026-06-24 | R7-3(d) | Gave BOTH the index funnel's liveness phase and `runDiscovery` internal wall-clock deadlines (not just the judge), so a slow run returns PARTIAL best-effort work instead of the outer `Promise.race` hard-cutting it to [] | The review showed the R7-3 internal deadline only guarded the judge — a slow-network liveness phase (up to ~56s) or a slow discovery eval phase could overrun the budget, the outer race would fire, and ALL the funnel/discovery work (incl. the expensive LLM evals) would be discarded; worse, a discovery hard-cut to [] leaves 0 essays — the exact failure the exactly-1-essay rule exists to fix. Mirroring the funnel-judge's existing `deadlineMs` pattern (and the per-article `tryConsumeLlm` deadline) for both phases is consistent and keeps the always-write/graceful-degradation invariant: each phase self-limits and returns what it has, the outer race becomes a rarely-fired backstop. Split the funnel budget 50/50 between liveness and the judge (`INDEX_FUNNEL_LIVENESS_BUDGET_FRACTION`) so neither starves the other under Gemini's tight per-run budget. |
 | 2026-06-24 | R7-3(c) | Stream 2 lives **inside the funnel** (runIndexFunnel calls runIndexMining + runLlmHunt concurrently and folds both into one raw pool), NOT as a separate pipeline step; theme rotates by **UTC day-of-month** (not Math.random / a DB cursor); the proposal call is **not** wrapUntrusted-fenced | The funnel already owns stream 1 (it calls runIndexMining internally) and already loads taste (for the judge), so folding stream 2 in beside it reuses the taste load + the entire cheap-filter→verify→judge gauntlet for free and needs zero pipeline change — the proposals get verified+judged exactly like mined candidates (the design's "every proposed URL is fetched and verified before it can advance"). Day-of-month rotation is stable within a UTC day (re-run-safe, like the R5-D3 place cadence's date-keying) while still rotating across days, without adding a DB cursor table (no migration) — variety accrues over days. The proposal call carries no fetched web page (only Kyle's trusted concepts + our angle, exactly like the query-bank script site 7 R6-2 exempted), so wrapUntrusted is not required there; the untrusted surface is the fetched destination pages, which the judge fences. (A test asserts the proposal prompt contains no `<untrusted_content>` fence, locking this in.) |
@@ -2608,3 +2639,35 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   `*.railway.app`/netlify.app/fly.dev). No migration.
 - RESUME AT: **R7-4** (multi-type coverage). Pending: **live Gemini-deploy validation of R7-3** (judge drops
   carbonads/bunny/krea + a gem passes + exactly 1 essay shows). R4-15 still BLOCKED on Kyle's seed-vector sign-off.
+
+### Session 2026-06-25 — R7-3-FIX: judge fail-open (digest no longer starves)
+- **Root cause (live, 2026-06-25):** the first Gemini cron on R7-3 code produced a **2-item issue** (1 thread + 1
+  essay). The exactly-1-essay rule worked; the **judged gem supply collapsed** (≈1 of 16 survived) because the funnel
+  judge stage was **fail-CLOSED on unavailability** — `if (!r.success) … return` dropped api/parse errors and
+  `if (Date.now() >= deadlineMs) … return` dropped the remainder. On the Gemini free tier the ~16 judge calls share the
+  RPM + wall-clock budget with aesthetic scoring + curator notes, so most 429/timeout/deadline-skip → candidates dropped
+  because the judge **couldn't run**, not because they're junk.
+- **R7-3-FIX DONE** (commit `pending`) — failed the judge **OPEN on unavailability**. Extracted the judge stage into a
+  pure, injectable **`selectJudgedFunnelItems(toJudge, taste, opts)`** in `lib/discovery/indexFunnel.ts`:
+  - **Fail OPEN** — `api_error`/`parse_error` → KEEP unjudged (`JUDGE_UNAVAILABLE … (kept; fail-open)`); **deadline
+    reached** → KEEP the remaining candidates unjudged (no longer `return`-drops); **no LLM** → keep the whole pool.
+  - **Fail CLOSED only on a RETURNED verdict** — `!safe` / `commercialOrSpam` / `interestingness < 3` still DROP.
+  - Judged-pass gems carry `judgeScore` (≥3) and OUTRANK the unjudged fail-open fallback (judgeScore undefined→0) in the
+    caller's existing sort — healthy provider prunes junk to a clean digest; rate-limited provider ships a FULL digest of
+    rule-filtered gems. **No `INDEX_FUNNEL_MAX_JUDGE`/concurrency/deadline change** (12 ≫ the ~5 funnel slots a 7-item
+    display needs; fail-open is the structural fix, see Decisions Log).
+  - **Safety floor:** new `NSFW_DOMAIN_DENYLIST` + `isUnsafeDomain()` in `lib/discovery/novelty.ts` (~26 unambiguous
+    adult domains, registrable-domain keyed), wired into the **cheap pre-fetch filter + the post-redirect re-check**
+    (beside mega/commercial) — known adult domains dropped deterministically even when the judge can't run (strictly
+    safer than R7-2's no-NSFW funnel). YIELD log gains `unsafe=<n>` + `failOpen(unavailable=… deadline=…)`.
+- **Verified:** `npx tsc --noEmit` (0 errors) · `npm run lint` (0 errors, 3 pre-existing warnings in untouched files) ·
+  `npm run build` (EXIT 0). Throwaway mock-provider check (`scripts/_check_r7_3_fix.ts`, **deleted** — not committed)
+  proved all required cases: **(a)** api_error/parse_error → KEPT (unjudged); **(b)** returned unsafe/commercial/lowScore
+  → DROPPED, passing verdict → KEPT with judgeScore; **(c)** judge clears only 2/12 → all 12 returned (no starvation);
+  plus deadline-skip → KEEP-all (no judge call) and no-LLM → KEEP-all. **Independent adversarial review of the diff
+  found no must-fix issues** (fail-open reliable on all 3 paths; healthy-path behavior identical modulo telemetry; NSFW
+  floor on both raw + post-redirect URLs; no aliasing / no `judgeScore` misread). **No migration.**
+- **Real proof = the next Gemini cron/refresh (Kyle validates live):** the digest fills ~7 with exactly 1 essay and no
+  carbonads/bunny. Watch-item: if Gemini's daily RPD is chronically exhausted, reduce per-run LLM volume / batch (R6-7).
+- RESUME AT: **R7-4** (multi-type coverage: music + video + finds, discovered not fed). R4-15 still BLOCKED on Kyle's
+  seed-vector sign-off.

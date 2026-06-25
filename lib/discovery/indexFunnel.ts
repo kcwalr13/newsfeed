@@ -17,7 +17,7 @@ import { parse, type HTMLElement } from 'node-html-parser';
 import type { ContentType } from '@/lib/types/article';
 import { canonicalizeUrlForDedup, registrableDomain } from '@/lib/utils/url';
 import { decodeHtmlEntities } from '@/lib/utils/htmlEntities';
-import { isMegaSite, isCommercialInfra, noveltyKey } from './novelty';
+import { isMegaSite, isCommercialInfra, isUnsafeDomain, noveltyKey } from './novelty';
 import { loadSeenCanonicalUrls, loadSeenNoveltyKeys } from '@/lib/db/discoverySeen';
 import { runIndexMining, type IndexCandidate } from './indexMiner';
 import { forEachWithConcurrency } from '@/lib/utils/concurrency';
@@ -31,7 +31,12 @@ import {
 } from '@/lib/config/feed';
 import { appendLog } from '@/lib/pipeline/storage';
 import { isLlmConfigured } from '@/lib/llm';
-import { judgeInterestingness, judgePasses } from './interestingnessJudge';
+import {
+  judgeInterestingness,
+  judgePasses,
+  type JudgeInput,
+  type JudgeResult,
+} from './interestingnessJudge';
 import { loadTasteContext, type TasteContext } from './tasteContext';
 import { runLlmHunt } from './llmHunt';
 
@@ -297,6 +302,106 @@ function interleaveBySource<T extends { discoverySource: string }>(items: T[]): 
   return out;
 }
 
+/** Injectable seam for the judge stage so its fail-open behavior can be unit-
+ *  checked with a mock provider — without standing up index-mining, liveness, or
+ *  a real LLM. Both fields default to the live wiring. */
+export interface JudgeStageOptions {
+  /** Absolute epoch-ms after which the stage stops issuing NEW judge calls and
+   *  ships the remainder unjudged (fail-open under the wall-clock budget). */
+  deadlineMs?: number;
+  /** The per-candidate judge (the active-provider `judgeInterestingness` by
+   *  default). Injectable so a test can supply a mock without a real provider. */
+  judge?: (input: JudgeInput, taste: TasteContext) => Promise<JudgeResult>;
+  /** Whether an LLM is configured (defaults to `isLlmConfigured()`). When false
+   *  the whole pool ships unjudged (R7-2 graceful path). Injectable for tests. */
+  llmConfigured?: boolean;
+}
+
+/**
+ * The R7-3 interestingness/safety JUDGE stage, factored out as a pure, testable
+ * re-rank/prune over the already-rule-filtered `toJudge` pool (each item passed
+ * liveness + the mega/commercial/NSFW denylists + dedup). Returns the KEPT items
+ * (unsorted — the caller ranks + interleaves + slices) plus a telemetry string.
+ *
+ * R7-3-FIX — fail OPEN on UNAVAILABILITY, fail CLOSED only on a returned verdict:
+ *  - judge api_error / parse_error  → KEEP the candidate unjudged ("couldn't RUN").
+ *  - deadline reached               → KEEP the remaining candidates unjudged.
+ *  - no LLM configured              → KEEP the whole pool unjudged (R7-2 behavior).
+ *  - verdict unsafe / commercial / below-threshold → DROP (the judge decided junk).
+ *
+ * Judged-and-passed gems carry `judgeScore` (≥ threshold) and OUTRANK the unjudged
+ * fallback in the caller's sort, so a healthy provider still prunes junk to the
+ * top; a rate-limited provider degrades to a FULL digest of rule-filtered gems
+ * (the carbonads/bunny class is already gone deterministically) instead of the
+ * 2-item starvation the original fail-closed judge produced (LIVE FAIL 2026-06-25).
+ */
+export async function selectJudgedFunnelItems(
+  toJudge: FunnelItem[],
+  taste: TasteContext,
+  opts: JudgeStageOptions = {}
+): Promise<{ kept: FunnelItem[]; stats: string }> {
+  const judge = opts.judge ?? judgeInterestingness;
+  const llmConfigured = opts.llmConfigured ?? isLlmConfigured();
+
+  if (!llmConfigured) {
+    appendLog('[index-funnel] LLM not configured — shipping rule-filtered gems unjudged (graceful)');
+    return { kept: [...toJudge], stats: `judge=skipped(no-llm) kept=${toJudge.length}` };
+  }
+
+  const passed: FunnelItem[] = [];
+  const keptUnjudged: FunnelItem[] = []; // fail-open: judge couldn't run / out of budget
+  let judged = 0;
+  let droppedUnsafe = 0;
+  let droppedCommercial = 0;
+  let droppedLowScore = 0;
+  let judgeUnavailable = 0;
+  let deadlineSkipped = 0;
+  await forEachWithConcurrency(toJudge, INDEX_FUNNEL_JUDGE_CONCURRENCY, async (item) => {
+    if (opts.deadlineMs != null && Date.now() >= opts.deadlineMs) {
+      deadlineSkipped++;
+      keptUnjudged.push(item); // out of budget — ship unjudged (fail OPEN), don't drop
+      return;
+    }
+    const r = await judge(
+      {
+        url: item.url,
+        contentType: item.contentType,
+        title: item.title,
+        description: item.description,
+        bodySample: item.bodySample,
+      },
+      taste
+    );
+    if (!r.success) {
+      judgeUnavailable++;
+      keptUnjudged.push(item); // judge couldn't RUN (api/parse error) — fail OPEN
+      appendLog(`[index-funnel] JUDGE_UNAVAILABLE ${registrableDomain(item.url)} -- ${r.reason} (kept; fail-open)`);
+      return;
+    }
+    judged++;
+    const v = r.verdict;
+    if (judgePasses(v)) {
+      passed.push({ ...item, judgeScore: v.interestingness });
+    } else {
+      if (!v.safe) droppedUnsafe++;
+      else if (v.commercialOrSpam) droppedCommercial++;
+      else droppedLowScore++;
+      appendLog(
+        `[index-funnel] JUDGE_DROP ${registrableDomain(item.url)} ` +
+          `(score=${v.interestingness} safe=${v.safe} commercial=${v.commercialOrSpam}) -- ${v.reason}`
+      );
+    }
+  });
+
+  // Judged-and-passed gems first (the caller ranks them by judgeScore), then the
+  // rule-filtered fallback the judge couldn't clear within budget.
+  const stats =
+    `judged=${judged}/${toJudge.length} pass=${passed.length} keptUnjudged=${keptUnjudged.length} ` +
+    `dropped(unsafe=${droppedUnsafe} commercial=${droppedCommercial} lowScore=${droppedLowScore}) ` +
+    `failOpen(unavailable=${judgeUnavailable} deadline=${deadlineSkipped})`;
+  return { kept: [...passed, ...keptUnjudged], stats };
+}
+
 /**
  * Runs the full index-mining → rule-filter funnel and returns a bounded, source-
  * diverse set of verified link-out candidates.
@@ -358,6 +463,7 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
   let dupCount = 0;
   let megaCount = 0;
   let commercialCount = 0;
+  let unsafeCount = 0;
   const survivors: IndexCandidate[] = [];
   for (const c of raw) {
     if (!c.url) continue;
@@ -380,6 +486,12 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
     // guarantees the worst offenders never ship even if the judge is unavailable).
     if (isCommercialInfra(c.url)) {
       commercialCount++;
+      continue;
+    }
+    // R7-3-FIX: cheap NSFW safety floor — a known adult domain is dropped before
+    // the LLM judge so the judge's fail-open path (below) keeps a safety floor.
+    if (isUnsafeDomain(c.url)) {
+      unsafeCount++;
       continue;
     }
     if (seenDomainThisRun.has(key)) continue; // one per domain per run
@@ -424,7 +536,11 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
       failTally[result.reason] = (failTally[result.reason] ?? 0) + 1;
       return;
     }
-    if (isMegaSite(result.finalUrl) || isCommercialInfra(result.finalUrl)) {
+    if (
+      isMegaSite(result.finalUrl) ||
+      isCommercialInfra(result.finalUrl) ||
+      isUnsafeDomain(result.finalUrl)
+    ) {
       redirectMegaCount++;
       return;
     }
@@ -455,80 +571,32 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
     });
   });
 
-  // R7-3 INTERESTINGNESS / SAFETY JUDGE — the universal LLM gate. A type-aware,
-  // taste-fed call per verified survivor decides whether it's a genuinely
-  // interesting one-off (keep) or generic/commercial/spam/unsafe (drop): this is
-  // where alive-but-junky pages the rule filters let through (ad/CDN/product
-  // pages, SEO slop) get killed. Bounded to the top INDEX_FUNNEL_MAX_JUDGE
-  // survivors (interleaved by source so it spends the budget diversely), gated by
-  // the shared Gemini limiter, and deadline-aware (returns partial under the
-  // funnel's wall-clock budget). Fail-CLOSED per item: a judge error or a
-  // non-passing verdict drops the candidate.
+  // R7-3 INTERESTINGNESS / SAFETY JUDGE — the universal LLM gate (the stage is
+  // `selectJudgedFunnelItems`, below). A type-aware, taste-fed call per verified
+  // survivor either keeps a genuinely interesting one-off or DROPS a returned
+  // reject verdict (unsafe / commercial-spam / below-threshold). Bounded to the
+  // top INDEX_FUNNEL_MAX_JUDGE survivors (interleaved by source so the budget is
+  // spent diversely).
   //
-  // GRACEFUL DEGRADATION: when no LLM is configured the judge can't run, so the
-  // funnel ships the rule-filtered verified pool (R7-2 behavior) — the cheap
-  // commercial/infra + mega + liveness filters still applied, so the worst junk is
-  // already gone. A digest of rule-filtered gems beats no digest. (`taste` is
-  // loaded once at the top of the run — shared with the LLM agentic stream.)
+  // R7-3-FIX (LIVE FAIL 2026-06-25): the judge now FAILS OPEN on UNAVAILABILITY —
+  // a transport/parse error, a deadline-skip, or no LLM configured KEEPS the
+  // candidate unjudged (it already cleared liveness + the mega/commercial/NSFW
+  // denylists + dedup) instead of dropping it. Only a verdict the judge actually
+  // RETURNED can drop a candidate. ("Judge couldn't run" ≠ "junk".) So a healthy
+  // provider prunes junk to a clean digest, while a Gemini-rate-limited run
+  // degrades to a FULL digest of rule-filtered gems — never the 2-item starvation
+  // the old fail-closed judge produced. (`taste` is loaded once at the top of the
+  // run — shared with the LLM agentic stream.)
   const toJudge = interleaveBySource(verified).slice(0, INDEX_FUNNEL_MAX_JUDGE);
-
-  let kept: FunnelItem[];
-  let judgeStats = '';
-  if (!isLlmConfigured()) {
-    kept = toJudge;
-    judgeStats = `judge=skipped(no-llm) kept=${kept.length}`;
-    appendLog('[index-funnel] LLM not configured — shipping rule-filtered gems unjudged (graceful)');
-  } else {
-    const passed: FunnelItem[] = [];
-    let judged = 0;
-    let droppedUnsafe = 0;
-    let droppedCommercial = 0;
-    let droppedLowScore = 0;
-    let judgeFailed = 0;
-    let deadlineSkipped = 0;
-    await forEachWithConcurrency(toJudge, INDEX_FUNNEL_JUDGE_CONCURRENCY, async (item) => {
-      if (opts.deadlineMs != null && Date.now() >= opts.deadlineMs) {
-        deadlineSkipped++;
-        return; // out of budget — drop the rest (fail-closed)
-      }
-      const r = await judgeInterestingness(
-        {
-          url: item.url,
-          contentType: item.contentType,
-          title: item.title,
-          description: item.description,
-          bodySample: item.bodySample,
-        },
-        taste
-      );
-      judged++;
-      if (!r.success) {
-        judgeFailed++;
-        appendLog(`[index-funnel] JUDGE_FAIL ${registrableDomain(item.url)} -- ${r.reason}`);
-        return;
-      }
-      const v = r.verdict;
-      if (judgePasses(v)) {
-        passed.push({ ...item, judgeScore: v.interestingness });
-      } else {
-        if (!v.safe) droppedUnsafe++;
-        else if (v.commercialOrSpam) droppedCommercial++;
-        else droppedLowScore++;
-        appendLog(
-          `[index-funnel] JUDGE_DROP ${registrableDomain(item.url)} ` +
-            `(score=${v.interestingness} safe=${v.safe} commercial=${v.commercialOrSpam}) -- ${v.reason}`
-        );
-      }
-    });
-    kept = passed;
-    judgeStats =
-      `judged=${judged}/${toJudge.length} kept=${passed.length} ` +
-      `dropped(unsafe=${droppedUnsafe} commercial=${droppedCommercial} lowScore=${droppedLowScore} ` +
-      `judgeFail=${judgeFailed} deadline=${deadlineSkipped})`;
-  }
+  const { kept, stats: judgeStats } = await selectJudgedFunnelItems(toJudge, taste, {
+    deadlineMs: opts.deadlineMs,
+  });
 
   // Rank kept gems best-first by judge score (popularity score as tiebreak), then
   // source-interleave and cap to the digest budget so the kept set stays diverse.
+  // Judged-and-passed gems carry a judgeScore (≥ threshold) and so outrank the
+  // fail-open unjudged fallback (judgeScore ?? 0); the fallback fills the digest
+  // only when the judge couldn't clear enough within budget.
   kept.sort((a, b) => (b.judgeScore ?? 0) - (a.judgeScore ?? 0) || (b.score ?? 0) - (a.score ?? 0));
   const selected = interleaveBySource(kept).slice(0, limit);
 
@@ -536,7 +604,7 @@ export async function runIndexFunnel(opts: RunIndexFunnelOptions = {}): Promise<
     Object.entries(failTally).map(([k, v]) => `${k}=${v}`).join(' ') || 'none';
   appendLog(
     `[index-funnel] YIELD raw=${raw.length} ` +
-      `dropped(dup=${dupCount} mega=${megaCount} commercial=${commercialCount} redirectDup=${redirectDupCount} redirectMega=${redirectMegaCount}) ` +
+      `dropped(dup=${dupCount} mega=${megaCount} commercial=${commercialCount} unsafe=${unsafeCount} redirectDup=${redirectDupCount} redirectMega=${redirectMegaCount}) ` +
       `survivors=${survivors.length} verified=${toVerify.length}→${verified.length} livenessSkipped=${livenessSkipped} ` +
       `${judgeStats} selected=${selected.length}/${limit} :: liveness-fails ${failSummary}`
   );
