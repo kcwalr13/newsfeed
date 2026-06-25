@@ -1544,7 +1544,7 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     (throwaway ts-node, removed) — 6/6 cases PASS: 0-in-top→1, 2-in-top→1, 7-in-top (essay-wall)→1, exactly-1 no-op
     (order unchanged), 0-essays-anywhere→graceful 0, gem-dominant-essay-below-fold→1; issue size preserved in all.
     Full type-spread (≥4 types + wildcard + R5-D1 simulation re-proof) remains **R7-5**.
-- [x] **R7-3-FIX** · **DONE** (commit `pending`) · 🔴 **HIGH — the judge starves the digest (LIVE FAIL, 2026-06-25). Fix BEFORE R7-4.** The first
+- [x] **R7-3-FIX** · **DONE** (commit `017b1fc`) · 🔴 **HIGH — the judge starves the digest (LIVE FAIL, 2026-06-25). Fix BEFORE R7-4.** The first
   Gemini cron on R7-3 code produced a **2-item issue** — `curl /api/feed/today` → `total 2`: one `thread`
   (`mastodon.social/@kottke`) + one `article` essay (`dornsife.usc.edu`). The exactly-1-essay rule worked (1 article);
   the **judged gem supply collapsed** (1 of ~16 survived). **Root cause (confirmed in `lib/discovery/indexFunnel.ts`):
@@ -2647,7 +2647,7 @@ _Append-only. One block per session so the next session (and Kyle) can orient fa
   `if (Date.now() >= deadlineMs) … return` dropped the remainder. On the Gemini free tier the ~16 judge calls share the
   RPM + wall-clock budget with aesthetic scoring + curator notes, so most 429/timeout/deadline-skip → candidates dropped
   because the judge **couldn't run**, not because they're junk.
-- **R7-3-FIX DONE** (commit `pending`) — failed the judge **OPEN on unavailability**. Extracted the judge stage into a
+- **R7-3-FIX DONE** (commit `017b1fc`) — failed the judge **OPEN on unavailability**. Extracted the judge stage into a
   pure, injectable **`selectJudgedFunnelItems(toJudge, taste, opts)`** in `lib/discovery/indexFunnel.ts`:
   - **Fail OPEN** — `api_error`/`parse_error` → KEEP unjudged (`JUDGE_UNAVAILABLE … (kept; fail-open)`); **deadline
     reached** → KEEP the remaining candidates unjudged (no longer `return`-drops); **no LLM** → keep the whole pool.
