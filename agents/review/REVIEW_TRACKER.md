@@ -125,8 +125,15 @@ npm run dev           # for manual/browser spot-checks
   rate-limit/deadline (drop on api/parse error + deadline-skip) → it starved the gems → a live 2-item issue
   (1 thread + 1 essay). Fixed by failing the judge **OPEN on unavailability** (keep rule-filtered gems unjudged when
   the judge can't RUN; fail-closed only on a returned unsafe/commercial/below-threshold verdict) + a cheap NSFW-domain
-  safety floor. Gate green + mock-provider checks + adversarial review; live proof = the next Gemini cron fills ~7,
-  exactly 1 essay, no carbonads/bunny. **Last resume point: R7-4.** R7-3 built (a–c): the exactly-1-essay HARD RULE (`ARTICLES_PER_ISSUE`=1 +
+  safety floor. Gate green + mock-provider checks + adversarial review. **✅ LIVE (2026-06-25): a refresh filled the digest to
+  13 items (not 2) — fail-open confirmed, no starvation.** BUT the run came back **`degraded` (`LLM enrichment failed
+  for all articles`): Gemini's daily RPD is exhausted** (too many full-pipeline refreshes today), so the judge never
+  ran → the digest is **rule-filtered only**, with junk it would normally catch (a Steam store page, a
+  `kottke-org.translate.goog` proxy URL, teenvogue). **The judge's actual *pruning* is still UNPROVEN on a healthy
+  Gemini.** **NEXT (blocks R7-4): stop manual refreshes (each burns the daily cap); let tomorrow's single 08:00 cron
+  run on fresh quota, then `curl`-check.** NON-degraded + junk pruned ⇒ one run/day fits the RPD, R7-3 validated,
+  R7-4 clear. STILL `degraded` on a *single* run ⇒ per-run LLM volume exceeds the free RPD ⇒ do **R6-7 batching**
+  (judge/score N-per-call) before relying on the judge. **Last resume point: confirm tomorrow's cron → R7-4 (or R6-7 if degraded).** R7-3 built (a–c): the exactly-1-essay HARD RULE (`ARTICLES_PER_ISSUE`=1 +
   supply-keep + `ensureExactlyOneArticle`), the type-aware interestingness/safety LLM judge (the funnel's universal
   gate — drops carbonads/bunny via a cheap commercial/infra backstop + the must-reject long tail incl. krea.ai via the
   LLM gate; `wrapUntrusted` on every fetched page), and the LLM agentic stream (stream 2 — proposes + fetch-verify-
