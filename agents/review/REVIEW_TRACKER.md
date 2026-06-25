@@ -121,8 +121,9 @@ npm run dev           # for manual/browser spot-checks
   funnel (permanent novelty/dedup memory · liveness verify · type classify · **type-aware interestingness LLM judge**
   replacing the essay gate · safety) → **hard-rebalance** mix (cap articles ≤3/issue, ≥4 types) across types (music,
   websites/web-toys/games, video, threads, finds) as `place`-style link-out items. Order **R7-1 → R7-7** (R7-7
-  optional). **▶ ACTIVE BACKLOG: 3/7 DONE (R7-1, R7-2, R7-3) · 4 TODO (R7-4…R7-7, R7-7 optional).** **Last resume point:
-  R7-4** (multi-type coverage). **✅ R7-3 COMPLETE (a–c):** the exactly-1-essay HARD RULE (`ARTICLES_PER_ISSUE`=1 +
+  optional). **▶ ACTIVE BACKLOG. ⚠️ R7-3 LIVE-FAILED (2026-06-25): the first Gemini cron produced a 2-item issue
+  (1 thread + 1 essay) — the judge is fail-closed on Gemini rate-limit/deadline and starved the gems. FIX
+  `R7-3-FIX` BEFORE R7-4.** **Last resume point: R7-3-FIX.** R7-3 built (a–c): the exactly-1-essay HARD RULE (`ARTICLES_PER_ISSUE`=1 +
   supply-keep + `ensureExactlyOneArticle`), the type-aware interestingness/safety LLM judge (the funnel's universal
   gate — drops carbonads/bunny via a cheap commercial/infra backstop + the must-reject long tail incl. krea.ai via the
   LLM gate; `wrapUntrusted` on every fetched page), and the LLM agentic stream (stream 2 — proposes + fetch-verify-
@@ -1540,6 +1541,24 @@ every discovered page sent to an LLM** (injection surface grows — we now feed 
     (throwaway ts-node, removed) — 6/6 cases PASS: 0-in-top→1, 2-in-top→1, 7-in-top (essay-wall)→1, exactly-1 no-op
     (order unchanged), 0-essays-anywhere→graceful 0, gem-dominant-essay-below-fold→1; issue size preserved in all.
     Full type-spread (≥4 types + wildcard + R5-D1 simulation re-proof) remains **R7-5**.
+- [ ] **R7-3-FIX** · 🔴 **HIGH — the judge starves the digest (LIVE FAIL, 2026-06-25). Fix BEFORE R7-4.** The first
+  Gemini cron on R7-3 code produced a **2-item issue** — `curl /api/feed/today` → `total 2`: one `thread`
+  (`mastodon.social/@kottke`) + one `article` essay (`dornsife.usc.edu`). The exactly-1-essay rule worked (1 article);
+  the **judged gem supply collapsed** (1 of ~16 survived). **Root cause (confirmed in `lib/discovery/indexFunnel.ts`):
+  the judge stage is fail-CLOSED on transport failure AND on the deadline** — `if (!r.success) … return` drops on
+  `api_error`/`parse_error`, and `if (Date.now() >= opts.deadlineMs) … return` drops the rest. On the Gemini free tier
+  the ~16 judge calls share the RPM + wall-clock budget with aesthetic scoring + curator notes, so most 429/timeout or
+  get deadline-skipped → **dropped because the judge couldn't RUN, not because the page is junk.**
+  **Fix — fail-OPEN on unavailability:** on judge `api_error`/`parse_error`/deadline, **keep** the candidate via the
+  rule-filtered path (it already passed liveness + the commercial/infra denylist + mega/dedup) instead of dropping it.
+  Keep fail-CLOSED **only** for verdicts the judge actually returned (`unsafe` / `commercialOrSpam` / below-threshold).
+  This degrades gracefully to **R7-2 quality** (a full digest of rule-filtered gems; carbonads/bunny still dropped
+  deterministically; an occasional krea-class slip) instead of 2 items. Also **guarantee a minimum digest size**: treat
+  the judge as a re-rank/prune over the top-K it can clear within budget, and ship the remaining rule-filtered gems
+  unjudged rather than deadline-dropping them; size `INDEX_FUNNEL_MAX_JUDGE`/concurrency/deadline so a run reliably fills
+  `ISSUE_DISPLAY_SIZE` (~7). Optional: a cheap rule-based NSFW-domain backstop so fail-open keeps a safety floor. (Also
+  worth a glance: whether Gemini's daily RPD is simply exhausted — if chronic, reduce per-run LLM volume / batch, R6-7.)
+  **Verify live (next cron or one refresh): the digest fills ~7, still no carbonads/bunny, exactly 1 essay.** · **TODO ← RESUME HERE**
 - [ ] **R7-4** · **Multi-type coverage (music + video + finds), discovered not fed.** Type detection + enrichment +
   link-out cards for `music`/`video`/`find`; make the streams surface them (music/video/find indexes + the LLM hunt +
   search). Video thumbnails from page/oEmbed; music cover art where free. **No subscriptions** — all discovered. · **TODO**
